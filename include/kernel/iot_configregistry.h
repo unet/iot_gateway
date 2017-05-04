@@ -5,10 +5,7 @@
 #include<stdint.h>
 #include<assert.h>
 
-#include<ecb.h>
-
 #include <iot_module.h>
-#include <iot_kapi.h>
 #include <kernel/iot_common.h>
 
 struct iot_config_inst_item_t;
@@ -57,12 +54,12 @@ struct iot_config_inst_item_t {
 	uint8_t mode_id;
 	uint8_t numitems; //number of items in dev[] or input[]
 	uint32_t host_id;
-	iot_modinstance_item_t *modinst; //filled after instantiation if_host id is ours
+	iot_miid_t miid; //filled after instantiation if host id is ours
 	time_t modtime;
 	const char *json_cfg;
 	union {
 		struct {
-			iot_hwdev_ident_t *dev[]; //can have NULL values if corresponding device not assigned
+			iot_hwdev_ident_t *dev[]; //can have NULL values if corresponding device not assigned. internal iot_hwdev_localident_t structure can be a template
 		} evsrc;
 		struct {
 			iot_config_inst_item_t *input[];

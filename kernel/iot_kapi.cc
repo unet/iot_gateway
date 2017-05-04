@@ -7,8 +7,9 @@
 //#include "evwrap.h"
 #include <uv.h>
 #include <ecb.h>
-#include <iot_kapi.h>
-#include <iot_error.h>
+#include <iot_module.h>
+#include <iot_devclass_keyboard.h>
+#include <kernel/iot_daemonlib.h>
 #include <kernel/iot_deviceregistry.h>
 
 
@@ -19,7 +20,7 @@ extern uv_loop_t *main_loop;
 //contype must be among those listed in .devcontypes field of detector module interface
 //hostid field of ident is ignored by kernel (it always assigns current host)
 //returns:
-int kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data) {
+int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data) {
 	//TODO check that ident->contype is listed in .devcontypes field of detector module interface
 
 	//TODO make inter-thread message, not direct call !!!
@@ -27,8 +28,34 @@ int kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident_t*
 	return 0;
 }
 
-void kapi_devdriver_self_abort(iot_iid_t iid, void *instance, int errcode) {
-	//TODO find driver by instance and stop it
+//accepted error codes:
+//	0 - for case of delayed stop (state of modinst must be IOT_MODINSTSTATE_STOPPING)
+//	IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be disabled
+//	IOT_ERROR_TEMPORARY_ERROR - for driver instances device communication problem. module is temporary blocked from using for current device
+//	IOT_ERROR_CRITICAL_ERROR - instanciation is invalid. driver module must not be used for current device, other module instances must not be used for current iot config
+//other are equivalent to IOT_ERROR_CRITICAL_BUG
+
+//returned status:
+//	0 - success, instance will be stopped or is not running
+//	IOT_ERROR_INVALID_ARGS - miid is not valid or instance does not match it
+int kapi_modinstance_self_abort(const iot_miid_t &miid, const iot_module_instance_base *instance, int errcode) { //can be called in modinstance thread
+	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk.modinst->instance!=instance) return IOT_ERROR_INVALID_ARGS;
+	iot_modinstance_item_t* modinst=modinstlk.modinst;
+	assert(uv_thread_self()==modinst->thread->thread);
+
+	auto state=modinst->state;
+	if(!modinst->is_working()) return 0;
+
+	if((errcode==0 && state!=IOT_MODINSTSTATE_STOPPING) ||
+					(errcode!=IOT_ERROR_CRITICAL_BUG && errcode!=IOT_ERROR_TEMPORARY_ERROR && errcode!=IOT_ERROR_CRITICAL_ERROR)) {
+		errcode=IOT_ERROR_CRITICAL_BUG;
+		auto module=modinst->module;
+		outlog_error("kapi_modinstance_self_abort() called by driver instance of module '%s::%s' with illegal error '%s' (%d). This is a bug in module", module->dbitem->bundle->name, module->dbitem->module_name, kapi_strerror(errcode), errcode);
+	}
+	modinst->aborted_error=errcode;
+	modinst->stop(true);
+	return 0;
 }
 
 
@@ -56,14 +83,15 @@ const char* kapi_err_name(int err) {
 	return "UNKNOWN";
 }
 
-const char* kapi_devclassid_str(uint32_t clsid) {
-	switch(clsid) {
-#define XX(nm, cc, txt) case cc: return txt;
-		IOT_DEVCLASSID_MAP(XX)
-#undef XX
-	}
-	return "UNKNOWN DEVICE CLASS"; //TODO. for module-specific classes find module's method for getting stringified class id
+uint32_t iot_devifaceclassdata_keyboard::get_d2c_maxmsgsize(const char* cls_data) const {
+	data_t* data=(data_t*)cls_data;
+	return iot_devifaceclass__keyboard_BASE::get_maxmsgsize(data->max_keycode);
 }
+uint32_t iot_devifaceclassdata_keyboard::get_c2d_maxmsgsize(const char* cls_data) const {
+	data_t* data=(data_t*)cls_data;
+	return iot_devifaceclass__keyboard_BASE::get_maxmsgsize(data->max_keycode);
+}
+
 
 
 /*

@@ -4,6 +4,7 @@
 #include<stdlib.h>
 #include<unistd.h>
 #include<assert.h>
+#include<new>
 
 #include<uv.h>
 
@@ -26,10 +27,7 @@
 //list of modules in current bundle, their registered IDs. TODO: put real IDs when they will be allocated through some table in unetcommonsrc
 #define BUNDLE_MODULES_MAP(XX) \
 	XX(detector, 1)  \
-	XX(input_drv, 2)   \
-	XX(kbd_src, 3) \
-	XX(kbdled_exor, 4) \
-	XX(cond_keyop, 5)
+	XX(input_drv, 2)
 
 
 //build constants like MODULEID_detector which resolve to registered module id
@@ -45,6 +43,108 @@ enum {
 #define DEVCONTYPESTR_CUSTOM_LINUXINPUT	"LinuxInput"
 
 
+//interface for DEVCONTYPE_CUSTOM_LINUXINPUT contype
+static struct linuxinput_iface : public iot_hwdevident_iface {
+	struct hwid_t {
+		input_id input;
+		uint32_t cap_bitmap; //value 0xFFFFFFFFu means 'any hwid' (for templates)
+	};
+	struct addr_t {
+		uint8_t event_index; //X in /dev/input/eventX. value 0xFF means 'any' (for templates)
+	};
+	struct data_t {
+		uint32_t format; //version of format and/or magic code. current is 1, and it is the only supported.
+		hwid_t hwid;
+		addr_t addr;
+	};
+
+	linuxinput_iface(void) : iot_hwdevident_iface(DEVCONTYPE_CUSTOM_LINUXINPUT, DEVCONTYPESTR_CUSTOM_LINUXINPUT) {
+	}
+
+	void init_localident(iot_hwdev_localident_t* dev_ident, uint32_t detector_module_id) { //must be called first to init iot_hwdev_localident_t structure
+		dev_ident->contype=contype;
+		dev_ident->detector_module_id=detector_module_id;
+		*((data_t*)dev_ident->data)={ //init as template
+			.format = 1,
+			.hwid = {
+				.input = {0, 0, 0, 0},
+				.cap_bitmap = 0xFFFFFFFFu
+			},
+			.addr = {
+				.event_index = 0xFF
+			}
+		};
+	}
+	void set_hwid(iot_hwdev_localident_t* dev_ident, hwid_t* hwid) {
+		assert(dev_ident->contype==contype);
+		assert(check_data(dev_ident->data));
+		data_t* data=(data_t*)dev_ident->data;
+		data->hwid=*hwid;
+	}
+	void set_addr(iot_hwdev_localident_t* dev_ident, addr_t* addr) {
+		assert(dev_ident->contype==contype);
+		assert(check_data(dev_ident->data));
+		data_t* data=(data_t*)dev_ident->data;
+		data->addr=*addr;
+	}
+
+private:
+	virtual bool check_data(const char* dev_data) const { //actual check that data is good by format
+		data_t* data=(data_t*)dev_data;
+		return data->format==1;
+	}
+	virtual bool check_istmpl(const char* dev_data) const { //actual check that data corresponds to template (so not all data components are specified)
+		data_t* data=(data_t*)dev_data;
+		return data->hwid.cap_bitmap==0xFFFFFFFFu || data->addr.event_index==0xFF;
+	}
+	virtual bool compare_hwid(const char* dev_data, const char* tmpl_data) const { //actual comparison function for hwid component of device ident data
+		data_t* data=(data_t*)dev_data;
+		data_t* tmpl=(data_t*)tmpl_data;
+		return tmpl->hwid.cap_bitmap==0xFFFFFFFFu || !memcmp(&tmpl->hwid, &data->hwid, sizeof(tmpl->hwid));
+	}
+	virtual bool compare_addr(const char* dev_data, const char* tmpl_data) const { //actual comparison function for address component of device ident data
+		data_t* data=(data_t*)dev_data;
+		data_t* tmpl=(data_t*)tmpl_data;
+		return tmpl->addr.event_index==data->addr.event_index || tmpl->addr.event_index==0xFF;
+	}
+	virtual size_t print_addr(const char* dev_data, char* buf, size_t bufsize) const { //actual address printing function. it must return number of written bytes (without NUL)
+		data_t* data=(data_t*)dev_data;
+		int len;
+		if(data->addr.event_index==0xFF) { //template
+			len=snprintf(buf, bufsize, "LinuxInput:any input");
+		} else {
+			len=snprintf(buf, bufsize, "LinuxInput:input=%u",unsigned(data->addr.event_index));
+		}
+		return len>=int(bufsize) ? bufsize-1 : len;
+	}
+	virtual size_t print_hwid(const char* dev_data, char* buf, size_t bufsize) const { //actual hw id printing function. it must return number of written bytes (without NUL)
+		data_t* data=(data_t*)dev_data;
+		int len;
+		if(data->hwid.cap_bitmap==0xFFFFFFFFu) { //template
+			len=snprintf(buf, bufsize, "any hwid");
+		} else {
+			const char *bus;
+			switch(data->hwid.input.bustype) {
+				case 0x01: bus="PCI";break;
+				case 0x03: bus="USB";break;
+				case 0x05: bus="BT";break;
+				case 0x10: bus="ISA";break;
+				case 0x11: bus="PS/2";break;
+				case 0x19: bus="Host";break;
+				default: bus=NULL;
+			}
+			if(bus) {
+				len=snprintf(buf, bufsize, "bus=%s,vendor=%04x,product=%04x,ver=%04x,caps=%x",bus,unsigned(data->hwid.input.vendor),
+					unsigned(data->hwid.input.product),unsigned(data->hwid.input.version),unsigned(data->hwid.cap_bitmap));
+			} else {
+				len=snprintf(buf, bufsize, "bus=%u,vendor=%04x,product=%04x,ver=%04x,caps=%x",unsigned(data->hwid.input.bustype),unsigned(data->hwid.input.vendor),
+					unsigned(data->hwid.input.product),unsigned(data->hwid.input.version),unsigned(data->hwid.cap_bitmap));
+			}
+		}
+		return len>=int(bufsize) ? bufsize-1 : len;
+	}
+} linuxinput_iface_obj;
+
 
 struct devcontype_linuxinput_t { //represents custom data for devices with DEVCONTYPE_CUSTOM_LINUXINPUT connection type
 	char name[256];
@@ -57,7 +157,6 @@ struct devcontype_linuxinput_t { //represents custom data for devices with DEVCO
 	uint8_t snd_bitmap; //when EV_SND capability present, bitmap of available sound capabilities
 	uint8_t event_index; //X in /dev/input/eventX
 };
-//unique_refid is just event_index in lower byte and zeros in others
 
 
 //common functions
@@ -110,15 +209,15 @@ static const char* read_inputdev_caps(int fd, uint8_t index, devcontype_linuxinp
 class detector;
 detector* detector_obj=NULL;
 
-class detector {
-	bool is_started;
-	uv_timer_t timer_watcher;
-	int devinfo_len; //number of filled items in devinfo array
+class detector : public iot_device_detector_base {
+	bool is_active=false; //true if instance was started
+	uv_timer_t timer_watcher={};
+	int devinfo_len=0; //number of filled items in devinfo array
 	struct devinfo_t { //short device info indexed by event_index field. minimal info necessary to determine change of device
 		input_id input;
 		uint32_t cap_bitmap;
 		bool present;
-	} devinfo[DETECTOR_MAX_DEVS];
+	} devinfo[DETECTOR_MAX_DEVS]={};
 
 	void on_timer(void) {
 		devcontype_linuxinput_t fulldevinfo[DETECTOR_MAX_DEVS];
@@ -126,18 +225,21 @@ class detector {
 		if(n==0 && devinfo_len==0) return; //nothing to do
 
 		iot_hwdev_localident_t ident;
-		ident.detector_module_id=MODULEID_detector;
-		ident.contype=DEVCONTYPE_CUSTOM_LINUXINPUT;
+		linuxinput_iface_obj.init_localident(&ident, MODULEID_detector);
+		linuxinput_iface::addr_t addr;
+		linuxinput_iface::hwid_t hwid;
 
 		int i, err;
 		int max_n = n>=devinfo_len ? n : devinfo_len;
 
-printf("Found %d devices, was %d\n",n, devinfo_len);
 		for(i=0;i<max_n;i++) { //compare if actual devices changed for common indexes
-			ident.unique_refid=uint64_t(i);
+			addr.event_index=i;
+			linuxinput_iface_obj.set_addr(&ident, &addr);
 			if(i<devinfo_len && devinfo[i].present) {
 				if(i>=n || !fulldevinfo[i].name[0]) { //new state is absent, so device was removed
 					kapi_outlog_info("Hwdevice was removed: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d",i);
+					hwid={devinfo[i].input, devinfo[i].cap_bitmap};
+					linuxinput_iface_obj.set_hwid(&ident, &hwid);
 					err=kapi_hwdev_registry_action(IOT_ACTION_REMOVE, &ident, 0, NULL);
 					if(err>=0) {
 						devinfo[i].present=false;
@@ -147,12 +249,14 @@ printf("Found %d devices, was %d\n",n, devinfo_len);
 					continue;
 				}
 				//check if device looks the same
-				if(devinfo[i].cap_bitmap==fulldevinfo[i].cap_bitmap && memcmp(&devinfo[i].input,&fulldevinfo[i].input,sizeof(devinfo[i].input))==0) continue; //same
+				if(devinfo[i].cap_bitmap==fulldevinfo[i].cap_bitmap && !memcmp(&devinfo[i].input, &fulldevinfo[i].input, sizeof(devinfo[i].input))) continue; //same
 
 				kapi_outlog_debug("bitmap %08x != %08x OR vendor:model %04x:%04x != %04x:%04x", devinfo[i].cap_bitmap, fulldevinfo[i].cap_bitmap, unsigned(devinfo[i].input.vendor),unsigned(devinfo[i].input.product), unsigned(fulldevinfo[i].input.vendor),unsigned(fulldevinfo[i].input.product));
 
 				kapi_outlog_info("Hwdevice was replaced: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, new name='%s'",i, fulldevinfo[i].name);
 				
+				hwid={fulldevinfo[i].input, fulldevinfo[i].cap_bitmap};
+				linuxinput_iface_obj.set_hwid(&ident, &hwid);
 				err=kapi_hwdev_registry_action(IOT_ACTION_REPLACE, &ident, sizeof(fulldevinfo[i]), &fulldevinfo[i]);
 				if(err>=0) {
 					devinfo[i].input=fulldevinfo[i].input;
@@ -163,6 +267,8 @@ printf("Found %d devices, was %d\n",n, devinfo_len);
 			} else  //previous state was absent
 				if(i<n && fulldevinfo[i].name[0]) { //new state is present, so NEW DEVICE ADDED
 					kapi_outlog_info("Detected new hwdevice with type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, name='%s'",i, fulldevinfo[i].name);
+					hwid={fulldevinfo[i].input, fulldevinfo[i].cap_bitmap};
+					linuxinput_iface_obj.set_hwid(&ident, &hwid);
 					err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, sizeof(fulldevinfo[i]), &fulldevinfo[i]);
 					if(err>=0) {
 						devinfo[i].present=true;
@@ -176,18 +282,25 @@ printf("Found %d devices, was %d\n",n, devinfo_len);
 				} //else do nothing
 		}
 	}
-public:
-	detector(void) : is_started(false), devinfo_len(0) {
-		assert(detector_obj==NULL);
 
-		memset(devinfo, 0, sizeof(devinfo));
-		detector_obj=this;
-	}
-	int start(void) {
-		assert(!is_started);
+//iot_module_instance_base methods
 
-		if(is_started) return 0;
-		uv_loop_t* loop=kapi_get_event_loop(uv_thread_self());
+
+	//Called to start work of previously inited instance.
+	//Return values:
+	//0 - driver successfully started. It could start with temporary error state and have own retry strategy.
+	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked till program restart. this instance will be deinited.
+	//IOT_ERROR_CRITICAL_ERROR - non-recoverable error. may be error in configuration. instanciation for specific entity (device for driver, iot_id for others) will be blocked
+	//IOT_ERROR_TEMPORARY_ERROR - module should be retried later
+	//other errors equivalent to IOT_ERROR_CRITICAL_BUG!!!
+	virtual int start(const iot_miid_t &miid_) {
+		assert(uv_thread_self()==thread);
+		assert(!is_active);
+		if(is_active) return 0;
+
+		miid=miid_;
+
+		uv_loop_t* loop=kapi_get_event_loop(thread);
 		assert(loop!=NULL);
 
 		uv_timer_init(loop, &timer_watcher);
@@ -196,23 +309,78 @@ public:
 			kapi_outlog_error("Cannot start timer: %s", uv_strerror(err));
 			return IOT_ERROR_TEMPORARY_ERROR;
 		}
-		is_started=true;
+		is_active=true;
 		return 0;
 	}
-	int stop(void) {
-		assert(is_started);
+	virtual int stop(void) {
+		assert(uv_thread_self()==thread);
+		assert(is_active);
 
-		if(!is_started) return 0;
-		uv_timer_stop(&timer_watcher);
-		is_started=false;
+		if(!is_active) return 0;
+
+		uv_close((uv_handle_t*)&timer_watcher, NULL);
+		is_active=false;
 		return 0;
+	}
+
+public:
+	detector(uv_thread_t thread) : iot_device_detector_base(thread) {
+		assert(detector_obj==NULL);
+		detector_obj=this;
+	}
+	virtual ~detector(void) {
+		detector_obj=NULL;
+	}
+	int init() {
+		return 0;
+	}
+	int deinit(void) {
+		assert(!is_active); //must be stopped
+		return 0;
+	}
+
+	static int init_instance(iot_device_detector_base**instance, uv_thread_t thread) {
+		assert(uv_thread_self()==main_thread);
+
+		detector *inst=new detector(thread);
+		if(!inst) return IOT_ERROR_TEMPORARY_ERROR;
+
+		int err=inst->init();
+		if(err) { //error
+			delete inst;
+			return err;
+		}
+		*instance=inst;
+		return 0;
+	}
+	//called to deinit instance.
+	//Return values:
+	//0 - success
+	//any other error leaves instance in hang state
+	static int deinit_instance(iot_module_instance_base* instance) {
+		assert(uv_thread_self()==main_thread);
+		detector *inst=static_cast<detector*>(instance);
+		int err=inst->deinit();
+		if(err) return err;
+		delete inst;
+		return 0;
+	}
+	static int check_system(void) {
+		struct stat statbuf;
+		int err=stat("/dev/input", &statbuf);
+		if(!err) {
+			if(S_ISDIR(statbuf.st_mode)) return 0; //dir
+			return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+		}
+		if(err==ENOMEM) return IOT_ERROR_TEMPORARY_ERROR;
+		return IOT_ERROR_DEVICE_NOT_SUPPORTED;
 	}
 
 	//traverses all /dev/input/eventX devices and reads necessary props
 	//returns number of found devices
 	static int get_event_devices(devcontype_linuxinput_t* devbuf, int max_devs, int start_index=0) {//takes address for array of devcontype_linuxinput_t structs and size of such array
 		char filepath[32];
-		int fd, idx;
+		int fd, idx, n=0;
 		devcontype_linuxinput_t *cur_dev;
 
 		for(idx=0;idx<max_devs;idx++) {
@@ -221,7 +389,6 @@ public:
 			snprintf(filepath, sizeof(filepath), "/dev/input/event%d", idx+start_index);
 			fd=open(filepath, O_RDONLY | O_NONBLOCK); //O_NONBLOCK help to avoid side-effects of open on Linux when only ioctl is necessary
 			if(fd<0) {
-//				if(errno==ENOENT) break; //stop on first non-existing file
 				if(errno!=ENOENT && errno!=ENODEV && errno!=ENXIO) //file present but corresponding device not exists
 					kapi_outlog_debug("Cannot open %s: %s", filepath, uv_strerror(uv_translate_sys_error(errno)));
 				cur_dev->name[0]='\0'; //indicator of skipped device
@@ -234,21 +401,24 @@ public:
 				kapi_outlog_debug("Cannot %s on %s: %s", errstr, filepath, uv_strerror(uv_translate_sys_error(errno)));
 				cur_dev->name[0]='\0'; //indicator of skipped device
 			}
+			n=idx+1; //must return maximum successful index + 1
 			close(fd);
 		}
-		return idx;
+		return n;
 	}
 };
-static detector _detector_obj; //instantiate singleton class
 
 static iot_hwdevcontype_t detector_devcontypes[]={DEVCONTYPE_CUSTOM_LINUXINPUT};
+
+static const iot_hwdevident_iface* detector_devcontype_config[]={&linuxinput_iface_obj};
 
 static iot_iface_device_detector_t detector_iface = {
 	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
 	.cpu_loading = 0,
 
-	.start = [](time_t cfg_lastmod, const char *json_cfg) -> int {return detector_obj->start();},
-	.stop = [](void) -> int {return detector_obj->stop();},
+	.init_instance = &detector::init_instance,
+	.deinit_instance = &detector::deinit_instance,
+	.check_system = &detector::check_system,
 
 	.hwdevcontypes = detector_devcontypes
 };
@@ -257,9 +427,11 @@ iot_moduleconfig_t IOT_MODULE_CONF(detector)={
 	.module_id = MODULEID_detector, //Registered ID of this module. Must correspond to its full name in registry
 	.version = 0x000100001,
 	.num_devifaces = 0,
+	.num_devcontypes = 1,
 	.init_module = [](void) -> int {return 0;},
 	.deinit_module = [](void) -> int {return 0;},
 	.deviface_config = NULL,
+	.devcontype_config = detector_devcontype_config,
 	.iface_event_source = NULL,
 	.iface_device_driver = NULL,
 	.iface_device_detector = &detector_iface
@@ -275,28 +447,26 @@ iot_moduleconfig_t IOT_MODULE_CONF(detector)={
 
 struct input_drv_instance;
 
-struct input_drv_instance {
-	input_drv_instance* next_instance;
-	uv_thread_t thread; //working thread of this instance after start
-	iot_iid_t iid;
-	bool is_active; //true if instance was started
+struct input_drv_instance : public iot_device_driver_base {
+	input_drv_instance* next_instance=NULL;
+	bool is_active=false; //true if instance was started
 	iot_hwdev_ident_t dev_ident; //identification of connected hw device
 	devcontype_linuxinput_t dev_info; //hw device capabilities reported by detector
-	uint32_t keys_state[(KEY_CNT+31)/32]; //when EV_KEY capability present, bitmap of current keys state
-	uint16_t sw_state; //when EV_SW capability present, bitmap of current switches state
-	uint16_t leds_state; //when EV_LED capability present, bitmap of current leds state
-	uint16_t want_leds_bitmap; //when EV_LED capability present, bitmap of leds which have executor connected
-	uint16_t want_leds_state; //when EV_LED capability present, bitmap of requested leds state
-	uint8_t snd_state; //when EV_SND capability present, bitmap of current snd state
+	uint32_t keys_state[(KEY_CNT+31)/32]={}; //when EV_KEY capability present, bitmap of current keys state
+	uint16_t sw_state=0; //when EV_SW capability present, bitmap of current switches state
+	uint16_t leds_state=0; //when EV_LED capability present, bitmap of current leds state
+	uint16_t want_leds_bitmap=0; //when EV_LED capability present, bitmap of leds which have executor connected
+	uint16_t want_leds_state=0; //when EV_LED capability present, bitmap of requested leds state
+	uint8_t snd_state=0; //when EV_SND capability present, bitmap of current snd state
 
-	bool have_kbd, //iface IOT_DEVCLASSID_KEYBOARD was reported
-		have_keys, //iface IOT_DEVCLASSID_KEYS was reported
-		have_leds, //iface IOT_DEVCLASSID_LEDS was reported
-		have_spk, //iface IOT_DEVCLASSID_BASIC_SPEAKER was reported
-		have_sw; //iface IOT_DEVCLASSID_HW_SWITCHES was reported
-	iot_connid_t connid_kbd; //id of connection with IOT_DEVCLASSID_KEYBOARD iface, if connected. conflicts with connid_keys
-	iot_connid_t connid_keys; //id of connection with IOT_DEVCLASSID_KEYS iface, if connected. conflicts with connid_kbd
+	bool have_kbd=false, //iface IOT_DEVIFACECLASSID_KEYBOARD was reported
+		have_leds=false, //iface IOT_DEVIFACECLASSID_LEDS was reported
+		have_spk=false, //iface IOT_DEVIFACECLASSID_BASIC_SPEAKER was reported
+		have_sw=false; //iface IOT_DEVIFACECLASSID_HW_SWITCHES was reported
+	iot_connid_t connid_kbd={}; //id of connection with IOT_DEVIFACECLASSID_KEYBOARD iface, if connected
+	const iot_devifaceclass_data *attr_kbd=NULL; //interface class attribute object for connected connid_kbd
 
+	uv_loop_t* loop=NULL;
 
 /////////////static fields/methods for driver instances management
 	static input_drv_instance* instances_head;
@@ -308,7 +478,7 @@ struct input_drv_instance {
 		assert(instances_head==NULL); //all instances should be deinited
 		return 0;
 	}
-	static int init_instance(void**instance, uv_thread_t thread, iot_hwdev_data_t* dev_data, iot_deviface_classid* devifaces, uint8_t max_devifaces) {
+	static int init_instance(iot_device_driver_base**instance, uv_thread_t thread, iot_hwdev_data_t* dev_data, iot_devifaces_list* devifaces) {
 		assert(uv_thread_self()==main_thread);
 
 		//FILTER HW DEVICE CAPABILITIES
@@ -318,30 +488,36 @@ struct input_drv_instance {
 		//END OF FILTER
 
 		//determine interfaces which this instance can provide for provided hwdevice
-		int num=0;
 		bool have_kbd=false, //iface IOT_DEVCLASSID_KEYBOARD was reported
-			have_keys=false, //iface IOT_DEVCLASSID_KEYS was reported
 			have_leds=false, //iface IOT_DEVCLASSID_LEDS was reported
 			have_spk=false, //iface IOT_DEVCLASSID_BASIC_SPEAKER was reported
 			have_sw=false; //iface IOT_DEVCLASSID_HW_SWITCHES was reported
 
+		iot_devifaceclass_data classdata;
+
 		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_KEY)) {
-			if(bitmap32_test_bit(devinfo->keys_bitmap,KEY_LEFTSHIFT) && bitmap32_test_bit(devinfo->keys_bitmap,KEY_LEFTCTRL)) {devifaces[num++]=IOT_DEVCLASSID_KEYBOARD;have_kbd=true;}
-			if(num<max_devifaces) {devifaces[num++]=IOT_DEVCLASSID_KEYS;have_keys=true;}
+			//find max key code in bitmap
+			uint32_t code=0;
+			for(int i=sizeof(devinfo->keys_bitmap)/sizeof(devinfo->keys_bitmap[0])-1;i>0;i--) {
+				if(devinfo->keys_bitmap[i]) {
+					for(int j=31;j>0;j--) if(bitmap32_test_bit(&devinfo->keys_bitmap[i],j)) {code=j+i*32;break;}
+					break;
+				}
+			}
+			bool is_pckbd=bitmap32_test_bit(devinfo->keys_bitmap,KEY_LEFTSHIFT) && bitmap32_test_bit(devinfo->keys_bitmap,KEY_LEFTCTRL);
+			iot_devifaceclassdata_keyboard::init_classdata(&classdata, code, is_pckbd);
+			if(devifaces->add(&classdata)==0) have_kbd=true;
 		}
-		if(num<max_devifaces && bitmap32_test_bit(&devinfo->cap_bitmap, EV_LED)) {devifaces[num++]=IOT_DEVCLASSID_LEDS;have_leds=true;}
-		if(num<max_devifaces && bitmap32_test_bit(&devinfo->cap_bitmap, EV_SND)) {devifaces[num++]=IOT_DEVCLASSID_BASIC_SPEAKER;have_spk=true;}
-		if(num<max_devifaces && bitmap32_test_bit(&devinfo->cap_bitmap, EV_SW)) {devifaces[num++]=IOT_DEVCLASSID_HW_SWITCHES;have_sw=true;}
+//		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_LED)) {
+//			if(devifaces->add(IOT_DEVIFACECLASSID_LEDS, NULL)==0) have_leds=true;
+//		}
+//		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SND)) {if(devifaces->add(IOT_DEVIFACECLASSID_BASIC_SPEAKER, NULL)==0) have_spk=true;}
+//		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SW)) {if(devifaces->add(IOT_DEVIFACECLASSID_HW_SWITCHES, NULL)==0) have_sw=true;}
 
-		if(!num) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+		if(!devifaces->num) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
 
-		input_drv_instance *inst=new input_drv_instance(thread);
-		if(!inst) return IOT_ERROR_NO_MEMORY;
-		inst->have_kbd=have_kbd;
-		inst->have_keys=have_keys;
-		inst->have_leds=have_leds;
-		inst->have_spk=have_spk;
-		inst->have_sw=have_sw;
+		input_drv_instance *inst=new input_drv_instance(thread, have_kbd, have_leds, have_spk, have_sw);
+		if(!inst) return IOT_ERROR_TEMPORARY_ERROR;
 
 		err=inst->init(dev_data);
 		if(err) { //error
@@ -349,27 +525,31 @@ struct input_drv_instance {
 			return err;
 		}
 
-		ULINKLIST_INSERTHEAD(inst, instances_head, next_instance);
 		*instance=inst;
 
 		char descr[256]="";
+		char buf[128];
 		int off=0;
-		for(int i=0;i<num;i++) {
-			off+=snprintf(descr+off, sizeof(descr)-off, "%s%s", i==0 ? "" : ", ",kapi_devclassid_str(devifaces[i]));
+		for(int i=0;i<devifaces->num;i++) {
+			const iot_devifaceclassdata_iface *iface=devifaces->items[i].find_iface();
+			if(!iface) continue;
+			off+=snprintf(descr+off, sizeof(descr)-off, "%s%s", i==0 ? "" : ", ", iface->sprint(&devifaces->items[i],buf,sizeof(buf)));
 			if(off>=int(sizeof(descr))) break;
 		}
-		kapi_outlog_info("Driver started for device with type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, name='%s', caps='%s'", int(devinfo->event_index), devinfo->name, descr);
-		return num;
+		kapi_outlog_info("Driver inited for device with type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, name='%s', caps='%s'", int(devinfo->event_index), devinfo->name, descr);
+		return 0;
 	}
 
-	static int deinit_instance(void* instance) {
+	//called to deinit instance.
+	//Return values:
+	//0 - success
+	//any other error leaves instance in hang state
+	static int deinit_instance(iot_module_instance_base* instance) {
 		assert(uv_thread_self()==main_thread);
-		input_drv_instance *inst=(input_drv_instance*) instance;
+		input_drv_instance *inst=static_cast<input_drv_instance*>(instance);
+		int err=inst->deinit();
+		if(err) return err;
 
-		assert(!inst->is_active); //must be stopped
-
-		inst->deinit();
-		ULINKLIST_REMOVE(inst, instances_head, next_instance);
 		delete inst;
 		return 0;
 	}
@@ -381,17 +561,60 @@ struct input_drv_instance {
 		return 0;
 	}
 /////////////public methods
-	int start(iot_iid_t _iid) {
+
+
+private:
+	input_drv_instance(uv_thread_t thread, bool have_kbd, bool have_leds, bool have_spk, bool have_sw): iot_device_driver_base(thread), have_kbd(have_kbd),
+			have_leds(have_leds), have_spk(have_spk), have_sw(have_sw) {
+		ULINKLIST_INSERTHEAD(this, instances_head, next_instance);
+	}
+	virtual ~input_drv_instance(void) {
+		ULINKLIST_REMOVE(this, instances_head, next_instance);
+	}
+
+	int init(iot_hwdev_data_t* dev_data) {
+
+		memcpy(&dev_ident, &dev_data->dev_ident, sizeof(dev_ident));
+
+		assert(dev_data->dev_ident.dev.contype==DEVCONTYPE_CUSTOM_LINUXINPUT);
+		memcpy(&dev_info, dev_data->custom_data, sizeof(dev_info));
+		return 0;
+	}
+	int deinit(void) {
+		assert(!is_active); //must be stopped
+		//nothing to deinit in this module
+		
+		return 0;
+	}
+
+//iot_module_instance_base methods
+
+
+	//Called to start work of previously inited instance.
+	//Return values:
+	//0 - driver successfully started. It could start with temporary error state and have own retry strategy.
+	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked till program restart. this instance will be deinited.
+	//IOT_ERROR_CRITICAL_ERROR - non-recoverable error. may be error in configuration. instanciation for specific entity (device for driver, iot_id for others) will be blocked
+	//IOT_ERROR_TEMPORARY_ERROR - module should be retried later
+	//other errors equivalent to IOT_ERROR_CRITICAL_BUG!!!
+	virtual int start(const iot_miid_t &miid_) {
 		assert(uv_thread_self()==thread);
 		assert(!is_active);
 
 		if(is_active) return 0; //even in release mode just return success
+		is_active=true;
 
-		iid=_iid;
+		miid=miid_;
+		loop=kapi_get_event_loop(thread);
+		assert(loop!=NULL);
+
 		eventfd=-1;
 		internal_error=ERR_NONE;
 		error_count=0;
-		is_active=true;
+
+
+		uv_timer_init(loop, &timer_watcher);
+		timer_watcher.data=this;
 
 		int err=setup_device_polling();
 		if(err) {
@@ -401,90 +624,84 @@ struct input_drv_instance {
 
 		return 0;
 	}
-	int stop(void) {
+	//called to stop work of started instance. call can be followed by deinit or started again (if stop was manual, by user)
+	//Return values:
+	//0 - driver successfully stopped and can be deinited or restarted
+	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_modinstance_self_abort() will be called to notify kernel when stop is finished.
+	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
+	//						cannot be called until stop reports OK)
+	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
+	virtual int stop(void) {
 		assert(uv_thread_self()==thread);
 		assert(is_active);
 
 		if(!is_active) return 0; //even in release mode just do nothing
 
 		if(eventfd>=0) {
-			uv_close((uv_handle_t*)&io_watcher, [](uv_handle_t* handle)->void{});
+			uv_close((uv_handle_t*)&io_watcher, NULL);
 			eventfd=-1;
-		} else {
-			uv_timer_stop(&timer_watcher);
 		}
+		uv_close((uv_handle_t*)&timer_watcher, NULL);
 		is_active=false;
 		return 0;
 	}
 
-	int handle_open(iot_connid_t connid, iot_deviface_classid classid, void **privdata) {
-		switch(classid) {
-			case IOT_DEVCLASSID_KEYBOARD:
+//iot_device_driver_base methods
+	virtual int device_open(const iot_conn_drvview* conn) {
+		switch(conn->devclass.classid) {
+			case IOT_DEVIFACECLASSID_KEYBOARD: {
 				if(!have_kbd) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
-				if(connid_kbd || connid_keys) return IOT_ERROR_LIMIT_REACHED;
-				connid_kbd=connid;
+				if(connid_kbd) return IOT_ERROR_LIMIT_REACHED;
+				connid_kbd=conn->id;
+				attr_kbd=&conn->devclass;
+
+				iot_devifaceclass__keyboard_DRV iface(attr_kbd);
+				int err=iface.send_set_state(connid_kbd, this, keys_state);
+				assert(err==0);
+
 				break;
-			case IOT_DEVCLASSID_KEYS:
-				if(!have_keys) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
-				if(connid_kbd || connid_keys) return IOT_ERROR_LIMIT_REACHED;
-				connid_keys=connid;
-				break;
+			}
 			default:
 				return IOT_ERROR_DEVICE_NOT_SUPPORTED;
 		}
 		return 0;
 	}
-	int handle_close(iot_connid_t connid, iot_deviface_classid classid, void *privdata) {
-		switch(classid) {
-			case IOT_DEVCLASSID_KEYBOARD:
-				if(connid_kbd==connid) connid_kbd=0;
-				break;
-			case IOT_DEVCLASSID_KEYS:
-				if(connid_keys==connid) connid_keys=0;
+	virtual int device_close(const iot_conn_drvview* conn) {
+		switch(conn->devclass.classid) {
+			case IOT_DEVIFACECLASSID_KEYBOARD:
+				if(connid_kbd==conn->id) {connid_kbd.clear(); attr_kbd=NULL;}
 				break;
 			default:
 				break;
 		}
 		return 0;
 	}
-	int handle_action(iot_connid_t connid, iot_deviface_classid classid, void *privdata, iot_devconn_action_t action_code, uint32_t data_size, void* data) {
+	virtual int device_action(const iot_conn_drvview* conn, iot_devconn_action_t action_code, uint32_t data_size, const void* data) {
+//		int err;
 		if(action_code==IOT_DEVCONN_ACTION_MESSAGE) {
-			if(classid==IOT_DEVCLASSID_KEYBOARD) {
-//				iot_devclass_keyboard* msg;
-//				if(data_size<sizeof(*msg)) return IOT_ERROR_INVALID_ARGS;
-//				msg=(iot_devclass_keyboard*)data;
-//				switch(msg->req_code) {
-//					case msg->REQ_GET_STATE:
-//				}
+			if(conn->id==connid_kbd) {
+				iot_devifaceclass__keyboard_DRV iface(attr_kbd);
+				const iot_devifaceclass__keyboard_DRV::msg* msg=iface.parse_event(data, data_size);
+				if(!msg) return IOT_ERROR_MESSAGE_IGNORED;
+
+				if(msg->req_code==iface.REQ_GET_STATE) {
+					kapi_outlog_info("Driver GOT keyboard GET STATE");
+					int err=iface.send_set_state(connid_kbd, this, keys_state);
+					assert(err==0);
+					return 0;
+				}
+				return IOT_ERROR_MESSAGE_IGNORED;
 			}
+//		} else if(action_code==IOT_DEVCONN_ACTION_READY) {
+//			if(conn->id==connid_kbd) {
+//				iot_devifaceclass__keyboard_DRV iface(attr_kbd);
+//				err=iface.send_set_state(connid_kbd, this, keys_state);
+//				assert(err==0);
+//			}
 		}
-		return 0;
+		return IOT_ERROR_UNKNOWN_ACTION;
 	}
 
-private:
-	input_drv_instance(uv_thread_t thread_) {
-		memset(this, 0, sizeof(*this));
-		thread=thread_;
-	}
-
-	int init(iot_hwdev_data_t* dev_data) {
-		uv_loop_t* loop=kapi_get_event_loop(thread);
-		assert(loop!=NULL);
-
-		uv_tcp_init(loop, &io_watcher);
-		io_watcher.data=this;
-		uv_timer_init(loop, &timer_watcher);
-		timer_watcher.data=this;
-
-		memcpy(&dev_ident, &dev_data->dev_ident, sizeof(dev_ident));
-
-		assert(dev_data->dev_ident.dev.contype==DEVCONTYPE_CUSTOM_LINUXINPUT);
-		memcpy(&dev_info, dev_data->custom_data, sizeof(dev_info));
-		return 0;
-	}
-	void deinit(void) {
-		//nothing to deinit in this module
-	}
 
 
 /////////////OS device communication internals
@@ -512,6 +729,7 @@ private:
 		uv_timer_stop(&timer_watcher);
 		int retrytm=0; //assigned in case of temp error to set retry period
 		int temperr=0; //assigned in case of temp error to set internal error
+		int err;
 		bool criterror=false;
 		do {
 			if(eventfd<0) { //open device file
@@ -519,7 +737,7 @@ private:
 				snprintf(path,sizeof(path),"/dev/input/event%d",dev_info.event_index);
 				eventfd=open(path, O_RDWR | O_NONBLOCK);
 				if(eventfd<0) {
-					int err=errno;
+					err=errno;
 					kapi_outlog_error("Cannot open '%s': %s", path, uv_strerror(uv_translate_sys_error(err)));
 					if(err==ENOENT || err==ENXIO || err==ENODEV) return IOT_ERROR_CRITICAL_ERROR; //driver instance should be deinited
 					temperr=ERR_OPEN_TEMP;
@@ -527,6 +745,19 @@ private:
 					snprintf(internal_error_descr, sizeof(internal_error_descr), "Cannot open '%s': %s", path, uv_strerror(uv_translate_sys_error(err)));
 					break;
 				}
+
+				uv_tcp_init(loop, &io_watcher);
+				io_watcher.data=this;
+				//attach device file FD to io watcher
+				err=uv_tcp_open(&io_watcher, eventfd);
+				if(err<0) {
+					kapi_outlog_error("Cannot open uv stream: %s", uv_strerror(err));
+					temperr=ERR_EVENT_MGR;
+					retrytm=30;
+					snprintf(internal_error_descr, sizeof(internal_error_descr), "Cannot open event listener: %s", uv_strerror(err));
+					break;
+				}
+
 				//recheck caps of opened device
 				devcontype_linuxinput_t dev_info2;
 				const char* errstr=read_inputdev_caps(eventfd, dev_info.event_index, &dev_info2);
@@ -573,16 +804,6 @@ private:
 				}
 			}
 
-			//attach device file FD to io watcher
-			int err=uv_tcp_open(&io_watcher, eventfd);
-			if(err<0) {
-				kapi_outlog_error("Cannot open uv stream: %s", uv_strerror(err));
-				temperr=ERR_EVENT_MGR;
-				retrytm=30;
-				snprintf(internal_error_descr, sizeof(internal_error_descr), "Cannot open event listener: %s", uv_strerror(err));
-				break;
-			}
-
 			read_buf_offset=0;
 			read_waitsyn=false;
 			//start polling for read events on device
@@ -594,6 +815,10 @@ private:
 				temperr=ERR_EVENT_MGR;
 				retrytm=30;
 				snprintf(internal_error_descr, sizeof(internal_error_descr), "Cannot set read event listener: %s", uv_strerror(err));
+				
+				uv_close((uv_handle_t*)&io_watcher, NULL);
+				close(eventfd);
+				eventfd=-1;
 				break;
 			}
 			return 0;
@@ -617,7 +842,7 @@ private:
 		input_drv_instance* obj=static_cast<input_drv_instance*>(handle->data);
 		int err=obj->setup_device_polling();
 		if(err) {
-			kapi_devdriver_self_abort(obj->iid, obj, err);
+			kapi_modinstance_self_abort(obj->miid, obj, err);
 		}
 	}
 
@@ -626,11 +851,11 @@ private:
 		if(nread<=0) { //error
 			if(nread==0) return; //EAGAIN
 			kapi_outlog_error("Error reading uv stream: %s", uv_strerror(nread));
-			uv_close((uv_handle_t*)&io_watcher, [](uv_handle_t* handle)->void{});
+			uv_close((uv_handle_t*)&io_watcher, NULL);
 			eventfd=-1;
 			int err=setup_device_polling();
 			if(err) {
-				kapi_devdriver_self_abort(iid, this, err);
+				kapi_modinstance_self_abort(miid, this, err);
 			}
 			return;
 		}
@@ -660,26 +885,26 @@ private:
 					bitmap32_clear_bit(keys_state, ev->code);
 				}
 				if(connid_kbd) {
-					iot_deviface_class_keyboard_msg_t msg;
-					memset(&msg, 0, sizeof(msg));
-					msg.event_code = ev->value == 1 ?
-										iot_deviface_class_keyboard_msg_t::EVENT_KEYDOWN : 
-										ev->value==0 ? 
-											iot_deviface_class_keyboard_msg_t::EVENT_KEYUP : 
-											iot_deviface_class_keyboard_msg_t::EVENT_KEYREPEAT;
-					msg.data.keyevent.key=ev->code;
-					memcpy(msg.data.keyevent.state.map, keys_state, sizeof(msg.data.keyevent.state.map));
-					if(bitmap32_test_bit(keys_state, KEY_LEFTSHIFT) | bitmap32_test_bit(keys_state, KEY_RIGHTSHIFT)) msg.data.keyevent.state.shift_state=1;
-					if(bitmap32_test_bit(keys_state, KEY_LEFTALT) | bitmap32_test_bit(keys_state, KEY_RIGHTALT)) msg.data.keyevent.state.alt_state=1;
-					if(bitmap32_test_bit(keys_state, KEY_LEFTCTRL) | bitmap32_test_bit(keys_state, KEY_RIGHTCTRL)) msg.data.keyevent.state.ctrl_state=1;
-					if(bitmap32_test_bit(keys_state, KEY_LEFTMETA) | bitmap32_test_bit(keys_state, KEY_RIGHTMETA)) msg.data.keyevent.state.meta_state=1;
-					err=kapi_connection_send_client_msg(connid_kbd, this, IOT_DEVCLASSID_KEYBOARD, &msg, sizeof(msg));
+					iot_devifaceclass__keyboard_DRV iface(attr_kbd);
+					switch(ev->value) {
+						case 0:
+							err=iface.send_keyup(connid_kbd, this, ev->code, keys_state);
+							break;
+						case 1:
+							err=iface.send_keydown(connid_kbd, this, ev->code, keys_state);
+							break;
+						case 2:
+							err=iface.send_keyrepeat(connid_kbd, this, ev->code, keys_state);
+							break;
+						default:
+							err=0;
+							break;
+					}
 					if(err) {
 						//TODO remember
 					} else {
 						//TODO remember dropped message state
 					}
-					break;
 				}
 				kapi_outlog_info("Key with code %d is %s", ev->code, ev->value == 1 ? "down" : ev->value==0 ? "up" : "repeated");
 				break;
@@ -688,6 +913,8 @@ private:
 				break;
 			case EV_SW: //led event
 				kapi_outlog_info("SW with code %d valued %d", ev->code, (int)ev->value);
+				break;
+			case EV_MSC: //MISC event. ignore
 				break;
 			default:
 				kapi_outlog_info("Unhandled event with type %d, code %d valued %d", (int)ev->type, (int)ev->code, (int)ev->value);
@@ -710,24 +937,19 @@ static iot_iface_device_driver_t input_drv_iface_device_driver = {
 
 	.init_instance = &input_drv_instance::init_instance,
 	.deinit_instance = &input_drv_instance::deinit_instance,
-	.check_device = &input_drv_instance::check_device,
-	.start = [](void* instance,iot_iid_t iid) -> int {return ((input_drv_instance*)instance)->start(iid);},
-	.stop = [](void* instance) -> int {return ((input_drv_instance*)instance)->stop();},
-
-//	.devclassids = NULL,
-	.open = [](void* instance, iot_connid_t connid, iot_deviface_classid classid, void **privdata) -> int {return ((input_drv_instance*)instance)->handle_open(connid, classid, privdata);},
-	.close = [](void* instance, iot_connid_t connid, iot_deviface_classid classid, void* privdata) -> int {return ((input_drv_instance*)instance)->handle_close(connid, classid, privdata);},
-	.action = [](void* instance, iot_connid_t connid, iot_deviface_classid classid, void* privdata, iot_devconn_action_t action_code, uint32_t data_size, void* data) -> int {return ((input_drv_instance*)instance)->handle_action(connid, classid, privdata, action_code, data_size, data);},
+	.check_device = &input_drv_instance::check_device
 };
 
 iot_moduleconfig_t IOT_MODULE_CONF(input_drv)={
 	.module_id = MODULEID_input_drv, //Registered ID of this module. Must correspond to its full name in registry
 	.version = 0x000100001,
 	.num_devifaces = 0,
+	.num_devcontypes = 0,
 //	.flags = IOT_MODULEFLAG_IFACE_DEVDRIVER,
 	.init_module = &input_drv_instance::init_module,
 	.deinit_module = &input_drv_instance::deinit_module,
 	.deviface_config = NULL,
+	.devcontype_config = NULL,
 	.iface_event_source = NULL,
 	.iface_device_driver = &input_drv_iface_device_driver,
 	.iface_device_detector = NULL
@@ -735,221 +957,6 @@ iot_moduleconfig_t IOT_MODULE_CONF(input_drv)={
 
 //end of kbdlinux:input_drv driver module
 
-
-
-
-
-
-/////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////inputlinux:kbd_src event source  module
-/////////////////////////////////////////////////////////////////////////////////
-
-static iot_deviface_classid kbd_src_devclassids[]={IOT_DEVCLASSID_KEYBOARD};
-
-static iot_state_classid kbd_src_stclassids[]={IOT_SRCSTATE_CLASSID_BUTTONSTATE};
-
-struct kbd_src_instance;
-
-struct kbd_src_instance {
-	uv_thread_t thread;
-	iot_iid_t iid;
-	uint32_t iot_id;
-	bool is_active; //true if instance was started
-	iot_connid_t device_connid;
-	uv_timer_t timer_watcher;
-	iot_device_conn_t device;
-/////////////evsource state:
-	iot_srcstate_error_t error_code;
-
-
-/////////////static fields/methods for module instances management
-	static int init_module(void) {
-		return 0;
-	}
-	static int deinit_module(void) {
-		return 0;
-	}
-
-	static int init_instance(void**instance, uv_thread_t thread, uint32_t iot_id, const char *json_cfg) {
-		assert(uv_thread_self()==main_thread);
-
-		kapi_outlog_info("EVENT SOURCE INITED id=%u", iot_id);
-
-		kbd_src_instance *inst=new kbd_src_instance(thread, iot_id);
-		int err=inst->init();
-		if(err) { //error
-			delete inst;
-			return err;
-		}
-		*instance=inst;
-		return 0;
-	}
-
-	static int deinit_instance(void* instance) {
-		assert(uv_thread_self()==main_thread);
-
-		kbd_src_instance *inst=(kbd_src_instance*) instance;
-		delete inst;
-		return 0;
-	}
-
-/////////////public methods
-
-	int start(iot_iid_t _iid) {
-		assert(uv_thread_self()==thread);
-		assert(!is_active);
-
-		if(is_active) return 0; //even in release mode just return success
-
-		iid=_iid;
-		kapi_outlog_info("EVENT SOURCE STARTED id=%u", iot_id);
-		is_active=true;
-
-		if(!device_connid) uv_timer_start(&timer_watcher, [](uv_timer_t* handle)->void {
-			kbd_src_instance* obj=static_cast<kbd_src_instance*>(handle->data);
-			obj->on_timer();
-		}, 2000, 0); //give 2 secs for device to connect
-
-		return 0;
-	}
-//	int get_state(iot_srcstate_t* statebuf, size_t bufsize) {
-//		//can be called from any thread
-//		return 0;
-//	}
-	int stop(void) {
-		assert(uv_thread_self()==thread);
-		assert(is_active);
-
-		if(!is_active) return 0; //even in release mode just return success
-
-
-		is_active=false;
-		return 0;
-	}
-////
-	void device_attached(iot_connid_t connid, iot_device_conn_t *devconn) {
-		assert(uv_thread_self()==thread);
-		assert(!device_connid);
-		device_connid=connid;
-		device=*devconn;
-
-		kapi_outlog_info("Device attached, iot_id=%u", iot_id);
-	}
-	void device_detached(void) {
-		assert(uv_thread_self()==thread);
-		assert(device_connid!=0);
-		device_connid=0;
-
-		kapi_outlog_info("Device detached, iot_id=%u", iot_id);
-	}
-	void device_action(iot_devconn_action_t action_code, uint32_t data_size, void* data) {
-		assert(uv_thread_self()==thread);
-		assert(device_connid!=0);
-		int err;
-		switch(action_code) {
-			case IOT_DEVCONN_ACTION_MESSAGE: //new message arrived
-				if(device.classid==IOT_DEVCLASSID_KEYBOARD) {
-					iot_deviface_class_keyboard_msg_t *msg;
-					if(data_size!=sizeof(*msg)) return;
-					msg=(iot_deviface_class_keyboard_msg_t*)data;
-
-					if(msg->event_code==iot_deviface_class_keyboard_msg_t::EVENT_KEYDOWN) {
-						kapi_outlog_info("GOT keyboard DOWN for key %d", (int)msg->data.keyevent.key);
-						return;
-					} else if(msg->event_code==iot_deviface_class_keyboard_msg_t::EVENT_KEYUP) {
-						kapi_outlog_info("GOT keyboard UP for key %d", (int)msg->data.keyevent.key);
-						return;
-					} else if(msg->event_code==iot_deviface_class_keyboard_msg_t::EVENT_KEYREPEAT) {
-						kapi_outlog_info("GOT keyboard REPEAT for key %d", (int)msg->data.keyevent.key);
-						return;
-					}
-				}
-				break;
-			default:
-				break;
-		}
-		kapi_outlog_info("Device action, iot_id=%u, act code %u, datasize %u", iot_id, unsigned(action_code), data_size);
-	}
-
-
-private:
-	kbd_src_instance(uv_thread_t thread, uint32_t iot_id) :
-		thread(thread),
-		iid(0),
-		iot_id(iot_id),
-		is_active(false),
-		device_connid(0),
-		error_code(0) {}
-
-	int init(void) {
-		uv_loop_t* loop=kapi_get_event_loop(thread);
-		assert(loop!=NULL);
-
-		uv_timer_init(loop, &timer_watcher);
-		timer_watcher.data=this;
-		return 0;
-	}
-	void on_timer(void) {
-		error_code=IOT_SRCSTATE_ERROR_NO_DEVICE;
-	}
-};
-
-//keys_instance* keys_instance::instances_head=NULL;
-
-
-//static iot_module_spec_t drvmodspec={
-//	.vendor=ECB_STRINGIFY(IOT_VENDOR),
-//	.bundle=ECB_STRINGIFY(IOT_BUNDLE),
-//	.module=ECB_STRINGIFY(DRVNAME),
-//};
-
-
-static iot_iface_event_source_t kbd_src_iface_event_source = {
-	.num_devices = 1,
-	.num_stclassids = sizeof(kbd_src_stclassids)/sizeof(kbd_src_stclassids[0]),
-	.cpu_loading = 0,
-
-	.devcfg={
-		{
-			.num_classids = sizeof(kbd_src_devclassids)/sizeof(kbd_src_devclassids[0]),
-			.flag_canauto = 1,
-			.flag_localonly = 1,
-			.classids = kbd_src_devclassids
-		}
-	},
-
-	.value_type = IOT_VALUETYPE_INTEGER,
-
-	//methods
-	.init_instance = &kbd_src_instance::init_instance,
-	.deinit_instance = &kbd_src_instance::deinit_instance,
-	.start = [](void* instance,iot_iid_t iid) -> int {return ((kbd_src_instance*)instance)->start(iid);},
-	.stop = [](void* instance) -> int {return ((kbd_src_instance*)instance)->stop();},
-	.device_attached = [](void* instance, int index, iot_connid_t connid, iot_device_conn_t *devconn) -> void {((kbd_src_instance*)instance)->device_attached(connid, devconn);},
-	.device_detached = [](void* instance, int index) -> void {((kbd_src_instance*)instance)->device_detached();},
-	.device_action = [](void* instance, int index, iot_deviface_classid classid, iot_devconn_action_t action_code, uint32_t data_size, void* data) -> void {((kbd_src_instance*)instance)->device_action(action_code, data_size, data);},
-
-
-//	.get_state = [](void* instance, iot_srcstate_t* statebuf, size_t bufsize)->int{return ((keys_instance*)instance)->get_state(statebuf, bufsize);},
-
-	//configuration for module state
-	.stclassids = kbd_src_stclassids,
-};
-
-iot_moduleconfig_t IOT_MODULE_CONF(kbd_src)={
-	.module_id = MODULEID_kbd_src, //Registered ID of this module. Must correspond to its full name in registry
-	.version = 0x000100001,
-	.num_devifaces = 0,
-//	.flags = IOT_MODULEFLAG_IFACE_SOURCE,
-	.init_module = [](void) -> int {return 0;},
-	.deinit_module = [](void) -> int {return 0;},
-	.deviface_config = NULL,
-	.iface_event_source = &kbd_src_iface_event_source,
-	.iface_device_driver = NULL,
-	.iface_device_detector = NULL
-};
-
-//end of kbdlinux:keys event source  module
 
 
 

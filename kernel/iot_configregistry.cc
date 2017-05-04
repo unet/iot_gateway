@@ -1,7 +1,7 @@
 #include<stdint.h>
 //#include<time.h>
 
-#include<iot_kapi.h>
+#include<iot_module.h>
 #include<iot_utils.h>
 #include<kernel/iot_daemonlib.h>
 #include<kernel/iot_deviceregistry.h>
@@ -26,7 +26,7 @@ iot_config_inst_item_t item1={ NULL, NULL,
 	mode_id : 0,
 	numitems : 0,
 	host_id : 1,
-	modinst : NULL,
+	miid : {0, 0},
 	modtime : 1,
 	json_cfg : NULL,
 	{evsrc : {}}
@@ -43,8 +43,7 @@ void iot_configregistry_t::start_config(void) {
 		//scan for items whose mode_id is actual for their group and try to instantiate
 		iot_module_item_t *module;
 		int err;
-		while(nextitem) {
-			item=nextitem;
+		while((item=nextitem)) {
 			nextitem=nextitem->next;
 
 			assert(item->group_id<IOT_CONFIG_MAX_GROUP_ID);
@@ -58,6 +57,7 @@ void iot_configregistry_t::start_config(void) {
 			}
 
 			switch(item->type) {
+				case IOT_MODINSTTYPE_DETECTOR:
 				case IOT_MODINSTTYPE_DRIVER:
 					assert(false);
 					break;
@@ -68,10 +68,10 @@ void iot_configregistry_t::start_config(void) {
 						break;
 					}
 					err=modules_registry->create_evsrc_modinstance(module, item);
-					if(!err) break;
+					if(!err || err==IOT_ERROR_NOT_READY) break;
 
 					outlog_error("Event source module with ID %u got error during init: %s", module->config->module_id, kapi_strerror(err));
-					if(err==IOT_ERROR_CRITICAL_BUG) module->evsrc_blocked=1;
+//					if(err==IOT_ERROR_CRITICAL_BUG) module->evsrc_blocked=1;
 					//TODO set error state for this iot_id to be able to report to server
 					//TODO setup retry if some recoverable error happened
 					break;

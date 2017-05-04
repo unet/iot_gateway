@@ -5,52 +5,44 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include <ecb.h>
+//always set by kernel
+#define IOT_STATE_ERROR_INSTANCE_UNREACHABLE	1	//bound instance from another host is unreachable due to host connection problems (actual for activators and actors)
+#define IOT_STATE_ERROR_INSTANCE_INVALID		2	//bound instance cannot be instantiated or got critical bug (actual for activators and actors)
+
+//can be set by kernel or instance
+#define IOT_STATE_ERROR_NO_DEVICE				64	//no mandatory device connected (actual for event sources, actors and possible activators when device for them ever appears)
 
 
-//macro for generating ID of custom module specific class of state data
-#define IOT_SRCSTATE_CUSTOMCLASSID(module_id, index) (((module_id)<<8)+(index))
-
-typedef uint32_t iot_state_classid;
-
-typedef uint32_t iot_srcstate_error_t;
-
-//no device connected
-#define IOT_SRCSTATE_ERROR_NO_DEVICE	1
-
-
-typedef struct {
-	union {
-		uint64_t	integer;
-		double		floating;
-	} value;
-	iot_srcstate_error_t	error;		//non-zero value indicates error code for error state of module, 'value' and 'msgpending' can be meaningful or not depending on error code
-	uint8_t					msgpending;	//flag that new message is pending
-	uint16_t				custom_len;	//size of custom data that follows
-	char					custom[];	//start of custom data which can be inspected using event source interface method parse_state_byclassid
-} iot_srcstate_t;
+struct iot_srcstate_t {
+	uint32_t			size;		//size of whole data
+	iot_state_error_t	error;		//non-zero value indicates error code for error state of module, 'value' and 'msgpending' can be meaningful or not depending on error code
+	struct {
+		uint32_t		offset;		//address of value as offset from start of valuedata item.
+		uint32_t		len;		//length of value. zero if value is NOT VALID (not configured or instance has error which invalidates it)
+	} value[IOT_CONFIG_MAX_EVENTSOURCE_STATES];
+	char valuedata[];
+};
 
 //maximum number of custom data classes for event source state
-#define IOT_SOURCE_STATE_MAX_CLASSES 5
+//#define IOT_SOURCE_STATE_MAX_CLASSES 5
 
 
-#define IOT_SRCSTATE_CLASSID_ERROR		1
-#define IOT_SRCSTATE_CLASSID_BOOLEAN	2
-#define IOT_SRCSTATE_CLASSID_INTEGER	3
-#define IOT_SRCSTATE_CLASSID_NUMBER		4
+//Build-in value classes
+#define IOT_VALUECLASSID_BOOLEAN		1			//
+#define IOT_VALUECLASSID_INTEGER		2			//integer number
+#define IOT_VALUECLASSID_NUMBER			3			//fractional number
 
-#define IOT_SRCSTATE_CLASSID_BUTTONS	10
-#define IOT_SRCSTATE_CLASSID_KEYBOARD	11
+#define IOT_VALUECLASSID_KEYBOARD		10
 
 
-ECB_EXTERN_C_BEG
-
+//ECB_EXTERN_C_BEG
+//
 //tries to find specified class of data inside state custom block
 //Returns 0 on success and fills startoffset to point to start of data. This offset can then be passed to CLASS::get_size and/or CLASS::extract methods to get actual data
 //Possible errors:
 //IOT_ERROR_NOT_FOUND - class of data not present in state
-int iot_find_srcstate_dataclass(iot_srcstate_t* state,iot_state_classid clsid, void** startoffset);
+//int iot_find_srcstate_dataclass(iot_srcstate_t* state,iot_state_classid clsid, void** startoffset);
 
-ECB_EXTERN_C_END
+//ECB_EXTERN_C_END
 
 #endif //IOT_SRCSTATE_H

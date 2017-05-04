@@ -13,7 +13,7 @@
 
 #include "config.h"
 
-#include <iot_kapi.h>
+#include <iot_module.h>
 #include <kernel/iot_daemonlib.h>
 
 static const char *loglevel_str[]={
@@ -32,13 +32,11 @@ char rootpath[128]="./"; //root dir for daemon
 //static size_t rootlen=0; //length of root dir
 
 #ifdef NDEBUG
-int min_loglevel=LERROR;
+int min_loglevel=LNOTICE;
 #else
 __attribute__ ((visibility ("default"))) int min_loglevel=LDEBUG;
 #endif
 
-volatile sig_atomic_t need_exit=0, //1 means graceful exit after getting SIGTERM or SIGUSR1, 2 means urgent exit after SIGINT or SIGQUIT
-	need_reload=0, need_restart=0;
 
 #ifndef _WIN32
 static long logclock_cost=0, prevlogcost=0;
@@ -223,5 +221,5 @@ int create_pidfile(const char* pidfile)
 	return 1;
 }
 
-
 #endif
+

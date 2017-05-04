@@ -10,6 +10,8 @@
 //#include<time.h>
 
 //#include<ecb.h>
+#include <iot_utils.h>
+
 
 
 template<class Node, class NodeBase, volatile std::atomic<NodeBase*> NodeBase::* NextPtr> class mpsc_queue { //Multiple Producer (push, push_list) Single Consumer (pop, pop_all) unlimited FIFO queue. Deletions not possible
@@ -108,13 +110,22 @@ public:
 
 //Thread-safe Single Producer Single Consumer circular byte buffer.
 class byte_fifo_buf {
-	uint32_t readpos, writepos, bufsize, mask;
+	volatile uint32_t readpos, writepos;
+	uint32_t bufsize, mask;
 	char* buf;
 
 public:
 	byte_fifo_buf(void) {
+		init();
+	}
+	void init(void) {
 		buf=NULL;
-		bufsize=readpos=writepos=mask=0;
+		bufsize=mask=0;
+		clear();
+	}
+	void clear(void) {
+		std::atomic_thread_fence(std::memory_order_release);
+		readpos=writepos=0;
 	}
 	uint32_t getsize(void) {
 		return bufsize;
@@ -138,12 +149,11 @@ public:
 		mask=newmask;
 		return true;
 	}
-	void clear(void) {
-		readpos=writepos=0;
-	}
 	uint32_t pending_read(void) { //returns unread bytes
 		assert(writepos>=readpos && writepos-readpos<=bufsize);
-		return writepos-readpos;
+		uint32_t res=writepos-readpos;
+		std::atomic_thread_fence(std::memory_order_acquire); //to be in sync with update of writepos in write() and write_zero()
+		return res;
 	}
 	uint32_t avail_write(void) { //returns available space
 		return bufsize-pending_read();
@@ -163,6 +173,7 @@ public:
 				memcpy((char*)dstbuf + ws1, buf, ws - ws1);
 			}
 		}
+		std::atomic_thread_fence(std::memory_order_release);
 		readpos+=ws;
 		return ws;
 	}
@@ -197,8 +208,8 @@ public:
 			memcpy(&buf[writepos & mask], srcbuf, ws1);
 			memcpy(buf, (char*)srcbuf + ws1, ws - ws1);
 		}
-		writepos+=ws;
 		std::atomic_thread_fence(std::memory_order_release);
+		writepos+=ws;
 		return ws;
 	}
 	uint32_t write_zero(size_t srcsize) { //write at most srcsize zero bytes. returns number of written bytes
@@ -212,8 +223,8 @@ public:
 			memset(&buf[readpos & mask], 0, ws1);
 			memset(buf, 0, ws - ws1);
 		}
-		writepos+=ws;
 		std::atomic_thread_fence(std::memory_order_release);
+		writepos+=ws;
 		return ws;
 	}
 };

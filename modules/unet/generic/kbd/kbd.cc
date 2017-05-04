@@ -52,14 +52,12 @@ static iot_devifaceclass_data kbd_src_devclasses[]={
 struct kbd_src_instance;
 
 struct kbd_src_instance : public iot_event_source_base {
-	uv_thread_t thread;
-	iot_miid_t miid;
 	uint32_t iot_id;
-	bool is_active; //true if instance was started
-	uv_timer_t timer_watcher;
-	const iot_conn_clientview *device;
+	bool is_active=false; //true if instance was started
+	uv_timer_t timer_watcher={};
+	const iot_conn_clientview *device=NULL;
 /////////////evsource state:
-	iot_state_error_t error_code;
+	iot_state_error_t error_code=0;
 
 
 /////////////static fields/methods for module instances management
@@ -93,13 +91,8 @@ struct kbd_src_instance : public iot_event_source_base {
 		return 0;
 	}
 private:
-	kbd_src_instance(uv_thread_t thread, uint32_t iot_id) :
-		thread(thread),
-		miid(0,0),
-		iot_id(iot_id),
-		is_active(false),
-		device(NULL),
-		error_code(0) {
+	kbd_src_instance(uv_thread_t thread, uint32_t iot_id) : iot_event_source_base(thread), iot_id(iot_id)
+	{
 	}
 
 	virtual ~kbd_src_instance(void) {
@@ -122,13 +115,13 @@ private:
 	//IOT_ERROR_CRITICAL_ERROR - non-recoverable error. may be error in configuration. instanciation for specific entity (device for driver, iot_id for others) will be blocked
 	//IOT_ERROR_TEMPORARY_ERROR - module should be retried later
 	//other errors equivalent to IOT_ERROR_CRITICAL_BUG!!!
-	virtual int start(iot_miid_t _miid) {
+	virtual int start(const iot_miid_t &miid_) {
 		assert(uv_thread_self()==thread);
 		assert(!is_active);
 
 		if(is_active) return 0; //even in release mode just return success
 
-		miid=_miid;
+		miid=miid_;
 		is_active=true;
 
 		if(!device) uv_timer_start(&timer_watcher, [](uv_timer_t* handle)->void {

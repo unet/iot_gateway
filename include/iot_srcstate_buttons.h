@@ -4,9 +4,6 @@
 
 #include <stdint.h>
 
-#include <iot_srcstate.h>
-#include <iot_utils.h>
-
 #include <linux/input-event-codes.h> //TODO use some compat for windows
 
 

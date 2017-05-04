@@ -2,10 +2,11 @@
 MODULEDIR = modules
 KERNELDIR = kernel
 INCLUDEDIR = include
-MODULELIST = unet/generic/inputlinux
+MODULELIST = unet/generic/inputlinux unet/generic/kbd
 
+common_hdr = $(wildcard $(INCLUDEDIR)/*.h)
 kernel_ccsrc = $(wildcard $(KERNELDIR)/*.cc)
-kernel_hdr = $(wildcard $(INCLUDEDIR)/*.h) $(wildcard $(INCLUDEDIR)/$(KERNELDIR)/*.h) bundles-db.h modules-db.h
+kernel_hdr = $(common_hdr) $(wildcard $(INCLUDEDIR)/$(KERNELDIR)/*.h) bundles-db.h modules-db.h
 kernel_ccobjs = $(patsubst %.cc,%.o,$(kernel_ccsrc))
 
 
@@ -15,6 +16,7 @@ LD=ld
 
 #COMMONFLAGS = -Wall -Wstrict-overflow=2 -g -O0 -fPIC -rdynamic -fno-strict-aliasing -fdata-sections -ffunction-sections -I. -Iinclude -pthread -Ilibuv
 COMMONFLAGS = -Wall -Wstrict-overflow=2 -g -O0 -I. -Iinclude -pthread -Ilibuv
+#COMMONFLAGS_NDEBUG = -Wall -Wstrict-overflow=2 -O2 -DNDEBUG -I. -Iinclude -pthread -Ilibuv
 CPPFLAGS = $(COMMONFLAGS) -std=c++11
 CFLAGS = $(COMMONFLAGS)
 
@@ -53,7 +55,7 @@ $(dyn_modules_sos) : %.so : %.o
 modules: $(builtin_modules_objs) $(dyn_modules_sos)
 
 
-$(modules_objs): $(patsubst %.o,%.cc,$(modules_objs))
+$(modules_objs): $(patsubst %.o,%.cc,$(modules_objs)) $(common_hdr)
 	$(CPP) $(CPPFLAGS) -fPIC -o $@ -c $(patsubst %.o,%.cc,$@)
 
 $(APPNAME): $(kernel_ccobjs) $(builtin_modules_objs)

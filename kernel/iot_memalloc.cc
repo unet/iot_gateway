@@ -3,13 +3,15 @@
 #include<assert.h>
 #include<string.h>
 #include<uv.h>
+#include <execinfo.h>
 
 //#include<ecb.h>
 
-#include <iot_kapi.h>
+#include <iot_module.h>
 #include <iot_utils.h>
 //#include <kernel/iot_common.h>
-#include <kernel/iot_memalloc.h>
+#include <kernel/iot_daemonlib.h>
+#include <kernel/iot_kernel.h>
 
 iot_membuf_chain* iot_memallocator::allocate_chain(uint32_t size) { //size is length of useful data to store in chained buffer
 		assert(uv_thread_self()==thread); //only one thread can allocate
@@ -32,7 +34,7 @@ iot_membuf_chain* iot_memallocator::allocate_chain(uint32_t size) { //size is le
 				res=(iot_membuf_chain*)(obj->data);
 				res->init(IOT_MEMOBJECT_CHAINSIZE-offsetof(struct iot_memobject, data));
 			} else {
-				res->add_buf(obj->data, IOT_MEMOBJECT_CHAINSIZE-offsetof(struct iot_memobject, data));
+				res->add_buf((char*)obj->data, IOT_MEMOBJECT_CHAINSIZE-offsetof(struct iot_memobject, data));
 			}
 			nblocks--;
 		}
@@ -55,7 +57,7 @@ iot_membuf_chain* iot_memallocator::allocate_chain(uint32_t size) { //size is le
 					res=(iot_membuf_chain*)(obj->data);
 					res->init(IOT_MEMOBJECT_CHAINSIZE-offsetof(struct iot_memobject, data));
 				} else {
-					res->add_buf(obj->data, IOT_MEMOBJECT_CHAINSIZE-offsetof(struct iot_memobject, data));
+					res->add_buf((char*)obj->data, IOT_MEMOBJECT_CHAINSIZE-offsetof(struct iot_memobject, data));
 				}
 				nblocks--;
 				obj=rest;
@@ -68,13 +70,23 @@ iot_membuf_chain* iot_memallocator::allocate_chain(uint32_t size) { //size is le
 		return res;
 	}
 
+iot_threadmsg_t *iot_memallocator::allocate_threadmsg(void) { //allocates threadmsg structure as memblock and inits is properly
+		iot_threadmsg_t *msg=(iot_threadmsg_t*)allocate(sizeof(iot_threadmsg_t));
+		if(msg) {
+			memset(msg, 0, sizeof(*msg));
+			msg->is_msgmemblock=1;
+		}
+		return msg;
+	}
+
+//real function called insted of allocate() with or without debug data
 void* iot_memallocator::allocate(uint32_t size, bool allow_direct) { //true allow_direct says that block can be malloced directly without going to freelist on release. can be used for rarely realloced buffers
 		assert(uv_thread_self()==thread); //only one thread can allocate
 
 		iot_memobject* rval;
 		size+=offsetof(struct iot_memobject, data);
 		int listidx;
-		if(size>IOT_MEMOBJECT_MAXPLAINSIZE) {
+		if(size>IOT_MEMOBJECT_MAXPLAINSIZE+offsetof(struct iot_memobject, data)) {
 			if(!allow_direct) return NULL; //objects larger than IOT_MEMOBJECT_MAXPLAINSIZE must be allocated with true allow_direct or by allocate_chain
 			uint16_t chunkidx;
 			rval=(iot_memobject*)do_allocate_direct(size, chunkidx);
@@ -116,7 +128,7 @@ void* iot_memallocator::allocate(uint32_t size, bool allow_direct) { //true allo
 					}
 					else {
 						if(size<=4096) listidx=12; //>2048 <=4096
-						else listidx=13; //>4096 <=IOT_MEMOBJECT_MAXPLAINSIZE (8192)
+						else listidx=13; //>4096 <=IOT_MEMOBJECT_MAXPLAINSIZE+offsetof(struct iot_memobject, data) (8192)
 					}
 				}
 			}
@@ -134,6 +146,13 @@ void* iot_memallocator::allocate(uint32_t size, bool allow_direct) { //true allo
 		rval->refcount.store(1, std::memory_order_relaxed);
 		rval->listindex=listidx;
 		totalinfly.fetch_add(1, std::memory_order_release);
+#ifndef NDEBUG
+		void* tmp[4]; //we need to abandon first value. it is always inside this func
+		int nback,i;
+		nback=backtrace(tmp, 4);
+		for(i=0;i<3;i++) rval->backtrace[i]=i<nback-1 ? tmp[i+1] : NULL;
+		gettimeofday(&rval->alloctimeval, NULL);
+#endif
 		return rval->data;
 	}
 
@@ -149,10 +168,23 @@ bool iot_memallocator::incref(void* ptr) { //increase object's reference count i
 		return true;
 	}
 
+void *iot_allocate_memblock(uint32_t size, bool allow_direct) {
+	iot_memallocator* allocator=thread_registry->find_allocator(uv_thread_self());
+	assert(allocator!=NULL);
+	if(!allocator) return NULL;
+	return allocator->allocate(size, allow_direct);
+}
+
 void iot_release_memblock(void *memblock) {
 	assert(memblock!=NULL);
 	iot_memobject* obj=(iot_memobject*)container_of(memblock, struct iot_memobject, data);
 	obj->parent->release(memblock);
+}
+
+bool iot_incref_memblock(void *memblock) {
+	assert(memblock!=NULL);
+	iot_memobject* obj=(iot_memobject*)container_of(memblock, struct iot_memobject, data);
+	return obj->parent->incref(memblock);
 }
 
 
@@ -192,35 +224,6 @@ void iot_memallocator::release(void* ptr) { //decrease object's reference count.
 		}
 	}
 
-void iot_memallocator::deinit(void) { //free all OS-allocated chunks
-		assert(totalinfly.load(std::memory_order_acquire)==0);
-		if(!memchunks) return;
-		//clear all freelists
-		for(int i=0;i<15;i++) {
-			iot_memobject* lst=freelist[i].pop_all();
-			while(lst) {
-				assert(lst->refcount==0); //freelist must contain items without refs
-				assert(memchunks_refs[lst->memchunk]>0);
-				memchunks_refs[lst->memchunk]--;
-				lst=lst->next.load(std::memory_order_relaxed);
-			}
-		}
-		uint32_t realholes=0;
-		for(uint32_t i=0;i<nummemchunks;i++) {
-			assert(memchunks_refs[i]==0);
-			if(!memchunks[i]) {realholes++;continue;} //a hole
-			free(memchunks[i]);
-			memchunks[i]=NULL;
-		}
-		free(memchunks);
-		free(memchunks_refs);
-		memchunks=NULL;
-		memchunks_refs=NULL;
-		nummemchunks=0;
-		maxmemchunks=0;
-		assert(realholes==numholes.load(std::memory_order_relaxed));
-		numholes.store(0,std::memory_order_relaxed);
-	}
 
 void iot_memallocator::do_free_direct(uint16_t &chunkindex) {
 		assert(chunkindex<nummemchunks);
@@ -242,7 +245,7 @@ void *iot_memallocator::do_allocate_direct(uint32_t size, uint16_t &chunkindex) 
 					if(memchunks_refs[i]==-2) break;
 				}
 				numholes.fetch_sub(1, std::memory_order_relaxed); //decrease even if no real hole was found in release mode
-				assert(i<nummemchunks);
+				assert(i<nummemchunks); //something wrong if numholes>0 but no holes found
 				if(i<nummemchunks) {
 					res=malloc(size);
 					if(!res) {
@@ -334,10 +337,17 @@ bool iot_memallocator::do_allocate_freelist(uint32_t &n, uint32_t sz, iot_memobj
 			for(unsigned i=0;i<perchunk-1;i++) {
 				((iot_memobject *)t)->next.store((iot_memobject *)(t+sz), std::memory_order_relaxed);
 				((iot_memobject *)t)->memchunk=chunkidx;
+#ifndef NDEBUG
+				((iot_memobject *)t)->refcount.store(0, std::memory_order_relaxed);
+#endif
 				t+=sz;
 			}
 			((iot_memobject *)t)->next.store(ret, std::memory_order_relaxed);
 			((iot_memobject *)t)->memchunk=chunkidx;
+#ifndef NDEBUG
+			((iot_memobject *)t)->refcount.store(0, std::memory_order_relaxed);
+#endif
+
 			memchunks_refs[chunkidx]=(int32_t)perchunk;
 			ret=first;
 			nchunks--;
@@ -358,6 +368,69 @@ bool iot_memallocator::do_allocate_freelist(uint32_t &n, uint32_t sz, iot_memobj
 		return false;
 	}
 
+void iot_memallocator::deinit(void) { //free all OS-allocated chunks
+		if(!memchunks) return;
+		//clear all freelists
+		for(int i=0;i<15;i++) {
+			iot_memobject* lst=freelist[i].pop_all();
+			while(lst) {
+				assert(lst->refcount==0); //freelist must contain items without refs
+				assert(memchunks_refs[lst->memchunk]>0);
+				memchunks_refs[lst->memchunk]--;
+				lst=lst->next.load(std::memory_order_relaxed);
+			}
+		}
+#ifndef NDEBUG
+		if(totalinfly.load(std::memory_order_acquire)>0) { //some block was not deallocated. find and print backtrace for all such blocks
+			outlog_debug("Leak of memory blocks detected");
+			printf("Leak of memory blocks detected\n");
+			for(uint32_t i=0;i<nummemchunks;i++) {
+				if(memchunks_refs[i]<=0) continue;
+				int listindex=((iot_memobject*)memchunks[i])->listindex;
+				if(listindex>15) {
+					outlog_debug("Cannot determine block size for memory chunk %d", i);
+					printf("Cannot determine block size for memory chunk %d\n", i);
+					continue;
+				}
+//				memchunks[i]=NULL;
+				int nfound=0, offset=0;
+				char timebuf[128];
+				for(int j=0; j<(listindex==15 ? 1 : 1024) && nfound<memchunks_refs[i]; j++, offset+=objsizes[listindex]) { //analyze up to 1024 sobblocks in memory chunk
+					iot_memobject* obj=(iot_memobject*)((char*)memchunks[i]+offset);
+					if(obj->refcount==0) continue;
+					nfound++;
+					struct tm tm1;
+					localtime_r(&obj->alloctimeval.tv_sec,&tm1);
+					strftime(timebuf, sizeof(timebuf),"%d.%m.%Y %H:%M:%S", &tm1);
+					char **symb=backtrace_symbols(obj->backtrace,3);
+					outlog_debug("Found unreleased memblock of %d bytes (-1 for arbitrary block), allocated at %s.%06u, backtrace: %s\n\t%s\n\t%s", listindex==15 ? -1 : int(objsizes[listindex]), timebuf,
+						unsigned(obj->alloctimeval.tv_usec), symb[0], symb[1], symb[2]);
+					printf("Found unreleased memblock of %d bytes (-1 for arbitrary block), allocated at %s.%06u, backtrace: %s\n\t%s\n\t%s\n", listindex==15 ? -1 : int(objsizes[listindex]), timebuf,
+						unsigned(obj->alloctimeval.tv_usec), symb[0], symb[1], symb[2]);
+					free(symb);
+				}
+			}
+		}
+#endif
+		assert(totalinfly.load(std::memory_order_acquire)==0);
+		uint32_t realholes=0;
+		for(uint32_t i=0;i<nummemchunks;i++) {
+			if(memchunks_refs[i]==-2) {realholes++;continue;} //a hole
+			assert(memchunks_refs[i]==0);
+			free(memchunks[i]);
+			memchunks[i]=NULL;
+		}
+		free(memchunks);
+		free(memchunks_refs);
+		memchunks=NULL;
+		memchunks_refs=NULL;
+		nummemchunks=0;
+		maxmemchunks=0;
+		assert(realholes==numholes.load(std::memory_order_relaxed));
+		numholes.store(0,std::memory_order_relaxed);
+printf("Allocator deinited\n");
+	}
+
 const uint32_t iot_memallocator::objsizes[15]={
 		32,  //index 0
 		48,
@@ -372,7 +445,7 @@ const uint32_t iot_memallocator::objsizes[15]={
 		1024,
 		2048,
 		4096,
-		IOT_MEMOBJECT_MAXPLAINSIZE, //index 13
+		IOT_MEMOBJECT_MAXPLAINSIZE+offsetof(struct iot_memobject, data), //index 13
 		IOT_MEMOBJECT_CHAINSIZE //index 14 , underlying data for objects must be iot_membuf_chain
 	};
 const uint32_t iot_memallocator::objoptblock[15]={

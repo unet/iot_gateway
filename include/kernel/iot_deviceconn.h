@@ -20,40 +20,89 @@
 #define IOT_MAX_DEVICECONNECTIONS 16384
 
 
+/*Life cycle of connection
+
+						   App startup: Static object construction with connident=={id:0, key:0}
+			   client instance started: iot_create_connection() called to init client-side fields (can be delayed until proper driver found)  [state=IOT_DEVCONN_INIT]
+				   proper driver found: connect_local or connect_remote called to try to bind driver, request to driver is queued  [state=IOT_DEVCONN_PENDING]
+								/																			\
+		driver's device_open() returned success and buffer memory allocated:							some error:
+				[state=IOT_DEVCONN_READYDRV]														another driver will be tried [state=IOT_DEVCONN_INIT]
+				notify client about ready connection												end.
+								|
+				client's device_attached() called
+
+*/
+
+
+
+
 struct iot_device_connection_t {
-	iot_devifacecls_item_t* deviface;
+	iot_devifaceclass_data devclass;
 	iot_hostid_t client_host;
-	union {
+	union client_data_t {
 		struct { //remote client_host
 			uint32_t module_id;
-			iot_miid_t miid;
+			iot_mi_inputid_t mi_inputid;
+			iot_modinstance_type_t type;
 		} remote;
-		struct {
-			iot_modinstance_item_t *modinst; //local client_host
+		struct local_client_data_t {
+			iot_modinstance_locker modinstlk; //local client_host
 			uint8_t dev_idx; //index of this device connection for client modinst
-		};
+			iot_driverclient_conndata_t *conndata;
+			dbllist_node<iot_device_entry_t, iot_mi_inputid_t, uint32_t>* blistnode; //block list node. is assigned when entering pending state
+		} local;
+
+		client_data_t(void) {} //necessary to shut up compiler because of iot_modinstance_locker member
+		~client_data_t(void) {}
 	} client;
+	const iot_deviceconn_filter_t* client_devifaceclassfilter; //set according to module config
+	const iot_hwdev_ident_t* client_hwdevident; //set according to bound configuration item. can be NULL
 
 	iot_hostid_t driver_host;
-	union {
+	union driver_data_t {
 		struct { //remote driver_host
 			uint32_t module_id;
 			iot_miid_t miid;
+//			uint8_t conn_idx; //index of this connection for driver modinst
 		} remote;
-		struct { //local driver_host
-			iot_modinstance_item_t *modinst;
-			void *private_data;
+		struct local_driver_data_t { //local driver_host
+			iot_modinstance_locker modinstlk;
+//			void *private_data;
 			uint8_t conn_idx; //index of this connection for driver modinst
-		};
+		} local;
+
+		driver_data_t(void) {} //necessary to shut up compiler because of iot_modinstance_locker member
+		~driver_data_t(void) {}
 	} driver;
 
-	iot_connid_t connid; //ID of this connection if it is used. zero otherwise
-	enum iot_devconn_state_t : uint8_t {
-		IOT_DEVCONN_INIT=0, //connection not inited yet (connect() wasn't called)
-		IOT_DEVCONN_PENDING, //connection not established yet
-		IOT_DEVCONN_READY,
-		IOT_DEVCONN_BROKEN
+	iot_connid_t connident; //ID of this connection if it is used. zero for unused structure
+	volatile enum iot_devconn_state_t : uint8_t {
+		IOT_DEVCONN_INIT=0,    //connection not initiated yet (connect() wasn't called)
+		IOT_DEVCONN_PENDING,   //connection in process of establishment (waiting for readiness from driver)
+		IOT_DEVCONN_READYDRV,  //driver-side of connection and connection struct are ready (waiting for readiness from client)
+//		IOT_DEVCONN_FULLREADY, //client-side of connection ready
+//		IOT_DEVCONN_CLOSED     //connection cannot transmit more data, but already sent data can be read. none or one side of connection is closed (zero 
+							   //value of client_host or driver_host show)
 	} state;
+	
+	std::atomic_flag acclock; //lock to protect connection structure when it can be accessed/modified during processing connect in non-main threads.
+							//this lock MUST be obtained by main thread before destroying connection which has state>=IOT_DEVCONN_PENDING as there can be 
+							//messages in driver's or consumer's queue to work with same connection. Those async operations MUST use locking too.
+							//Other threads must check connkey first and treat old connnection as closed on non-match without prior locking acclock. After
+							//obtaining lock, connkey must be rechecked again
+	iot_conn_drvview drvview;
+	iot_conn_clientview clientview;
+
+	iot_threadmsg_t* clientclose_msg; //preallocated msg struct to send message to client about connection close
+	iot_threadmsg_t* driverclose_msg; //preallocated msg struct to send message to driver when establishing or closing connection
+	iot_threadmsg_t* driverstatus_msg; //preallocated msg struct to send message to driver when establishing or closing connection
+	iot_threadmsg_t* c2d_ready_msg; //preallocated msg struct to send message to driver side when it can read or write
+	iot_threadmsg_t* d2c_ready_msg; //preallocated msg struct to send message to client side when it can read or write
+//	iot_threadmsg_t* c2d_read_ready_msg; //preallocated msg struct to send message to second side when it can read full request or get continuation for streamed requests
+//	iot_threadmsg_t* c2d_write_ready_msg; //preallocated msg struct to send message to first side when it can write new request or put continuation for streamed requests
+//	iot_threadmsg_t* d2c_read_ready_msg; //preallocated msg struct to send message to second side when it can read full request or get continuation for streamed requests
+//	iot_threadmsg_t* d2c_write_ready_msg; //preallocated msg struct to send message to first side when it can write new request or put continuation for streamed requests
 
 	struct packet_hdr {
 		uint32_t data_size; //size of pure data that follows
@@ -63,11 +112,11 @@ struct iot_device_connection_t {
 	};
 
 private:
+	void* connbuf; //address of allocated connection buffer (which is ued for c2d.buf and d2c.buf)
 	struct direction_state {
-		byte_fifo_buf buf; //client-to-driver buffer. client writes, driver reads
-		uv_async_t read_ready; //signaled when driver side can read full request or request continuation for streamed requests
-		uv_async_t write_ready; //signaled when client side can write new request or request contuation for streamed requests
-		bool want_write; //signal about free space in c2d_buf must be sent
+		byte_fifo_buf buf; //ring buffer for communication. first side writes (client for c2d), second reads
+		bool want_write; //true if signal about free space in buf must be sent (can be configured by first side)
+		volatile bool reader_closed; //true if reading side (driver for c2d) already processed close of connection (connection must be in IOT_DEVCONN_CLOSED state)
 		packet_hdr read_head;
 		packet_tail write_pendingtail, read_pendingtail;
 
@@ -80,14 +129,30 @@ private:
 
 public:
 
-	iot_device_connection_t(void) {connid=0;}
-	void init(iot_connid_t id, iot_modinstance_item_t *client_inst, uint8_t idx);
-	void uninit(void) {
-		connid=0;
+	iot_device_connection_t(void) {}
+	void init_local(iot_connsid_t id, iot_modinstance_item_t *client_inst, uint8_t idx);
+	void deinit(void);
+	int close(iot_threadmsg_t* asyncmsg=NULL); //any thread
+
+	void lock(void) { //tries to lock structure from modifying
+		uint8_t c=0;
+		while(acclock.test_and_set(std::memory_order_acquire)) {
+			//busy wait
+			c++;
+			if((c & 0x3F)==0x3F) sched_yield();
+		}
 	}
-	int connect_remote(iot_miid_t* driver_inst, iot_deviface_classid* ifaceclassids, uint8_t num_ifaceclassids);
-	int connect_local(iot_modinstance_item_t* driver_inst, iot_deviface_classid* ifaceclassids, uint8_t num_ifaceclassids);
-	void process_connect_local(void); //called in working thread of driver instance
+	void unlock(void) {
+		acclock.clear(std::memory_order_release);
+	}
+
+	int connect_remote(iot_miid_t& driver_inst, const iot_devifaceclass_id_t* ifaceclassids, uint8_t num_ifaceclassids);
+	int connect_local(iot_modinstance_item_t* driver_inst);
+	int process_connect_local(bool); //called in working thread of driver instance
+	int on_drvconnect_status(int err, bool isasync); //depending on state can run in different threads
+	void process_driver_ready(void); //runs in client thread after driver finished connection
+	void process_close_client(iot_threadmsg_t* msg); //client instance  thread
+	void process_close_driver(iot_threadmsg_t* msg); //driver instance  thread
 
 	//tries to write a message to driver's in-queue in full
 	//returns:
@@ -105,8 +170,36 @@ public:
 	//IOT_ERROR_NO_BUFSPACE - not enough space in queue, and it cannot appear later (TODO use another type of call)
 	int send_client_message(const void* data, uint32_t datasize); //can be called in driver thread only
 
+	//checks if client buffer has incomming data and sends appropriate signal if so
+//	void check_client_queue(void) {
+//		if(d2c.buf.pending_read()>0) {
+//			uv_async_send(&d2c.read_ready);
+//		}
+//	}
+
+	void on_c2d_ready(void);
+//	void on_c2d_write_ready(void) {} //TODO
+
+	void on_d2c_ready(void);
+//	void on_d2c_write_ready(void) {} //TODO
+
+private:
+
+	void d2c_ready(void); //called by driver after writing data to d2c stream buffer
+//	void c2d_write_ready(void); //called by driver after reading data from c2d stream buffer if c2d.want_write is true
+
+	void c2d_ready(void); //called by client after writing data to c2d stream buffer
+//	void d2c_write_ready(void); //called by client after reading data from d2c stream buffer if d2c.want_write is true
+
+
+	//tries to write a message to corresponding queue in full
+	//returns:
+	//0 - success
+	//IOT_ERROR_INVALID_ARGS - datasize is zero
+	//IOT_ERROR_TRY_AGAIN - not enough space in queue, but it can appear later (buffer size is enough)
+	//IOT_ERROR_NO_BUFSPACE - not enough space in queue, and it cannot appear later (TODO use another type of call)
 	template <direction_state iot_device_connection_t::*dir>
-	int send_message(const void* data, uint32_t datasize) { //can be called in client thread only
+	int send_message(const void* data, uint32_t datasize) {
 		if(datasize==0 || datasize>0x3fffffff) return IOT_ERROR_INVALID_ARGS;
 
 		uint32_t space=(this->*dir).buf.avail_write();
@@ -118,14 +211,6 @@ public:
 		assert(rval==datasize);
 		return 0;
 	}
-
-private:
-
-	void on_c2d_read_ready(void) {}
-	void on_c2d_write_ready(void) {}
-
-	void on_d2c_read_ready(void);
-	void on_d2c_write_ready(void) {}
 
 	//add request to client input buffer.
 	//returns actually written bytes.
@@ -407,7 +492,7 @@ private:
 };
 
 iot_device_connection_t* iot_create_connection(iot_modinstance_item_t *client_inst, uint8_t idx);
-iot_device_connection_t* iot_find_device_conn(iot_connid_t connid);
+iot_device_connection_t* iot_find_device_conn(const iot_connid_t &connid);
 
 
 #endif //IOT_DEVICECONN_H
