@@ -77,9 +77,12 @@ extern int min_loglevel;
 
 
 
-#define IOT_CONFIG_MAX_EVENTSOURCE_DEVICES 2
+#define IOT_CONFIG_MAX_NODE_DEVICES 3
 #define IOT_CONFIG_MAX_CLASSES_PER_DEVICE 4          //max number if 15
-#define IOT_CONFIG_MAX_EVENTSOURCE_STATES 4
+#define IOT_CONFIG_MAX_NODE_VALUEOUTPUTS 4
+#define IOT_CONFIG_MAX_NODE_VALUEINPUTS 4
+#define IOT_CONFIG_MAX_NODE_MSGOUTPUTS 8
+#define IOT_CONFIG_MAX_NODE_MSGINPUTS 4
 
 #define IOT_MEMOBJECT_MAXPLAINSIZE 8192
 
@@ -100,8 +103,9 @@ extern iot_hostid_t iot_current_hostid; //ID of current host in user config
 typedef uint16_t iot_iid_t;					//type for running Instance ID
 typedef uint16_t iot_connsid_t;				//type for connection struct ID
 
-typedef uint32_t iot_devifaceclass_id_t;	//type for device interface class ID (abstraction over hardware devices provided by device drivers)
-typedef uint32_t iot_valueclass_id_t;		//type for event-source state class ID
+typedef uint32_t iot_devifacetype_id_t;	//type for device interface class ID (abstraction over hardware devices provided by device drivers)
+typedef uint32_t iot_valueclass_id_t;		//type for class ID of value for node input/output
+typedef uint32_t iot_msgclass_id_t;			//type for message type ID
 
 typedef uint32_t iot_state_error_t;
 
@@ -400,53 +404,53 @@ struct iot_hwdev_data_t {
 };
 
 
-#define IOT_DEVIFACECLASS_DATA_MAXSIZE (32-sizeof(iot_devifaceclass_id_t))
+#define IOT_DEVIFACETYPE_DATA_MAXSIZE (32-sizeof(iot_devifacetype_id_t))
 
-struct iot_devifaceclassdata_iface;
+struct iot_devifacetype_iface;
 
-struct iot_devifaceclass_data {
-	iot_devifaceclass_id_t classid;
-	char data[IOT_DEVIFACECLASS_DATA_MAXSIZE]; //custom classid-dependent additional data for device classification (subclassing)
+struct iot_devifacetype final {
+	iot_devifacetype_id_t classid;
+	char data[IOT_DEVIFACETYPE_DATA_MAXSIZE]; //custom classid-dependent additional data for device classification (subclassing)
 
-	iot_devifaceclass_data(void) {}
-	iot_devifaceclass_data(void (*initfunc)(iot_devifaceclass_data* cls_data)) { //this constructor allows to init structure using arbitrary iot_devifaceclassdata_iface subclass
+	iot_devifacetype(void) {}
+	iot_devifacetype(void (*initfunc)(iot_devifacetype* cls_data)) { //this constructor allows to init structure using arbitrary iot_devifacetype_iface subclass
 		initfunc(this);
 	}
 
-	const iot_devifaceclassdata_iface* find_iface(bool tryload=false) const;//searches for device interface class realization in local registry
+	const iot_devifacetype_iface* find_iface(bool tryload=false) const;//searches for device interface class realization in local registry
 		//must run in main thread if tryload is true
 		//returns NULL if interface not found or cannot be loaded
 };
 
-struct iot_devifaceclassdata_iface {
-	iot_devifaceclass_id_t classid;
+struct iot_devifacetype_iface { //base class for interfaces to iot_devifacetype
+	iot_devifacetype_id_t classid;
 	const char* name;
 
-	char* sprint(const iot_devifaceclass_data* cls_data, char* buf, size_t bufsize) const { //bufsize must include space for NUL
+	char* sprint(const iot_devifacetype* cls_data, char* buf, size_t bufsize) const { //bufsize must include space for NUL
 		assert(classid==cls_data->classid);
 		if(!bufsize) return buf;
 		print_data(cls_data->data, buf, bufsize);
 		return buf;
 	}
-	uint32_t get_d2c_maxmsgsize(const iot_devifaceclass_data* cls_data) const {
+	uint32_t get_d2c_maxmsgsize(const iot_devifacetype* cls_data) const {
 		assert(classid==cls_data->classid);
 		return get_d2c_maxmsgsize(cls_data->data);
 	}
-	uint32_t get_c2d_maxmsgsize(const iot_devifaceclass_data* cls_data) const {
+	uint32_t get_c2d_maxmsgsize(const iot_devifacetype* cls_data) const {
 		assert(classid==cls_data->classid);
 		return get_c2d_maxmsgsize(cls_data->data);
 	}
-	bool is_valid(const iot_devifaceclass_data* cls_data) const { //this function checks if cls_data has correct data in it with known format
+	bool is_valid(const iot_devifacetype* cls_data) const { //this function checks if cls_data has correct data in it with known format
 		assert(classid==cls_data->classid);
 		return check_data(cls_data->data);
 	}
-	bool matches(const iot_devifaceclass_data* cls_data, const iot_devifaceclass_data* cls_tmpl) const { //this function tries to match one iface class spec with another (it can be exact specification or template)
+	bool matches(const iot_devifacetype* cls_data, const iot_devifacetype* cls_tmpl) const { //this function tries to match one iface class spec with another (it can be exact specification or template)
 		assert(classid==cls_data->classid);
 		if(cls_data->classid != cls_tmpl->classid) return false;
-		return compare(cls_data->data, cls_data->data);
+		return compare(cls_data->data, cls_tmpl->data);
 	}
 protected:
-	iot_devifaceclassdata_iface(iot_devifaceclass_id_t classid, const char* name) : classid(classid), name(name) {
+	iot_devifacetype_iface(iot_devifacetype_id_t classid, const char* name) : classid(classid), name(name) {
 	}
 //customizable part of interface:
 private:
@@ -469,12 +473,12 @@ private:
 
 //object of this class is used during driver instance creation to provide kernel with info about supported interface classes of device
 struct iot_devifaces_list {
-	iot_devifaceclass_data items[IOT_CONFIG_MAX_CLASSES_PER_DEVICE];
+	iot_devifacetype items[IOT_CONFIG_MAX_CLASSES_PER_DEVICE];
 	int num;
 
 	iot_devifaces_list(void) : num(0) {}
 	//return 0 on success, one of error code otherwise: IOT_ERROR_LIMIT_REACHED, IOT_ERROR_INVALID_ARGS
-	int add(iot_devifaceclass_data *cls) {
+	int add(iot_devifacetype *cls) {
 		if(num>=IOT_CONFIG_MAX_CLASSES_PER_DEVICE) return IOT_ERROR_LIMIT_REACHED;
 		if(!cls || !cls->classid) return IOT_ERROR_INVALID_ARGS;
 		items[num]=*cls;
@@ -506,10 +510,9 @@ static inline time_t fix_time32(uint32_t tm) { //restores normal timestamp value
 
 
 
-int kapi_modinstance_self_abort(const iot_miid_t &miid, const iot_module_instance_base *instance, int errcode);
 
-int kapi_connection_send_client_msg(const iot_connid_t &connid, iot_module_instance_base *drv_inst, iot_devifaceclass_id_t classid, const void* data, uint32_t datasize);
-int kapi_connection_send_driver_msg(const iot_connid_t &connid, iot_module_instance_base *client_inst, iot_devifaceclass_id_t classid, const void* data, uint32_t datasize);
+int kapi_connection_send_client_msg(const iot_connid_t &connid, iot_module_instance_base *drv_inst, iot_devifacetype_id_t classid, const void* data, uint32_t datasize);
+int kapi_connection_send_driver_msg(const iot_connid_t &connid, iot_module_instance_base *client_inst, iot_devifacetype_id_t classid, const void* data, uint32_t datasize);
 
 //Used by device detector modules for managing registry of available hardware devices
 //action is one of {IOT_ACTION_ADD, IOT_ACTION_REMOVE,IOT_ACTION_REPLACE}
@@ -519,11 +522,11 @@ int kapi_connection_send_driver_msg(const iot_connid_t &connid, iot_module_insta
 
 
 
-#include <iot_srcstate.h>
+#include <iot_valueclasses.h>
 
 
 // EVENT SOURCE INTERFACE //
-enum iot_value_type {		//type of numeric value for iface_event_source interface
+enum iot_value_type {		//type of numeric value for iface_node interface
 	IOT_VALUETYPE_INTEGER,		//unsigned 64 bit integer
 	IOT_VALUETYPE_FLOATING		//floating point result
 };
@@ -547,6 +550,16 @@ struct iot_module_instance_base {
 	iot_module_instance_base(uv_thread_t thread) : thread(thread), miid(0,0) {
 	}
 
+	//sends request to kernel to stop current instance with specific error code. Also is used to notify kernel when instance is ready to stop if stop was delayed by
+	//returning IOT_ERROR_TRY_AGAIN from stop(). Possible error codes:
+	//0 - no error. can be used after delayed stop() only
+	//IOT_ERROR_CRITICAL_BUG - blocks module. so no new instances of current instance type can be created
+	//IOT_ERROR_CRITICAL_ERROR - say kernel about incorrect instanciation (i.e. block driver creation using current module for current hw device) or configuration (iot item config is invalid).
+	//							no instanciation will be attempted until configuration or module version update
+	//IOT_ERROR_TEMPORARY_ERROR - just request to recreate instance after some time due to some temporary error.
+	int kapi_self_abort(int errcode);
+
+
 	//Called to start work of previously inited instance.
 	//Return values:
 	//0 - driver successfully started. It could start with temporary error state and have own retry strategy.
@@ -559,7 +572,7 @@ struct iot_module_instance_base {
 	//called to stop work of started instance. call can be followed by deinit or started again (if stop was manual, by user)
 	//Return values:
 	//0 - driver successfully stopped and can be deinited or restarted
-	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_modinstance_self_abort() will be called to notify kernel when stop is finished.
+	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify kernel when stop is finished.
 	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
 	//						cannot be called until stop reports OK)
 	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
@@ -645,7 +658,7 @@ struct iot_process_inputident_t {
 struct iot_conn_drvview {
 	iot_connid_t id;									//ID of this connection
 	int index;											//index if this connection for driver instance
-	iot_devifaceclass_data devclass;					//specific device iface class among supported by driver instance
+	iot_devifacetype devclass;					//specific device iface class among supported by driver instance
 	iot_process_ident_t client;							//identification of consumer module instance
 };
 
@@ -654,7 +667,7 @@ struct iot_conn_drvview {
 struct iot_conn_clientview {
 	iot_connid_t id;									//ID of this connection
 	int index;											//index if this driver connection for consumer instance
-	iot_devifaceclass_data devclass;					//specific device iface class among supported by driver instance
+	iot_devifacetype devclass;					//specific device iface class among supported by driver instance
 	iot_process_ident_t driver;							//universal identification of driver instance
 };
 
@@ -701,7 +714,7 @@ struct iot_device_driver_base : public iot_module_instance_base {
 	virtual int device_action(const iot_conn_drvview* conn, iot_devconn_action_t action_code, uint32_t data_size, const void* data)=0;
 };
 
-//additional specific interface for evsrc module instances
+//additional specific interface for node module instances
 struct iot_driver_client_base : public iot_module_instance_base {
 
 	iot_driver_client_base(uv_thread_t thread) : iot_module_instance_base(thread) {
@@ -713,9 +726,9 @@ struct iot_driver_client_base : public iot_module_instance_base {
 	virtual int device_action(const iot_conn_clientview* conn, iot_devconn_action_t action_code, uint32_t data_size, const void* data)=0;
 };
 
-struct iot_event_source_base : public iot_driver_client_base {
+struct iot_node_base : public iot_driver_client_base {
 //called in instance thread:
-	iot_event_source_base(uv_thread_t thread) : iot_driver_client_base(thread) {
+	iot_node_base(uv_thread_t thread) : iot_driver_client_base(thread) {
 	}
 };
 
@@ -754,36 +767,56 @@ struct iot_iface_device_driver_t {
 	//other errors treated as IOT_ERROR_CRITICAL_BUG
 	int (*check_device)(const iot_hwdev_data_t* dev_data);
 
-//	iot_devifaceclass_id_t* devclassids;			//pointer to array (with num_devclassids items) of class ids of device interfaces which this module provides
+//	iot_devifacetype_id_t* devclassids;			//pointer to array (with num_devclassids items) of class ids of device interfaces which this module provides
 
 //	iot_device_operations_t* devops;			//pointer to array (with num_devclassids items) of map of supported operations for corresponding device class
 };
 
 
-///////////////////////////EVENT SOURCE INTERFACE
+///////////////////////////NODE INTERFACE
 
-struct iot_deviceconn_filter_t { //represents general filter for selecting device driver
+struct iot_deviceconn_filter_t { //represents general filter for selecting device driver for node device connections
 	uint8_t num_devclasses:4,					//number of allowed classes for current device (number of items in devclasses list in this struct). can be zero when item is unused (num_devices <= index of current struct) of when ANY classid is suitable.
 		flag_canauto:1,						//flag that current device can be automatically selected by kernel according to classids. otherwise only user can select device
-		flag_localonly:1;					//flag that current driver (and thus hwdevice) must run on same host as evsrc instance
-	iot_devifaceclass_data *devclasses;		//pointer to array (with num_classids items) of class ids of devices this module can be connected to
+		flag_localonly:1;					//flag that current driver (and thus hwdevice) must run on same host as node instance
+	iot_devifacetype *devclasses;		//pointer to array (with num_classids items) of class ids of devices this module can be connected to
 };
 
 
-struct iot_iface_event_source_t {
-	uint32_t num_devices:2,						//number of devices this module should be connected to, 0, 1 or 2. (limited by IOT_CONFIG_MAX_EVENTSOURCE_DEVICES)
-			num_values:4,						//number of output values this module provides. can be 0 if only messages can be generated. limited by IOT_CONFIG_MAX_EVENTSOURCE_STATES. "error" output is always present and not counted here
+//TODO. provides wasy to document and describe customizable message fields (like to specify possible values of some enumeration)
+class iot_msgclass_descriptor {
+};
+
+
+struct iot_iface_node_t {
+	uint32_t num_devices:2,						//number of devices this module should be connected to. limited by IOT_CONFIG_MAX_NODE_DEVICES
+			num_valueoutputs:4,					//number of output value lines this module provides. limited by IOT_CONFIG_MAX_NODE_VALUEOUTPUTS. "error" output is always present and not counted here
+			num_valueinputs:4,					//number of input value lines this module accepts. limited by IOT_CONFIG_MAX_NODE_VALUEINPUTS
+			num_msgoutputs:4,					//number of message types this module can send. limited by IOT_CONFIG_MAX_NODE_MSGOUTPUTS.
+			num_msginputs:4,					//number of message types this module can receive. limited by IOT_CONFIG_MAX_NODE_MSGINPUTS.
 			cpu_loading:2;						//average level of cpu loading of started instance. 0 - minimal loading (unlimited number of such tasks can work in same working thread), 3 - very high loading (this module requires separate working thread per instance)
-	iot_deviceconn_filter_t devcfg[IOT_CONFIG_MAX_EVENTSOURCE_DEVICES];
+	iot_deviceconn_filter_t devcfg[IOT_CONFIG_MAX_NODE_DEVICES];
 	struct {
-		const char *label; //label to name output. event source output in iot configuration is matched by this label. "err" is reserved for error state
+		const char *label; //unique label to name output. node output in iot configuration is matched by this label. "err" is reserved for error state, "msg" is reserved for message output
 		iot_valueclass_id_t vclass_id;
-	} statevaluecfg[IOT_CONFIG_MAX_EVENTSOURCE_STATES];
-//	enum iot_value_type value_type;				//specifies type of 'value' field of event_source_state_t
+	} valueoutput[IOT_CONFIG_MAX_NODE_VALUEOUTPUTS]; //describes type of value for corresponding labeled VALUE output
+	struct {
+		const char *label; //unique label to name input (can overlap with labels of outputs). node input in iot configuration is matched by this label. "msg" is reserved for message input
+		iot_valueclass_id_t vclass_id;
+	} valueinput[IOT_CONFIG_MAX_NODE_VALUEINPUTS]; //describes type of value for corresponding labeled VALUE input
+	struct {
+		iot_msgclass_id_t msgclass_id; //must be unique in msgoutput
+		const iot_msgclass_descriptor* msgdescr; //optional descriptor for customizable message data fields
+	} msgoutput[IOT_CONFIG_MAX_NODE_MSGOUTPUTS]; //describes possible messages this node can output
+	struct {
+		iot_msgclass_id_t msgclass_id; //must be unique in msginput
+	} msginput[IOT_CONFIG_MAX_NODE_MSGINPUTS]; //describes possible messages this node can process
+	
+//	enum iot_value_type value_type;				//specifies type of 'value' field of node_state_t
 //	size_t state_size;							//real size of state struct (sizeof(iot_srcstate_t) + custom_len)
 
 	//reads current state of module into provided statebuf. size of statebuf must be at least state_size. Can be called from any thread. returns 0 on success or negative error code
-	int (*init_instance)(iot_event_source_base**instance, uv_thread_t thread, uint32_t iot_id, const char *json_cfg); //always called in main thread
+	int (*init_instance)(iot_node_base**instance, uv_thread_t thread, uint32_t iot_id, const char *json_cfg); //always called in main thread
 //	int (*get_state)(void* instance, iot_srcstate_t* statebuf, size_t bufsize);
 
 	//called to deinit instance.
@@ -807,11 +840,11 @@ typedef struct {
 	int (*init_module)(void);						//always called in main thread. once after loading (if loaded dynamically) or during startup (if compiled in statically)
 	int (*deinit_module)(void);						//called in main thread before unloading dynamically loaded module
 
-	const iot_devifaceclassdata_iface **deviface_config;//optional array of module-defined device interface classes. can be NULL if num_devifaces==0
+	const iot_devifacetype_iface **deviface_config;//optional array of module-defined device interface classes. can be NULL if num_devifaces==0
 	const iot_hwdevident_iface **devcontype_config;	//optional array of module-defined device connection types. can be NULL if num_devcontypes==0
 
 //Role interfaces
-	const iot_iface_event_source_t *iface_event_source;
+	const iot_iface_node_t *iface_node;
 	const iot_iface_device_driver_t* iface_device_driver;
 	const iot_iface_device_detector_t *iface_device_detector;
 //TODO other roles

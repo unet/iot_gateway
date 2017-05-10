@@ -70,7 +70,7 @@ const iot_hwdevident_iface* iot_hwdev_localident_t::find_iface(bool tryload) con
 	return NULL;
 }
 
-const iot_devifaceclassdata_iface* iot_devifaceclass_data::find_iface(bool tryload) const { //searches for connection type interface class realization in local registry
+const iot_devifacetype_iface* iot_devifacetype::find_iface(bool tryload) const { //searches for connection type interface class realization in local registry
 	//must run in main thread if tryload is true
 	//returns NULL if interface not found or cannot be loaded
 	iot_devifaceclass_item_t* it=modules_registry->find_devifaceclass(classid, tryload);
@@ -112,7 +112,7 @@ void iot_modules_registry_t::create_detector_modinstance(iot_module_item_t* modu
 
 	//from here all errors go to onerr
 
-	thread=thread_registry->assign_thread(iface->cpu_loading);
+	thread=main_thread_item; //thread_registry->assign_thread(iface->cpu_loading);   for now always run detectors in main thread to have sync access to device registry
 	assert(thread!=NULL);
 
 	err=iface->init_instance(&inst, thread->thread);
@@ -250,12 +250,12 @@ void iot_module_item_t::recheck_job(bool no_jobs) { //reschedules timers and/or 
 	if(delay<0xFFFFFFFFFFFFFFFFul) {
 		if(!no_jobs || !recheck_timer.is_on() || recheck_timer.get_timeout()>now+2000) //for no_jobs mode to not reschedule timer if its activation is close or in past
 																					//to avoid repeated moving of job execution time in case of often no_jobs calls
-			main_thread_item.schedule_atimer(recheck_timer, delay);
+			main_thread_item->schedule_atimer(recheck_timer, delay);
 	}
 }
 
 
-void iot_modules_registry_t::start(const iot_devifaceclassdata_iface** devifaceclscfg, uint32_t num_devifaces,const iot_hwdevident_iface** devcontypescfg, uint32_t num_contypes) {
+void iot_modules_registry_t::start(const iot_devifacetype_iface** devifaceclscfg, uint32_t num_devifaces,const iot_hwdevident_iface** devcontypescfg, uint32_t num_contypes) {
 	assert(uv_thread_self()==main_thread);
 
 	int err;
@@ -288,7 +288,7 @@ void iot_modules_registry_t::stop(void) {
 	//TODO
 }
 
-int iot_modules_registry_t::register_devifaceclasses(const iot_devifaceclassdata_iface** iface, uint32_t num, uint32_t module_id) { //main thread
+int iot_modules_registry_t::register_devifaceclasses(const iot_devifacetype_iface** iface, uint32_t num, uint32_t module_id) { //main thread
 	//zero module_id is used for built-in device iface classes. It can be used to config class IDs from other modules
 	assert(uv_thread_self()==main_thread);
 	assert(iface!=NULL || num==0);
@@ -450,12 +450,12 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 			BILINKLIST_INSERTHEAD(item, drivers_head, next_driver, prev_driver);
 		}
 	}
-	if(cfg->iface_event_source) {
-		if(!cfg->iface_event_source->init_instance || !cfg->iface_event_source->deinit_instance) {
+	if(cfg->iface_node) {
+		if(!cfg->iface_node->init_instance || !cfg->iface_node->deinit_instance) {
 			outlog_error("Module '%s::%s' with ID %u has incomplete event source interface", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
 		} else {
 			item->state[IOT_MODINSTTYPE_EVSOURCE]=IOT_MODULESTATE_OK;
-			BILINKLIST_INSERTHEAD(item, evsrc_head, next_evsrc, prev_evsrc);
+			BILINKLIST_INSERTHEAD(item, node_head, next_node, prev_node);
 		}
 	}
 	//do post actions after filling all item props
@@ -544,11 +544,11 @@ bool iot_modinstance_item_t::init(const iot_miid_t &miid_, iot_module_item_t* mo
 		case IOT_MODINSTTYPE_EVSOURCE: {
 			cfgitem=cfgitem_;
 			cfgitem->miid=miid;
-			auto iface=module->config->iface_event_source;
+			auto iface=module->config->iface_node;
 			assert(iface!=NULL);
-			BILINKLIST_INSERTHEAD(this, module->evsrc_instances_head, next_inmod, prev_inmod);
+			BILINKLIST_INSERTHEAD(this, module->node_instances_head, next_inmod, prev_inmod);
 			cpu_loading=iface->cpu_loading;
-			for(int i=0;i<iface->num_devices;i++) data.evsrc.dev[i].actual=1;
+			for(int i=0;i<iface->num_devices;i++) data.node.dev[i].actual=1;
 			break;
 		}
 	}
@@ -646,8 +646,8 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 		}
 		case IOT_MODINSTTYPE_EVSOURCE: {
 			//clean retry timeouts data
-			for(uint8_t i=0;i<IOT_CONFIG_MAX_EVENTSOURCE_DEVICES && modinst->data.evsrc.dev[i].actual;i--)
-				modinst->data.evsrc.dev[i].retry_drivers.remove_all();
+			for(uint8_t i=0;i<IOT_CONFIG_MAX_NODE_DEVICES && modinst->data.node.dev[i].actual;i--)
+				modinst->data.node.dev[i].retry_drivers.remove_all();
 
 			break;
 		}
@@ -693,7 +693,7 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 				break;
 			}
 			case IOT_MODINSTTYPE_EVSOURCE: {
-				auto iface=module->config->iface_event_source;
+				auto iface=module->config->iface_node;
 				err=iface->deinit_instance(modinst->instance);
 				break;
 			}
@@ -777,9 +777,9 @@ int iot_modules_registry_t::create_driver_modinstance(iot_module_item_t* module,
 	int num_devclasses;
 	int i;
 	for(num_devclasses=0,i=0;i<deviface_list.num;i++) {
-		const iot_devifaceclassdata_iface* iface=deviface_list.items[i].find_iface();
+		const iot_devifacetype_iface* iface=deviface_list.items[i].find_iface();
 		if(iface) {
-			memmove(&modinst->data.driver.devclasses[num_devclasses].data, &deviface_list.items[i], sizeof(deviface_list.items[i]));
+			memcpy(&modinst->data.driver.devclasses[num_devclasses].type, &deviface_list.items[i], sizeof(deviface_list.items[i]));
 			modinst->data.driver.devclasses[num_devclasses].iface=iface;
 			num_devclasses++;
 		}
@@ -811,21 +811,21 @@ onerr:
 	return err;
 }
 
-//try to create evsrc instance for specific config item
+//try to create node instance for specific config item
 //Returns:
 //  0 - success, driver instance created and started
 //  IOT_ERROR_NOT_READY - temporary success. instance start is async, result not available right now
 //  IOT_ERROR_TEMPORARY_ERROR - error. module can be retried for this device later
 //  IOT_ERROR_MODULE_BLOCKED - error. module was blocked on temporary or constant basis
 //  IOT_ERROR_CRITICAL_ERROR - instanciation is invalid (error in saved config of config item?)
-int iot_modules_registry_t::create_evsrc_modinstance(iot_module_item_t* module, iot_config_inst_item_t* item) {
+int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, iot_config_inst_item_t* item) {
 	assert(uv_thread_self()==main_thread);
 
-	iot_event_source_base *inst=NULL;
+	iot_node_base *inst=NULL;
 	iot_modinstance_item_t *modinst=NULL;
 	iot_modinstance_type_t type=IOT_MODINSTTYPE_EVSOURCE;
 	int err;
-	auto iface=module->config->iface_event_source;
+	auto iface=module->config->iface_node;
 	//from here all errors go to onerr
 	iot_thread_item_t* thread=thread_registry->assign_thread(iface->cpu_loading);
 	assert(thread!=NULL);
@@ -876,59 +876,75 @@ onerr:
 	return err;
 }
 
-//tries to setup connection of LOCAL driver to appropriate LOCAL consumer
-//returns:
-//	0 on successful connection creation
-//	IOT_ERROR_NOT_READY - connection creation is in progress
-//	IOT_ERROR_TEMPORARY_ERROR - attempt can be repeated later (lack of resources)
-//	IOT_ERROR_NOT_FOUND - no attempt should be scheduled, i.e. do nothing
-int iot_modules_registry_t::try_connect_driver_to_consumer(iot_modinstance_item_t *drvinst) {
+//tries to setup connection of LOCAL driver to appropriate LOCAL consumer (or several)
+void iot_modules_registry_t::try_connect_driver_to_consumer(iot_modinstance_item_t *drvinst) {
 	assert(uv_thread_self()==main_thread);
-	if(need_exit) return IOT_ERROR_NOT_FOUND;
+	if(need_exit) return;
 
-	if(!drvinst->is_working_not_stopping()) return IOT_ERROR_NOT_FOUND; //driver instance must be started
+	if(!drvinst->is_working_not_stopping()) return; //driver instance must be started
 
 	int err;
-	bool wastemperr=false;
 	iot_driverclient_conndata_t* conndata;
 	iot_module_item_t* mod, *nextmod=modules_registry->all_head;
 	while(nextmod) {
 		mod=nextmod;
 		nextmod=nextmod->next;
 
-		iot_modinstance_item_t *modinst=mod->evsrc_instances_head; //loop through ev sources
+		iot_modinstance_item_t *modinst=mod->node_instances_head; //loop through ev sources
 		while(modinst) {
-			auto iface=mod->config->iface_event_source;
+			auto iface=mod->config->iface_node;
 			uint8_t num_devs=iface->num_devices;
+
+			//check that any node input is connected to current driver 
+
 			for(uint8_t dev_idx=0;dev_idx<num_devs;dev_idx++) {
-				conndata=&modinst->data.evsrc.dev[dev_idx];
+
+				conndata=&modinst->data.node.dev[dev_idx];
 				iot_device_connection_t* conn=conndata->conn;
-				if(conndata->block || (conn && conn->state!=conn->IOT_DEVCONN_INIT)) continue; //connection blocked, is set or in process of being set
+				if(conndata->block) continue; //connection blocked
 
 				if(!conn) {
 					conn=iot_create_connection(modinst, dev_idx); //updates conndata->conn on success
 					if(!conn) { //no connection slots?
 						outlog_error("Cannot allocate connection for device line %d of %s iot_id=%u", int(dev_idx)+1, iot_modinsttype_name[modinst->type], modinst->cfgitem->iot_id);
-						wastemperr=true;
+
+						uint32_t now32=uint32_t((uv_now(main_loop)+500)/1000);
+						if(conndata->retry_drivers_timeout<now32+30) { //retry to set up connection
+							conndata->retry_drivers_timeout=now32+30;
+							modinst->recheck_job(true);
+						} //else recheck already set on later time, so do nothing here
+
 						continue;
 					}
+				} else {
+					if(conn->state!=conn->IOT_DEVCONN_INIT) continue; //is set or in process of being set
 				}
 
 				if((!conn->client_hwdevident && !conn->client_devifaceclassfilter->flag_canauto) || //no hwdevice bound and auto detection forbidden
 					(conn->client_hwdevident && conn->client_devifaceclassfilter->flag_localonly && conn->client_hwdevident->hostid!=IOT_HOSTID_ANY &&
 																						conn->client_hwdevident->hostid != iot_current_hostid)) { //another host specified but not allowed
 					conndata->block=1;
+					conn->close();
 					continue;
+				}
+
+				if(!conn->client_hwdevident && conn->client_devifaceclassfilter->flag_canauto && num_devs>1) { //no device specified and suto search enabled
+					//check we do not set up connection to same driver several times. TODO: enchance checks to account possible template in client_hwdevident
+					iot_driverclient_conndata_t* conndata2;
+					uint8_t dev_idx2;
+					for(dev_idx2=0;dev_idx2<num_devs;dev_idx2++) {
+						if(dev_idx==dev_idx2) continue;
+						conndata2=&modinst->data.node.dev[dev_idx2];
+						if(!conndata2->block && conndata2->conn && conndata2->conn->state!=conn->IOT_DEVCONN_INIT && conndata2->conn->driver_host==iot_current_hostid &&
+							conndata2->conn->driver.local.modinstlk.modinst==drvinst) break;
+					}
+					if(dev_idx2<num_devs) continue; //skip current device connenction as it already has connection to same driver
 				}
 
 				if(!conn->client_hwdevident || conn->client_hwdevident->hostid==IOT_HOSTID_ANY || conn->client_hwdevident->hostid == iot_current_hostid) { //any device host allowed or current host matches
 					//can try to connect to current local driver
 					err=conn->connect_local(drvinst);
-					if(err==IOT_ERROR_TEMPORARY_ERROR) {
-						wastemperr=true;
-						continue;
-					}
-					if(err!=IOT_ERROR_DEVICE_NOT_SUPPORTED) return err;	// !err || err==IOT_ERROR_NOT_READY //////////////////|| err==IOT_ERROR_CRITICAL_ERROR 
+					if(err==IOT_ERROR_NO_MEMORY || err==IOT_ERROR_HARD_LIMIT_REACHED) return; //useless to continue after such errors. retry will be already scheduled
 				}
 			}
 			modinst=modinst->next_inmod;
@@ -936,7 +952,6 @@ int iot_modules_registry_t::try_connect_driver_to_consumer(iot_modinstance_item_
 
 		//TODO iot_modinstance_item_t *modinst=mod->executor_instances_head; //loop through executors
 	}
-	return wastemperr ? IOT_ERROR_TEMPORARY_ERROR : IOT_ERROR_NOT_FOUND;
 }
 
 //tries to setup connection of driver client (event source or executor) to one of its driver
@@ -953,8 +968,8 @@ int iot_modules_registry_t::try_connect_consumer_to_driver(iot_modinstance_item_
 
 	switch(modinst->type) {
 		case IOT_MODINSTTYPE_EVSOURCE: {
-			assert(idx<IOT_CONFIG_MAX_EVENTSOURCE_DEVICES);
-			conndata=&modinst->data.evsrc.dev[idx];
+			assert(idx<IOT_CONFIG_MAX_NODE_DEVICES);
+			conndata=&modinst->data.node.dev[idx];
 			break;
 		}
 		case IOT_MODINSTTYPE_DRIVER:
@@ -1176,7 +1191,7 @@ onerr:
 		} else {
 			msgp.start=NULL;
 			msg->intarg=err;
-			main_thread_item.send_msg(msg);
+			main_thread_item->send_msg(msg);
 		}
 		return IOT_ERROR_NOT_READY;
 	}
@@ -1205,7 +1220,7 @@ int iot_modinstance_item_t::on_start_status(int err, bool isasync) { //processes
 				modules_registry->try_connect_driver_to_consumer(this);
 				break;
 			case IOT_MODINSTTYPE_EVSOURCE: {
-				for(uint8_t i=0;i<IOT_CONFIG_MAX_EVENTSOURCE_DEVICES && data.evsrc.dev[i].actual;i--) modules_registry->try_connect_consumer_to_driver(this, i);
+				for(uint8_t i=0;i<IOT_CONFIG_MAX_NODE_DEVICES && data.node.dev[i].actual;i--) modules_registry->try_connect_consumer_to_driver(this, i);
 				break;
 			}
 		}
@@ -1288,25 +1303,25 @@ void iot_modinstance_item_t::recheck_job(bool no_jobs) {
 
 
 //possible return status:
-//0 - success, modinstance has been started or was already started
+//0 - success, modinstance has been stopped or was already stopped
 //	IOT_ERROR_NOT_READY - async request to stop successfully sent or stop is delayed by module code
 //	IOT_ERROR_TEMPORARY_ERROR - stop operation failed by internal gateway fault
 //	IOT_ERROR_CRITICAL_ERROR - module instance is hung or instance is invalid
 
-int iot_modinstance_item_t::stop(bool isasync, bool forcemsg) { //called in working thread of instance or main thread. tries to stop module instance and returns status
-	//isasync should be true only when processing IOT_MSG_START_MODINSTANCE command or call is made from modinst itself or by timer
-	//forcemsg can be used to force async action even from main thread (isasync must be false)
+int iot_modinstance_item_t::stop(bool ismsgproc, bool forcemsg) { //called in working thread of instance or main thread. tries to stop module instance and returns status
+	//ismsgproc should be true only when processing IOT_MSG_START_MODINSTANCE command
+	//forcemsg can be used to force async action even from instance thread (isasync must be false)
 	int err;
-	if(!isasync) { //initial call from main thread
-		assert(uv_thread_self()==main_thread);
-		target_state=IOT_MODINSTSTATE_INITED;
-
+	target_state=IOT_MODINSTSTATE_INITED;
+	if(!ismsgproc) { //initial call from main thread
 		if(uv_thread_self()!=thread->thread || forcemsg) { //not working thread of instance, so must be async start
+			if(stopmsglock.test_and_set(std::memory_order_acquire)) return IOT_ERROR_NOT_READY; //msg already busy, so stop already queuered
 			iot_threadmsg_t* msg=msgp.stop;
-			if(!msg) return IOT_ERROR_NOT_READY; //msg already sent?
+			assert(msg!=NULL);
 			err=iot_prepare_msg(msg, IOT_MSG_STOP_MODINSTANCE, this, 0, NULL, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
 			if(err) {
 				assert(false);
+				stopmsglock.clear(std::memory_order_release); //TODO leaves period between test_and_set when another thread can see lock busy and think msg is sent, but it won't be sent
 				return err;
 			}
 
@@ -1317,19 +1332,16 @@ int iot_modinstance_item_t::stop(bool isasync, bool forcemsg) { //called in work
 		}
 	} else {
 		assert(uv_thread_self()==thread->thread);
-		target_state=IOT_MODINSTSTATE_INITED;
 	}
 	//this is working thread of modinstance
 
-	if(state==IOT_MODINSTSTATE_INITED) goto onsucc;
+	if(state==IOT_MODINSTSTATE_INITED) return 0;
 	assert(state==IOT_MODINSTSTATE_STARTED || state==IOT_MODINSTSTATE_STOPPING);
 
 	err=instance->stop();
 	if(err==IOT_ERROR_TRY_AGAIN && state==IOT_MODINSTSTATE_STARTED) { //module asked some time to make graceful stop
 		state=IOT_MODINSTSTATE_STOPPING;
-		state_timeout=uv_now(thread->loop)+3*1000;
-		recheck_job(true);
-		return IOT_ERROR_NOT_READY;
+		goto onsucc;
 	}
 	if(err) {
 		state=IOT_MODINSTSTATE_HUNG;
@@ -1342,7 +1354,7 @@ int iot_modinstance_item_t::stop(bool isasync, bool forcemsg) { //called in work
 	outlog_debug("%s instance of module '%s::%s' ID %u stopped (iid %u)",iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, unsigned(miid.iid));
 onsucc:
 	err=0;
-	if(isasync) {
+	if(ismsgproc) {
 		iot_threadmsg_t* msg=msgp.stopstatus;
 		assert(msg!=NULL);
 		err=iot_prepare_msg(msg, IOT_MSG_MODINSTANCE_STOPSTATUS, this, 0, NULL, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
@@ -1351,7 +1363,7 @@ onsucc:
 		} else {
 			msgp.stopstatus=NULL;
 			msg->intarg=err;
-			main_thread_item.send_msg(msg);
+			main_thread_item->send_msg(msg);
 		}
 		return IOT_ERROR_NOT_READY;
 	}
@@ -1364,6 +1376,13 @@ onsucc:
 //	IOT_ERROR_CRITICAL_ERROR - module instance is hung or instance is invalid
 int iot_modinstance_item_t::on_stop_status(int err, bool isasync) { //processes result of modinstance stop in main thread
 	assert(uv_thread_self()==main_thread);
+
+	if(state==IOT_MODINSTSTATE_STOPPING) {
+		state_timeout=uv_now(main_loop)+3*1000;
+		recheck_job(true);
+		return IOT_ERROR_NOT_READY;
+	}
+
 	assert(state==IOT_MODINSTSTATE_INITED || state==IOT_MODINSTSTATE_HUNG);
 
 	int i;
@@ -1374,6 +1393,7 @@ int iot_modinstance_item_t::on_stop_status(int err, bool isasync) { //processes 
 
 	switch(type) {
 		case IOT_MODINSTTYPE_DETECTOR:
+			hwdev_registry->remove_hwdev_bydetector(miid);
 			break;
 		case IOT_MODINSTTYPE_DRIVER: {
 			assert(data.driver.hwdev!=NULL);
@@ -1391,8 +1411,8 @@ int iot_modinstance_item_t::on_stop_status(int err, bool isasync) { //processes 
 		}
 		case IOT_MODINSTTYPE_EVSOURCE:
 			//close connections
-			for(i=0;i<IOT_CONFIG_MAX_EVENTSOURCE_DEVICES;i++) {
-				if(data.evsrc.dev[i].actual && data.evsrc.dev[i].conn) data.evsrc.dev[i].conn->close();
+			for(i=0;i<IOT_CONFIG_MAX_NODE_DEVICES;i++) {
+				if(data.node.dev[i].actual && data.node.dev[i].conn) data.node.dev[i].conn->close();
 			}
 			break;
 	}
@@ -1430,7 +1450,7 @@ void iot_modinstance_item_t::unlock(void) { //unlocked previously locked structu
 				int err=iot_prepare_msg(msg, IOT_MSG_FREE_MODINSTANCE, this, 0, NULL, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
 				assert(err==0);
 				msgp.stopstatus=NULL;
-				main_thread_item.send_msg(msg);
+				main_thread_item->send_msg(msg);
 			}
 		}
 	}

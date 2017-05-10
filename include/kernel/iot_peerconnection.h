@@ -28,7 +28,7 @@ struct iot_remote_driverinst_item_t {
 	const iot_hwdevident_iface* ident_iface;
 	dbllist_list<iot_device_entry_t, iot_mi_inputid_t, uint32_t, 1> retry_clients; //list of local client instances which can be retried later or blocked forever
 
-	iot_devifaceclass_id_t dev_classids[IOT_CONFIG_MAX_CLASSES_PER_DEVICE];
+	iot_devifacetype_id_t dev_classids[IOT_CONFIG_MAX_CLASSES_PER_DEVICE];
 	iot_miid_t miid;
 };
 

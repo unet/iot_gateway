@@ -27,30 +27,119 @@ static const uint16_t iot_thread_loading[4] = {
 
 iot_thread_registry_t* thread_registry=NULL;
 static iot_thread_registry_t _thread_registry; //instantiate singleton class
-iot_thread_item_t main_thread_item;
+iot_thread_item_t* main_thread_item=NULL;
 
 uv_thread_t main_thread=0;
 uv_loop_t *main_loop=NULL;
 volatile sig_atomic_t need_exit=0; //1 means graceful exit after getting SIGTERM or SIGUSR1, 2 means urgent exit after SIGINT or SIGQUIT
+int max_threads=10;
 
-void iot_thread_item_t::init(uv_thread_t thread_, uv_loop_t* loop_, iot_memallocator* allocator_) {
-		memset(this, 0, sizeof(*this));
-		thread=thread_;
-		loop=loop_;
-		allocator=allocator_;
+uint32_t iot_thread_item_t::last_thread_id=0;
 
-		uv_async_init(loop, &msgq_watcher, iot_thread_registry_t::on_thread_msg);
-		msgq_watcher.data=this;
+int iot_thread_item_t::init(bool ismain) {//, uv_loop_t* loop_, iot_memallocator* allocator_) {
+	int err;
+	uint32_t interval;
+	if(ismain) {
+		thread=main_thread;
+		allocator=&main_allocator;
 
-		uint32_t interval=1*1000; //interval of first timer in milliseconds
-		for(unsigned i=0;i<sizeof(atimer_pool)/sizeof(atimer_pool[0]);i++) {
-			atimer_pool[i].timer.init(interval, loop);
-			interval*=2;
-		}
+		loop=main_loop;
+	} else {
+		allocator=new iot_memallocator;
+		if(!allocator) goto onerr;
+
+		loop=new uv_loop_t;
+		if(!loop) goto onerr;
+		uv_loop_init(loop);
+
 	}
 
+	uv_async_init(loop, &msgq_watcher, iot_thread_registry_t::on_thread_msg);
+	msgq_watcher.data=this;
 
-iot_thread_registry_t::iot_thread_registry_t(void) : threads_head(NULL) {
+	interval=1*1000; //interval of first timer in milliseconds
+	for(unsigned i=0;i<sizeof(atimer_pool)/sizeof(atimer_pool[0]);i++) {
+		atimer_pool[i].timer.init(interval, loop);
+		interval*=2;
+	}
+
+	if(!ismain) {
+#ifndef _WIN32
+		sigset_t myset, oldset;
+		sigfillset( &myset );
+		pthread_sigmask( SIG_SETMASK, &myset, &oldset ); //block all signals by default
+#endif
+		err=uv_thread_create(&thread, [](void * arg) -> void {
+			iot_thread_item_t* thitem=(iot_thread_item_t*)arg;
+			thitem->thread_func();
+
+		}, this);
+
+#ifndef _WIN32
+		pthread_sigmask( SIG_SETMASK, &oldset, NULL ); //restore previous signal mask
+#endif
+		if(err) goto onerr;
+	}
+
+	return 0;
+onerr:
+	deinit();
+	return IOT_ERROR_NO_MEMORY;
+}
+
+void iot_thread_item_t::thread_func(void) {
+	thread=uv_thread_self();
+	allocator->set_thread(thread);
+	for(unsigned i=0;i<sizeof(atimer_pool)/sizeof(atimer_pool[0]);i++) atimer_pool[i].timer.set_thread(thread);
+
+	uv_run(loop, UV_RUN_DEFAULT);
+
+	//TERMINATION
+
+	//process all messages currently in msg queue
+	iot_thread_registry_t::on_thread_msg(&msgq_watcher);
+
+	//send msg to main thread
+	iot_threadmsg_t* msg=&termmsg;
+	int err=iot_prepare_msg(msg, IOT_MSG_THREAD_SHUTDOWNREADY, NULL, 0, this, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
+	if(err) {
+		assert(false);
+	} else {
+		main_thread_item->send_msg(msg);
+	}
+}
+
+
+void iot_thread_item_t::deinit(void) {
+	assert(uv_thread_self()==main_thread);
+	assert(this==main_thread_item || !thread); //non-main thread must be already stopped and destroyed
+	if(loop) {
+		for(unsigned i=0;i<sizeof(atimer_pool)/sizeof(atimer_pool[0]);i++) {
+			atimer_pool[i].timer.deinit();
+		}
+		uv_close((uv_handle_t*)&msgq_watcher, NULL);
+	}
+	if(this!=main_thread_item) {
+		if(loop) {
+			uv_walk(loop, [](uv_handle_t* handle, void* arg) -> void {if(!uv_is_closing(handle)) {uv_close(handle, NULL);}}, NULL);
+			uv_run(loop, UV_RUN_NOWAIT);
+			int err=uv_loop_close(loop);
+			if(!err) {
+				delete loop;
+			} else {
+				outlog_debug("Thread %u left event loop in busy state", thread_id);
+			}
+			loop=NULL;
+		}
+		if(allocator) {
+			allocator->set_thread(main_thread);
+//			delete allocator;
+//			allocator=NULL;
+		}
+	}
+}
+
+iot_thread_registry_t::iot_thread_registry_t(void) {
 		assert(thread_registry==NULL);
 		assert(sizeof(iot_threadmsg_t)==64);
 		thread_registry=this;
@@ -59,9 +148,10 @@ iot_thread_registry_t::iot_thread_registry_t(void) : threads_head(NULL) {
 		main_loop=uv_default_loop();
 
 		//fill main thread item
-		main_thread_item.init(main_thread, main_loop, &main_allocator);
-		main_thread_item.cpu_loading=IOT_THREAD_LOADING_MAIN;
-		BILINKLIST_INSERTHEAD(&main_thread_item, threads_head, next, prev);
+		main_thread_item=&main_thread_obj;
+		main_thread_item->init(true);
+		main_thread_item->cpu_loading=IOT_THREAD_LOADING_MAIN;
+		BILINKLIST_INSERTHEAD(main_thread_item, threads_head, next, prev);
 	}
 
 void iot_thread_registry_t::remove_modinstance(iot_modinstance_item_t* inst_item) { //hang instances are moved to hang list
@@ -102,20 +192,36 @@ iot_thread_item_t* iot_thread_registry_t::assign_thread(uint8_t cpu_loadtp){
 
 		if(cpu_loadtp>=IOT_THREAD_LOADING_NUM) cpu_loadtp=0;
 
-		if(cpu_loadtp<3) {
-			//find thread with minimum loading
-			iot_thread_item_t* minthread=NULL;
-			uint16_t minload=IOT_THREAD_LOADING_MAX;
-			iot_thread_item_t* it=threads_head;
-			while(it) {
-				if(it->cpu_loading<minload)	{minload=it->cpu_loading;minthread=it;}
-				it=it->next;
-			}
-			if(minthread && minload+iot_thread_loading[cpu_loadtp]<=IOT_THREAD_LOADING_MAX) return minthread;
+		//find thread with minimum loading
+		iot_thread_item_t* minthread=NULL;
+		uint16_t minload=IOT_THREAD_LOADING_MAX;
+		iot_thread_item_t* it=threads_head;
+		while(it) {
+			if(!minthread || it->cpu_loading<minload) {minload=it->cpu_loading;minthread=it;}
+			it=it->next;
 		}
-		//here new thread must be started
+		assert(minthread!=NULL); //at leasy main thread must be here
+
+		if(cpu_loadtp<3) {
+			if(minload+iot_thread_loading[cpu_loadtp]<=IOT_THREAD_LOADING_MAX) return minthread;
+		}
+		if(num_threads>=max_threads) {
+			outlog_notice("Limit on number of threads should be raised! Per-thread load exceeded.");
+			return minthread;
+		}
+		//here new thread must and can be started
 		//TODO
-		return &main_thread_item;
+		iot_thread_item_t* thitem=new iot_thread_item_t;
+		if(!thitem) goto onerr;
+		if(thitem->init()) goto onerr;
+		BILINKLIST_INSERTHEAD(thitem, threads_head, next, prev);
+		num_threads++;
+		outlog_debug("New thread created with ID %u", thitem->thread_id);
+		return thitem;
+
+onerr:
+		outlog_notice("Cannot create new thread, using existing. Per-thread load exceeded.");
+		return minthread;
 	}
 
 void iot_thread_registry_t::graceful_shutdown(void) { //initiate graceful shutdown, stop all module instances in all threads
@@ -138,17 +244,52 @@ void iot_thread_registry_t::graceful_shutdown(void) { //initiate graceful shutdo
 		}
 	}
 void iot_thread_registry_t::on_thread_modinstances_ended(iot_thread_item_t* thread) { //called by remove_modinstance() after removing last modinstance in shutdown mode
+		assert(uv_thread_self()==main_thread);
 		assert(is_shutdown);
-		if(thread!=&main_thread_item) {
-			thread->deinit();
-			BILINKLIST_REMOVE(thread, next, prev);
-		}
-		if(threads_head==&main_thread_item && main_thread_item.next==NULL && !main_thread_item.instances_head) { //only main thread left
-			//process all messages currently in msg queue
-			on_thread_msg(&main_thread_item.msgq_watcher);
-			modules_registry->graceful_shutdown();
+		if(thread!=main_thread_item) {
+			assert(!thread->is_shutdown);
+			//send msg to exit
+			iot_threadmsg_t* msg=&thread->termmsg;
+			int err=iot_prepare_msg(msg, IOT_MSG_THREAD_SHUTDOWN, NULL, 0, NULL, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
+			if(err) {
+				assert(false);
+			} else {
+				thread->send_msg(msg);
+				thread->is_shutdown=true;
+			}
+		} else {
+			on_thread_shutdown(main_thread_item);
 		}
 	}
+
+//notification from non-main thread about termination
+void iot_thread_registry_t::on_thread_shutdown(iot_thread_item_t* thread) {
+	assert(uv_thread_self()==main_thread);
+
+	outlog_debug("Thread with ID %u shut down", thread->thread_id);
+
+	if(thread!=main_thread_item) {
+		int err=uv_thread_join(&thread->thread);
+		assert(err==0);
+		thread->thread=0;
+
+		thread->deinit();
+
+		assert(num_threads>0);
+		num_threads--;
+	}
+	BILINKLIST_REMOVE_NOCL(thread, next, prev);
+	BILINKLIST_INSERTHEAD(thread, delthreads_head, next, prev); //TODO dealloc closed threads later if necesary
+
+	if(!threads_head) { //main thread is the last one
+		//process all messages currently in msg queue
+		main_thread_item->is_shutdown=true;
+		on_thread_msg(&main_thread_item->msgq_watcher);
+
+		thread->deinit();
+		modules_registry->graceful_shutdown();
+	}
+}
 
 
 void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
@@ -162,6 +303,23 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 
 			if(msg->is_kernel) { //msg for kernel
 				switch(msg->code) {
+					case IOT_MSG_THREAD_SHUTDOWN: //request to current thread to stop
+						assert(uv_thread_self()!=main_thread);
+
+						iot_release_msg(msg); msg=NULL; //reuse same msg for main thread notification
+
+						thread_item->is_shutdown=true;
+						uv_stop (thread_item->loop);
+						break;
+					case IOT_MSG_THREAD_SHUTDOWNREADY: {//notification from child thread about shutdown
+						assert(uv_thread_self()==main_thread);
+
+						iot_thread_item_t* th=(iot_thread_item_t*)msg->data;
+						iot_release_msg(msg); msg=NULL; //reuse same msg for main thread notification
+
+						thread_registry->on_thread_shutdown(th);
+						break;
+					}
 					case IOT_MSG_START_MODINSTANCE: //try to start provided instance (for any type of instance)
 						//instance thread
 						assert(modinst!=NULL);
@@ -183,9 +341,9 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 					}
 					case IOT_MSG_STOP_MODINSTANCE: //stop provided instance (for any type of instance)
 						//instance thread
-						assert(modinst!=NULL);
+						if(!modinst) break; //can be already free
 
-						if(!modinst->msgp.stop) {iot_release_msg(msg, true); modinst->msgp.stop=msg;} //return msg for reuse in delayed or repeated stop
+						if(!modinst->msgp.stop) {iot_release_msg(msg, true); modinst->msgp.stop=msg; modinst->stopmsglock.clear(std::memory_order_release);} //return msg for reuse in delayed or repeated stop
 							else {assert(false);iot_release_msg(msg);}
 						msg=NULL;
 						modinst->stop(true);
@@ -204,12 +362,13 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						break;
 					}
 					case IOT_MSG_FREE_MODINSTANCE: {
+						//main thread
+						assert(uv_thread_self()==main_thread);
+
 						if(modinstlk) modinstlk.unlock();
 						iot_miid_t miid=msg->miid;
 
 						iot_release_msg(msg); msg=NULL;
-						modinst->stop(true);
-
 						modules_registry->free_modinstance(miid);
 						break;
 					}
@@ -300,19 +459,27 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						break;
 					}
 					case IOT_MSG_CONNECTION_CLOSECL: { //notify client about closed connection
+						if(!modinstlk) break; //client can be already stopped and/or freed and thus its connection side already closed or being closed right now
+						assert(uv_thread_self()==modinstlk.modinst->thread->thread);
+						if(!modinstlk.modinst->is_working()) break;
 						//data contains address of iot_connid_t structure
 						iot_device_connection_t *conn=iot_find_device_conn(*(iot_connid_t*)msg->data); //also does connident.key check before getting the lock
 						if(!conn) break; //connection was closed, no action required
 						iot_release_msg(msg, true);
 						conn->process_close_client(msg); //reuse msg structure. it should have been conn->closeclient_msg (now nullified)
+						msg=NULL;
 						break;
 					}
 					case IOT_MSG_CONNECTION_CLOSEDRV: { //notify driver about closed connection
+						if(!modinstlk) break; //client can be already stopped and/or freed and thus its connection side already closed or being closed right now
+						assert(uv_thread_self()==modinstlk.modinst->thread->thread);
+						if(!modinstlk.modinst->is_working()) break;
 						//data contains address of iot_connid_t structure
 						iot_device_connection_t *conn=iot_find_device_conn(*(iot_connid_t*)msg->data); //also does connident.key check before getting the lock
 						if(!conn) break; //connection was closed, no action required
 						iot_release_msg(msg, true);
 						conn->process_close_driver(msg); //reuse msg structure. it should have been conn->closedriver_msg (now nullified)
+						msg=NULL;
 						break;
 					}
 

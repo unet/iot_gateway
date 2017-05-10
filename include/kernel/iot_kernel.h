@@ -22,7 +22,7 @@ struct iot_modinstance_item_t;
 //list of possible codes of thread messages.
 //fields from iot_threadmsg_t struct which are interpreted differently depending on message code: miid, bytearg, data
 enum iot_msg_code_t : uint16_t {
-	IOT_MSG_INVALID,				//marks invalidated content of msg structure
+	IOT_MSG_INVALID=0,				//marks invalidated content of msg structure
 //kernel destined messages (is_kernel must be true)
 	IOT_MSG_START_MODINSTANCE,		//start instance in [miid] arg. [data] unused. [bytearg] unused. instance can be of any type.
 	IOT_MSG_MODINSTANCE_STARTSTATUS,//notification to kernel about status of modinstance start (status will be in data)
@@ -40,18 +40,23 @@ enum iot_msg_code_t : uint16_t {
 	IOT_MSG_CONNECTION_CLOSEDRV,	//notify driver instance about driver connection close. [data] contains address of connection structure.
 
 	IOT_MSG_THREAD_SHUTDOWN,		//process shutdown of thread (break event loop and exit thread)
+	IOT_MSG_THREAD_SHUTDOWNREADY,	//notification to main thread about child thread stop. [data] contains thread item address
 };
 
-extern iot_thread_item_t main_thread_item; //prealloc main thread item
+extern iot_thread_item_t* main_thread_item; //prealloc main thread item
 extern iot_thread_registry_t* thread_registry;
 
 extern uv_loop_t *main_loop;
 extern volatile sig_atomic_t need_exit;
+extern int max_threads; //maximum threads to run (specified from command line). limited by IOT_THREADS_MAXNUM
 
 //void kern_notifydriver_removedhwdev(iot_hwdevregistry_item_t*);
 
 #define IOT_THREAD_LOADING_MAX 1000
 #define IOT_THREAD_LOADING_MAIN (IOT_THREAD_LOADING_MAX/10)
+
+//upper limit on threads number for max_threads
+#define IOT_THREADS_MAXNUM 100
 
 //selects memory model for message data argument to extended version of iot_thread_item_t::send_msg
 enum iot_threadmsg_datamem_t : uint8_t {
@@ -64,7 +69,7 @@ enum iot_threadmsg_datamem_t : uint8_t {
 	IOT_THREADMSG_DATAMEM_MALLOC, //provided data buffer points to buffer allocated by malloc(). if its size fits IOT_MSG_BUFSIZE, buffer will be copied and freed immediately
 };
 
-#define IOT_THREADMSG_LOADING_MAX 1000
+//#define IOT_THREADMSG_LOADING_MAX 1000
 
 struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 	volatile std::atomic<iot_threadmsg_t*> next; //points to next message in message queue
@@ -101,35 +106,37 @@ struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 #include <kernel/iot_moduleregistry.h>
 
 struct iot_thread_item_t {
-	iot_thread_item_t *next, *prev; //position in iot_thread_registry_t::threads_head list
-	uv_thread_t thread;
-	uv_loop_t* loop;
-	iot_memallocator* allocator;
+	iot_threadmsg_t termmsg={}; //preallocated msg structire to send
+	iot_thread_item_t *next=NULL, *prev=NULL; //position in iot_thread_registry_t::threads_head list
+	uint32_t thread_id=0;
+	uv_thread_t thread=0;
+	uv_loop_t* loop=NULL;
+	iot_memallocator* allocator=NULL;
 	uv_async_t msgq_watcher; //gets signal when new message arrives
-	iot_modinstance_item_t *instances_head; //list of instances, which work (or will work after start) in this thread
-	iot_modinstance_item_t *hung_instances_head; //list of instances in HUNG state
+	iot_modinstance_item_t *instances_head=NULL; //list of instances, which work (or will work after start) in this thread
+	iot_modinstance_item_t *hung_instances_head=NULL; //list of instances in HUNG state
 
 	mpsc_queue<iot_threadmsg_t, iot_threadmsg_t, &iot_threadmsg_t::next> msgq;
-	uint16_t cpu_loading; //current sum of declared cpu loading
+	uint16_t cpu_loading=0; //current sum of declared cpu loading
+	bool is_shutdown=false;
 
-	iot_threadmsg_t termmsg; //preallocated msg structire to send
 
 	struct {
 		iot_atimer timer;
 		uint32_t interval;
-	} atimer_pool[8];
+	} atimer_pool[8]={};
 
-	void init(uv_thread_t thread_, uv_loop_t* loop_, iot_memallocator* allocator_);
-
-	void deinit(void) {
-		for(unsigned i=0;i<sizeof(atimer_pool)/sizeof(atimer_pool[0]);i++) {
-			atimer_pool[i].timer.deinit();
-		}
-		uv_close((uv_handle_t*)&msgq_watcher, NULL);
+	iot_thread_item_t(void) {
+		thread_id=last_thread_id++;
 	}
 
+	int init(bool ismain=false);
+
+	void deinit(void);
 
 	void send_msg(iot_threadmsg_t* msg) {
+		if(is_shutdown) return;
+		assert(msg->code!=0 && loop!=NULL);
 		if(msgq.push(msg)) {
 			uv_async_send(&msgq_watcher);
 		}
@@ -143,12 +150,17 @@ struct iot_thread_item_t {
 		}
 		atimer_pool[0].timer.schedule(it);
 	}
-
+private:
+	static uint32_t last_thread_id;
+	void thread_func(void);
 };
 
 
 class iot_thread_registry_t {
-	iot_thread_item_t *threads_head;
+	iot_thread_item_t *threads_head=NULL;
+	iot_thread_item_t *delthreads_head=NULL;
+	int num_threads=0; //number of started additional threads (not counting main)
+	iot_thread_item_t main_thread_obj;
 
 public:	
 	bool is_shutdown=false;
@@ -180,6 +192,7 @@ public:
 
 	void graceful_shutdown(void); //initiate graceful shutdown, stop all module instances in all threads
 	void on_thread_modinstances_ended(iot_thread_item_t* thread); //called by remove_modinstance() after removing last modinstance in shutdown mode
+	void on_thread_shutdown(iot_thread_item_t* thread);
 };
 
 //fills thread message struct

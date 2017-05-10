@@ -4,6 +4,7 @@
 
 
 #include<stdint.h>
+#include<stdlib.h>
 #include<assert.h>
 //#include<time.h>
 
@@ -29,6 +30,7 @@ struct iot_hwdevregistry_item_t {
 	//TODO add next-prev fields for locations inside search indexes (by detector_module_id or devcontype) if necessary
 
 	iot_hwdev_data_t devdata; //custom_data field will be assigned to custom_data buffer in current struct
+	iot_miid_t detector_miid; //miid of detector instance
 
 	iot_modinstance_locker devdrv_modinstlk; //NULL if no driver connected or ref to driver module instance
 
@@ -77,19 +79,19 @@ struct iot_hwdevregistry_item_t {
 
 //singleton class to keep and manage registry of LOCAL HARDWARE devices
 class hwdev_registry_t {
-	iot_hwdevregistry_item_t* actual_dev_head; //bi-linked list of actual hw devices
-	iot_hwdevregistry_item_t* removed_dev_head; //bi-linked list of hw devices which were removed but have active reference in driver modules
+	iot_hwdevregistry_item_t* actual_dev_head=NULL; //bi-linked list of actual hw devices
+	iot_hwdevregistry_item_t* removed_dev_head=NULL; //bi-linked list of hw devices which were removed but have active reference in driver modules
 
 
 public:
-	bool have_unconnected_devs; //flag that there are hw devices without driver and some drivers were delayed due to temp errors, so periodic search must be attempted
+	bool have_unconnected_devs=false; //flag that there are hw devices without driver and some drivers were delayed due to temp errors, so periodic search must be attempted
 								//TODO. make periodic recheck every 2 minutes
 
-	hwdev_registry_t(void) : actual_dev_head(NULL), removed_dev_head(NULL), have_unconnected_devs(false) {
+	hwdev_registry_t(void) {
 		assert(hwdev_registry==NULL);
 		hwdev_registry=this;
 	}
-	void list_action(iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data); //main thread
+	int list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data); //main thread
 	//finish removal or removed device after stopping bound driver
 	void finish_hwdev_removal(iot_hwdevregistry_item_t* it) { //main thread
 		assert(it->is_removed);
@@ -117,6 +119,9 @@ public:
 		}
 		return NULL;
 	}
+	void remove_hwdev_bydetector(const iot_miid_t &miid);
+private:
+	void remove_hwdev(iot_hwdevregistry_item_t* hwdevitem);
 };
 
 

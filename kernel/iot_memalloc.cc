@@ -271,8 +271,8 @@ void *iot_memallocator::do_allocate_direct(uint32_t size, uint16_t &chunkindex) 
 				return NULL;
 			}
 			if(nummemchunks>0) {
-				memmove(t, memchunks, sizeof(void*)*nummemchunks);
-				memmove(r, memchunks_refs, sizeof(int32_t)*nummemchunks);
+				memcpy(t, memchunks, sizeof(void*)*nummemchunks);
+				memcpy(r, memchunks_refs, sizeof(int32_t)*nummemchunks);
 			}
 			if(memchunks) {
 				free(memchunks);
@@ -466,5 +466,5 @@ const uint32_t iot_memallocator::objoptblock[15]={
 		256*1024 //index 14 , underlying data for objects must be iot_membuf_chain
 	};
 
-iot_memallocator main_allocator(0);
+iot_memallocator main_allocator;
 

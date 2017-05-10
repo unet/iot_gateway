@@ -137,11 +137,12 @@ struct iot_modinstance_item_t {
 	volatile iot_modinstance_state_t target_state; //assigned in main or working thread
 	iot_modinstance_type_t type;
 	uint8_t cpu_loading; //copied from corresponding iface from module's config
+	volatile std::atomic_flag stopmsglock; //lock protecting access to msgp.stop
 	union {
 		struct {
 			iot_threadmsg_t *start, //for start (from main thread) and for start status (from working thread)
 							*stop, //for stop (from main thread)
-							*stopstatus; //for stop status (from working thread) and delayed release (from any thread)
+							*stopstatus; //for stop status (from working thread) and delayed free instance (from any thread, protected by acclock)
 		} msgp;
 		iot_threadmsg_t* msg_structs[];
 	};
@@ -152,8 +153,8 @@ struct iot_modinstance_item_t {
 			iot_device_connection_t* conn[IOT_MAX_DRIVER_CLIENTS]; //connections from clients
 			dbllist_list<iot_device_entry_t, iot_mi_inputid_t, uint32_t, 1> retry_clients; //list of local client instances which can be retried later or blocked forever
 			struct {
-				iot_devifaceclass_data data;
-				const iot_devifaceclassdata_iface* iface; //first NULL value here ends the list
+				iot_devifacetype type;
+				const iot_devifacetype_iface* iface; //first NULL value here ends the list
 			} devclasses[IOT_CONFIG_MAX_CLASSES_PER_DEVICE]; //list of available device iface classes (APIs for device communication)
 			uint32_t retry_clients_timeout; //non-zero value tells that retry for consumer connections search is waiting
 			uint8_t announce_connfree_once:1, //flag that after clearing any conn[] pointer search for other clients must be reattempted ONCE (like after driver start)
@@ -166,14 +167,14 @@ struct iot_modinstance_item_t {
 		} driver;
 
 		struct { //ev src
-			iot_driverclient_conndata_t dev[IOT_CONFIG_MAX_EVENTSOURCE_DEVICES]; //data per each possible driver connection
-		} evsrc;
+			iot_driverclient_conndata_t dev[IOT_CONFIG_MAX_NODE_DEVICES]; //data per each possible driver connection
+		} node;
 
 		modinsttype_data_t(void) {} //to make compiler happy
 		~modinsttype_data_t(void) {} //to make compiler happy
 	} data;
 private:
-	std::atomic_flag acclock; //lock protecting access to next 2 fields
+	volatile std::atomic_flag acclock; //lock protecting access to next 2 fields
 	int8_t refcount; //how many times this struct was locked. can be accessed under acclock only
 	uint8_t pendfree; //flag that this struct in waiting for zero in refcount to be freed. can be accessed under acclock only
 	iot_miid_t miid; //module instance id (index in iot_modinstances array and creation time). zero iid field indicates unused structure.
@@ -368,7 +369,7 @@ struct iot_module_item_t {
 	iot_module_item_t *next, *prev;  //position in iot_modules_registry_t::all_head list
 	iot_module_item_t *next_detector, *prev_detector; //position in iot_modules_registry_t::detectors_head list
 	iot_module_item_t *next_driver, *prev_driver;//position in iot_modules_registry_t::drivers_head list
-	iot_module_item_t *next_evsrc, *prev_evsrc;//position in iot_modules_registry_t::evsrc_head list
+	iot_module_item_t *next_node, *prev_node;//position in iot_modules_registry_t::node_head list
 	iot_moduleconfig_t *config;
 	iot_modulesdb_item_t *dbitem;
 	iot_module_state_t state[IOT_MODINSTTYPE_MAX+1]; //zero index used for detector
@@ -378,16 +379,16 @@ struct iot_module_item_t {
 
 	iot_modinstance_item_t* detector_instance;
 	iot_modinstance_item_t* driver_instances_head; //list of existing driver instances (module must have driver interface)
-	iot_modinstance_item_t* evsrc_instances_head; //list of existing evsrc instances (module must have evsrc interface)
+	iot_modinstance_item_t* node_instances_head; //list of existing node instances (module must have node interface)
 
 	iot_module_item_t(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem_) : recheck_timer(this, [](void* param)->void {((iot_module_item_t*)param)->recheck_job(false);}) {
-		next=prev=next_detector=prev_detector=next_driver=prev_driver=next_evsrc=prev_evsrc=NULL;
+		next=prev=next_detector=prev_detector=next_driver=prev_driver=next_node=prev_node=NULL;
 		config=cfg;
 		dbitem=dbitem_;
 		memset(state,0,sizeof(state));
 		memset(errors,0,sizeof(state));
 		memset(timeout,0,sizeof(state));
-		detector_instance=driver_instances_head=evsrc_instances_head=NULL;
+		detector_instance=driver_instances_head=node_instances_head=NULL;
 		in_recheck_job=false;
 	}
 	void recheck_job(bool);
@@ -413,7 +414,7 @@ private:
 
 struct iot_devifaceclass_item_t {
 	iot_devifaceclass_item_t *next, *prev; //for position in iot_modules_registry_t::devifacecls_head
-	const iot_devifaceclassdata_iface* iface;
+	const iot_devifacetype_iface* iface;
 	uint32_t module_id; //module which gave this definition. zero for built-in classes
 };
 
@@ -428,7 +429,7 @@ class iot_modules_registry_t {
 	iot_module_item_t *all_head;
 	iot_module_item_t *detectors_head;
 	iot_module_item_t *drivers_head;
-	iot_module_item_t *evsrc_head;
+	iot_module_item_t *node_head;
 
 	iot_devifaceclass_item_t *devifacecls_head;
 	iot_devcontype_item_t *devcontypes_head;
@@ -437,7 +438,7 @@ class iot_modules_registry_t {
 public:
 	bool is_shutdown;
 
-	iot_modules_registry_t(void) : all_head(NULL), detectors_head(NULL), drivers_head(NULL), evsrc_head(NULL), devifacecls_head(NULL), devcontypes_head(NULL) {
+	iot_modules_registry_t(void) : all_head(NULL), detectors_head(NULL), drivers_head(NULL), node_head(NULL), devifacecls_head(NULL), devcontypes_head(NULL) {
 		assert(modules_registry==NULL);
 		modules_registry=this;
 		is_shutdown=false;
@@ -449,11 +450,11 @@ public:
 	void free_modinstance(iot_modinstance_item_t* modinst); //main thread
 
 	//inits some object data, loads modules marked for autoload, starts detectors. must be called once during startup
-	void start(const iot_devifaceclassdata_iface** devifaceclscfg, uint32_t num_devifaces,const iot_hwdevident_iface** devcontypescfg, uint32_t num_contypes); //main thread
+	void start(const iot_devifacetype_iface** devifaceclscfg, uint32_t num_devifaces,const iot_hwdevident_iface** devcontypescfg, uint32_t num_contypes); //main thread
 	//stops detectors and driver instances
 	void stop(void); //main thread
 
-	iot_devifaceclass_item_t* find_devifaceclass(iot_devifaceclass_id_t clsid, bool tryload) {
+	iot_devifaceclass_item_t* find_devifaceclass(iot_devifacetype_id_t clsid, bool tryload) {
 		iot_devifaceclass_item_t* item=devifacecls_head;
 		while(item) {
 			if(item->iface->classid==clsid) return item;
@@ -483,7 +484,7 @@ public:
 	//after detecting new hw device tries to find appropriate driver
 	void try_find_driver_for_hwdev(iot_hwdevregistry_item_t* devitem);  //main thread
 
-	int try_connect_driver_to_consumer(iot_modinstance_item_t *drvinst);
+	void try_connect_driver_to_consumer(iot_modinstance_item_t *drvinst);
 
 	//having new non-started instance of event source tries to find configured or suitable driver for device with index idx
 	int try_connect_consumer_to_driver(iot_modinstance_item_t *modinst, uint8_t idx); //main thread
@@ -491,7 +492,7 @@ public:
 	//try to create driver instance for provided real device
 	int create_driver_modinstance(iot_module_item_t* module, iot_hwdevregistry_item_t* devitem); //main thread
 
-	int create_evsrc_modinstance(iot_module_item_t* module, iot_config_inst_item_t* item); //main thread
+	int create_node_modinstance(iot_module_item_t* module, iot_config_inst_item_t* item); //main thread
 	void create_detector_modinstance(iot_module_item_t* module); //main thread
 
 	void graceful_shutdown(void) { //must be called by hwdev_registry->graceful_shutdown after stopping all modinstances
@@ -507,7 +508,7 @@ public:
 
 
 private:
-	int register_devifaceclasses(const iot_devifaceclassdata_iface** iface, uint32_t num, uint32_t module_id); //main thread
+	int register_devifaceclasses(const iot_devifacetype_iface** iface, uint32_t num, uint32_t module_id); //main thread
 	int register_devcontypes(const iot_hwdevident_iface** iface, uint32_t num, uint32_t module_id); //main thread
 
 	int register_module(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem); //main thread

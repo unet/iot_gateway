@@ -16,9 +16,10 @@
 uint64_t iot_starttime_ms; //start time of process like returned by uv_now (monotonic in ms since unknown point)
 static timeval _start_timeval;
 
-static iot_devifaceclassdata_keyboard builtin_deviface_keyboard;
+static iot_devifacetype_keyboard builtin_deviface_keyboard;
 
-static const iot_devifaceclassdata_iface* builtin_deviface_classes[]={
+//list of built-in device interface types to register at startup
+static const iot_devifacetype_iface* builtin_deviface_classes[]={
 	&builtin_deviface_keyboard
 };
 

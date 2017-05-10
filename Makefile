@@ -24,7 +24,7 @@ LDFLAGS = -g -Wl,--gc-sections -pthread -Wl,--export-dynamic
 LDDYNFLAGS = -shared
 
 
-LIBS = -lpthread -ljson-c -Llibuv/.libs -luv -ldl
+LIBS = -lpthread -ljson-c  -ldl -Llibuv/.libs -Wl,-static,-luv,-call_shared
 APPEXT =
 
 ifdef SystemRoot

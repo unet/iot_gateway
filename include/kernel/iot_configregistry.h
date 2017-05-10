@@ -60,7 +60,7 @@ struct iot_config_inst_item_t {
 	union {
 		struct {
 			iot_hwdev_ident_t *dev[]; //can have NULL values if corresponding device not assigned. internal iot_hwdev_localident_t structure can be a template
-		} evsrc;
+		} node;
 		struct {
 			iot_config_inst_item_t *input[];
 		} actor;

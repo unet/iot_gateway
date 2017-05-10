@@ -4,9 +4,9 @@
 
 
 class iot_devifaceclass__DRVBASE {
-	const iot_devifaceclass_data* devclass;
+	const iot_devifacetype* devclass;
 protected:
-	iot_devifaceclass__DRVBASE(const iot_devifaceclass_data* devclass) : devclass(devclass) {
+	iot_devifaceclass__DRVBASE(const iot_devifacetype* devclass) : devclass(devclass) {
 	}
 	int send_client_msg(const iot_connid_t &connid, iot_device_driver_base *drv_inst, const void *msg, uint32_t msgsize) {
 		return kapi_connection_send_client_msg(connid, drv_inst, devclass->classid, msg, msgsize);
@@ -14,9 +14,9 @@ protected:
 };
 
 class iot_devifaceclass__CLBASE {
-	const iot_devifaceclass_data* devclass;
+	const iot_devifacetype* devclass;
 protected:
-	iot_devifaceclass__CLBASE(const iot_devifaceclass_data* devclass) : devclass(devclass) {
+	iot_devifaceclass__CLBASE(const iot_devifacetype* devclass) : devclass(devclass) {
 	}
 	int send_driver_msg(const iot_connid_t &connid, iot_driver_client_base *client_inst, const void *msg, uint32_t msgsize) {
 		return kapi_connection_send_driver_msg(connid, client_inst, devclass->classid, msg, msgsize);
@@ -38,7 +38,7 @@ typedef struct { //represents custom data for devices with IOT_DEVCONTYPE_USB co
 } iot_hwdevcontype_usb_t;
 
 
-//IOT DEVCLASSID codes with type iot_devifaceclass_id_t
+//IOT DEVCLASSID codes with type iot_devifacetype_id_t
 #define IOT_DEVIFACECLASS_IDMAP(XX) \
 	XX(KEYBOARD, 1) /*sizeof(iot_devifaceclass__keyboard_ATTR) set of keys or standard keyboard (with SHIFT, CTRL and ALT keys)*/	\
 	XX(LEDS, 2) /*set of lamps (or single lamp) which can be turned on and off*/							\

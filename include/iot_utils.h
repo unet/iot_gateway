@@ -176,7 +176,7 @@ uv_loop_t* kapi_get_event_loop(uv_thread_t thread);
 
 
 //Bitmaps built of arrays of uint32_t
-static inline uint32_t bitmap32_test_bit(uint32_t* _map, unsigned _bit) {
+static inline uint32_t bitmap32_test_bit(const uint32_t* _map, unsigned _bit) {
 	return _map[_bit>>5] & (1U << (_bit & (32-1)));
 }
 static inline void bitmap32_set_bit(uint32_t* _map, unsigned _bit) {
@@ -379,11 +379,14 @@ public:
 		period=period_;
 		uv_timer_start(&timer, iot_atimer::ontimer, period_, period_);
 	}
+	void set_thread(uv_thread_t thread_) {
+		thread=thread_;
+	}
 	void deinit(void) {
 		if(period) {
 			while(head)
 				head->unschedule(); //here head is moved to next item!!!
-			uv_timer_stop(&timer);
+			uv_close((uv_handle_t*)&timer, NULL);
 			period=0;
 		}
 	}

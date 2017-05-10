@@ -29,7 +29,7 @@ iot_config_inst_item_t item1={ NULL, NULL,
 	miid : {0, 0},
 	modtime : 1,
 	json_cfg : NULL,
-	{evsrc : {}}
+	{node : {}}
 };
 
 
@@ -62,16 +62,16 @@ void iot_configregistry_t::start_config(void) {
 					assert(false);
 					break;
 				case IOT_MODINSTTYPE_EVSOURCE:
-					if(!module->config->iface_event_source) {
+					if(!module->config->iface_node) {
 						outlog_error("Incapable instantiation of module ID %u as EVENT SOURCE for iot_item %u", item->module_id, item->iot_id);
 						//TODO set error state for this iot_id to be able to report to server
 						break;
 					}
-					err=modules_registry->create_evsrc_modinstance(module, item);
+					err=modules_registry->create_node_modinstance(module, item);
 					if(!err || err==IOT_ERROR_NOT_READY) break;
 
 					outlog_error("Event source module with ID %u got error during init: %s", module->config->module_id, kapi_strerror(err));
-//					if(err==IOT_ERROR_CRITICAL_BUG) module->evsrc_blocked=1;
+//					if(err==IOT_ERROR_CRITICAL_BUG) module->node_blocked=1;
 					//TODO set error state for this iot_id to be able to report to server
 					//TODO setup retry if some recoverable error happened
 					break;

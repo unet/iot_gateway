@@ -53,21 +53,24 @@ class /*alignas(IOT_MEMOBJECT_PARENT_ALIGN)*/ iot_memallocator {
 	static const uint32_t objoptblock[15]; //optimal size of OS-allocated block for corresponding freelist
 	mpsc_queue<iot_memobject, iot_memobject, &iot_memobject::next> freelist[15];
 
-	volatile std::atomic<int32_t> totalinfly; //incremented during block allocation and decremented during release
-	uv_thread_t thread; //which thread can do allocations
+	volatile std::atomic<int32_t> totalinfly={0}; //incremented during block allocation and decremented during release
+	uv_thread_t thread={}; //which thread can do allocations
 
 	void **memchunks; //array of OS-allocated memory chunks
 	int32_t *memchunks_refs; //for each OS-allocated chunk keeps total number of blocks in use and in freelist, so 0 means that chunk can be freed. for holes == -2
 	uint32_t nummemchunks, maxmemchunks; //current quantity of chunk pointers in memchunks, number of allocated items in memchunks array
 	volatile std::atomic<uint32_t> numholes; //current number of holes in memchunks array (they appear during freeing OS-allocated blocks)
 public:
-	iot_memallocator(uv_thread_t th) :
-		totalinfly({0}), thread(th),
+	iot_memallocator(void) :
+//		totalinfly({0}),
 		memchunks(NULL),  memchunks_refs(NULL), nummemchunks(0), maxmemchunks(0), numholes({0}) {
 			if(this==&main_allocator) thread=uv_thread_self();
 	}
 	~iot_memallocator(void) {
 		deinit();
+	}
+	void set_thread(uv_thread_t th) {
+		thread=th;
 	}
 	iot_membuf_chain* allocate_chain(uint32_t size);
 	void* allocate(uint32_t size, bool allow_direct=false); //true allow_direct says that block can be malloced directly without going to freelist on release. can be used for rarely realloced buffers

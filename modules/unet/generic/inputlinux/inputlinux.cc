@@ -89,25 +89,25 @@ static struct linuxinput_iface : public iot_hwdevident_iface {
 	}
 
 private:
-	virtual bool check_data(const char* dev_data) const { //actual check that data is good by format
+	virtual bool check_data(const char* dev_data) const override { //actual check that data is good by format
 		data_t* data=(data_t*)dev_data;
 		return data->format==1;
 	}
-	virtual bool check_istmpl(const char* dev_data) const { //actual check that data corresponds to template (so not all data components are specified)
+	virtual bool check_istmpl(const char* dev_data) const override { //actual check that data corresponds to template (so not all data components are specified)
 		data_t* data=(data_t*)dev_data;
 		return data->hwid.cap_bitmap==0xFFFFFFFFu || data->addr.event_index==0xFF;
 	}
-	virtual bool compare_hwid(const char* dev_data, const char* tmpl_data) const { //actual comparison function for hwid component of device ident data
+	virtual bool compare_hwid(const char* dev_data, const char* tmpl_data) const override { //actual comparison function for hwid component of device ident data
 		data_t* data=(data_t*)dev_data;
 		data_t* tmpl=(data_t*)tmpl_data;
 		return tmpl->hwid.cap_bitmap==0xFFFFFFFFu || !memcmp(&tmpl->hwid, &data->hwid, sizeof(tmpl->hwid));
 	}
-	virtual bool compare_addr(const char* dev_data, const char* tmpl_data) const { //actual comparison function for address component of device ident data
+	virtual bool compare_addr(const char* dev_data, const char* tmpl_data) const override { //actual comparison function for address component of device ident data
 		data_t* data=(data_t*)dev_data;
 		data_t* tmpl=(data_t*)tmpl_data;
 		return tmpl->addr.event_index==data->addr.event_index || tmpl->addr.event_index==0xFF;
 	}
-	virtual size_t print_addr(const char* dev_data, char* buf, size_t bufsize) const { //actual address printing function. it must return number of written bytes (without NUL)
+	virtual size_t print_addr(const char* dev_data, char* buf, size_t bufsize) const override { //actual address printing function. it must return number of written bytes (without NUL)
 		data_t* data=(data_t*)dev_data;
 		int len;
 		if(data->addr.event_index==0xFF) { //template
@@ -117,7 +117,7 @@ private:
 		}
 		return len>=int(bufsize) ? bufsize-1 : len;
 	}
-	virtual size_t print_hwid(const char* dev_data, char* buf, size_t bufsize) const { //actual hw id printing function. it must return number of written bytes (without NUL)
+	virtual size_t print_hwid(const char* dev_data, char* buf, size_t bufsize) const override { //actual hw id printing function. it must return number of written bytes (without NUL)
 		data_t* data=(data_t*)dev_data;
 		int len;
 		if(data->hwid.cap_bitmap==0xFFFFFFFFu) { //template
@@ -432,7 +432,7 @@ iot_moduleconfig_t IOT_MODULE_CONF(detector)={
 	.deinit_module = [](void) -> int {return 0;},
 	.deviface_config = NULL,
 	.devcontype_config = detector_devcontype_config,
-	.iface_event_source = NULL,
+	.iface_node = NULL,
 	.iface_device_driver = NULL,
 	.iface_device_detector = &detector_iface
 };
@@ -464,7 +464,7 @@ struct input_drv_instance : public iot_device_driver_base {
 		have_spk=false, //iface IOT_DEVIFACECLASSID_BASIC_SPEAKER was reported
 		have_sw=false; //iface IOT_DEVIFACECLASSID_HW_SWITCHES was reported
 	iot_connid_t connid_kbd={}; //id of connection with IOT_DEVIFACECLASSID_KEYBOARD iface, if connected
-	const iot_devifaceclass_data *attr_kbd=NULL; //interface class attribute object for connected connid_kbd
+	const iot_devifacetype *attr_kbd=NULL; //interface class attribute object for connected connid_kbd
 
 	uv_loop_t* loop=NULL;
 
@@ -493,7 +493,7 @@ struct input_drv_instance : public iot_device_driver_base {
 			have_spk=false, //iface IOT_DEVCLASSID_BASIC_SPEAKER was reported
 			have_sw=false; //iface IOT_DEVCLASSID_HW_SWITCHES was reported
 
-		iot_devifaceclass_data classdata;
+		iot_devifacetype classdata;
 
 		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_KEY)) {
 			//find max key code in bitmap
@@ -505,7 +505,7 @@ struct input_drv_instance : public iot_device_driver_base {
 				}
 			}
 			bool is_pckbd=bitmap32_test_bit(devinfo->keys_bitmap,KEY_LEFTSHIFT) && bitmap32_test_bit(devinfo->keys_bitmap,KEY_LEFTCTRL);
-			iot_devifaceclassdata_keyboard::init_classdata(&classdata, code, is_pckbd);
+			iot_devifacetype_keyboard::init_classdata(&classdata, code, is_pckbd);
 			if(devifaces->add(&classdata)==0) have_kbd=true;
 		}
 //		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_LED)) {
@@ -531,7 +531,7 @@ struct input_drv_instance : public iot_device_driver_base {
 		char buf[128];
 		int off=0;
 		for(int i=0;i<devifaces->num;i++) {
-			const iot_devifaceclassdata_iface *iface=devifaces->items[i].find_iface();
+			const iot_devifacetype_iface *iface=devifaces->items[i].find_iface();
 			if(!iface) continue;
 			off+=snprintf(descr+off, sizeof(descr)-off, "%s%s", i==0 ? "" : ", ", iface->sprint(&devifaces->items[i],buf,sizeof(buf)));
 			if(off>=int(sizeof(descr))) break;
@@ -627,7 +627,7 @@ private:
 	//called to stop work of started instance. call can be followed by deinit or started again (if stop was manual, by user)
 	//Return values:
 	//0 - driver successfully stopped and can be deinited or restarted
-	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_modinstance_self_abort() will be called to notify kernel when stop is finished.
+	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify kernel when stop is finished.
 	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
 	//						cannot be called until stop reports OK)
 	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
@@ -842,7 +842,7 @@ private:
 		input_drv_instance* obj=static_cast<input_drv_instance*>(handle->data);
 		int err=obj->setup_device_polling();
 		if(err) {
-			kapi_modinstance_self_abort(obj->miid, obj, err);
+			obj->kapi_self_abort(err);
 		}
 	}
 
@@ -855,7 +855,7 @@ private:
 			eventfd=-1;
 			int err=setup_device_polling();
 			if(err) {
-				kapi_modinstance_self_abort(miid, this, err);
+				kapi_self_abort(err);
 			}
 			return;
 		}
@@ -894,7 +894,7 @@ private:
 							err=iface.send_keydown(connid_kbd, this, ev->code, keys_state);
 							break;
 						case 2:
-							err=iface.send_keyrepeat(connid_kbd, this, ev->code, keys_state);
+//							err=iface.send_keyrepeat(connid_kbd, this, ev->code, keys_state);
 							break;
 						default:
 							err=0;
@@ -906,7 +906,7 @@ private:
 						//TODO remember dropped message state
 					}
 				}
-				kapi_outlog_info("Key with code %d is %s", ev->code, ev->value == 1 ? "down" : ev->value==0 ? "up" : "repeated");
+//				kapi_outlog_info("Key with code %d is %s", ev->code, ev->value == 1 ? "down" : ev->value==0 ? "up" : "repeated");
 				break;
 			case EV_LED: //led event
 				kapi_outlog_info("LED with code %d is %s", ev->code, ev->value == 1 ? "on" : "off");
@@ -933,7 +933,7 @@ input_drv_instance* input_drv_instance::instances_head;
 
 static iot_iface_device_driver_t input_drv_iface_device_driver = {
 //	.num_devclassids = 0,
-	.cpu_loading = 0,
+	.cpu_loading = 3,
 
 	.init_instance = &input_drv_instance::init_instance,
 	.deinit_instance = &input_drv_instance::deinit_instance,
@@ -950,7 +950,7 @@ iot_moduleconfig_t IOT_MODULE_CONF(input_drv)={
 	.deinit_module = &input_drv_instance::deinit_module,
 	.deviface_config = NULL,
 	.devcontype_config = NULL,
-	.iface_event_source = NULL,
+	.iface_node = NULL,
 	.iface_device_driver = &input_drv_iface_device_driver,
 	.iface_device_detector = NULL
 };

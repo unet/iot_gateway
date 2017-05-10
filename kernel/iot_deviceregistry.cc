@@ -14,64 +14,48 @@
 
 hwdev_registry_t* hwdev_registry=NULL;
 static hwdev_registry_t _hwdev_registry; //instantiate singleton
-
-void hwdev_registry_t::list_action(iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data) {
+//errors:
+//	IOT_ERROR_INVALID_ARGS - provided ident is template or action unknown
+//	IOT_ERROR_NOT_FOUND - interface to ident's data not found (invalid or module cannot be loaded)
+//	IOT_ERROR_TEMPORARY_ERROR - some temporary error (no memory etc). retry can succeed
+int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data) {
 		assert(uv_thread_self()==main_thread);
 		char buf[256];
 		const iot_hwdevident_iface* ident_iface=ident->find_iface(true);
 		if(!ident_iface) {
 			outlog_error("Cannot find device connection interface for device from DevDetector %u, contype=%u", ident->detector_module_id,unsigned(ident->contype));
-			return;
+			return IOT_ERROR_NOT_FOUND;
 		}
 		if(ident_iface->is_tmpl(ident)) {
 			outlog_error("Got incomplete device data from DevDetector %u", ident->detector_module_id);
-			return;
+			return IOT_ERROR_INVALID_ARGS;
 		}
 
 		iot_hwdevregistry_item_t* it=find_item_byaddr(ident);
 		switch(action) {
 			case IOT_ACTION_REMOVE:
-				if(!it || !it->devdata.ident_iface->matches_hwid(&it->devdata.dev_ident.dev, ident)) return; //not found or hwid does not match
-				outlog_debug("Removing hwdev from DevDetector %u: %s", ident->detector_module_id, it->devdata.ident_iface->sprint(&it->devdata.dev_ident.dev,buf, sizeof(buf)));
-				BILINKLIST_REMOVE_NOCL(it, next, prev); //remove from actual list
-
-				if(it->devdrv_modinstlk) { //item is busy, move to list of removed items until released by driver
-					BILINKLIST_INSERTHEAD(it, removed_dev_head, next, prev);
-					it->is_removed=1;
-					it->devdrv_modinstlk.modinst->stop(false);
-				} else {
-					free(it);
-				}
-				return;
+				if(!it || !it->devdata.ident_iface->matches_hwid(&it->devdata.dev_ident.dev, ident)) return 0; //not found or hwid does not match
+				remove_hwdev(it);
+				return 0;
 			case IOT_ACTION_ADD:
-				if(it) outlog_debug("Replacing duplicate hwdev instead of adding from DevDetector %u: %s", ident->detector_module_id, it->devdata.ident_iface->sprint(&it->devdata.dev_ident.dev,buf, sizeof(buf)));
-				break;
-			case IOT_ACTION_REPLACE:
-				if(!it) outlog_debug("Adding new hwdev instead of replacing from DevDetector %u: %s", ident->detector_module_id, it->devdata.ident_iface->sprint(&it->devdata.dev_ident.dev,buf, sizeof(buf)));
+//				if(it) outlog_debug("Replacing duplicate hwdev instead of adding from DevDetector %u: %s", ident->detector_module_id, it->devdata.ident_iface->sprint(&it->devdata.dev_ident.dev,buf, sizeof(buf)));
 				break;
 			default:
 				//here we had useless search, but no such errors must ever happen
 				outlog_error("Illegal action code %d", int(action));
-				return;
+				return IOT_ERROR_INVALID_ARGS;
 		}
 		//do add/replace
 		//remove if exists and buffer cannot be reused
 		if(it && (it->custom_len_alloced < custom_len || it->devdrv_modinstlk)) { //not enough space in prev buffer for update or item is busy (and thus cannot be updated)
-			BILINKLIST_REMOVE_NOCL(it, next, prev);
-			if(it->devdrv_modinstlk) { //item is busy, move to list of removed items until released by driver
-				BILINKLIST_INSERTHEAD(it, removed_dev_head, next, prev);
-				it->is_removed=1;
-				it->devdrv_modinstlk.modinst->stop(false);
-			} else {
-				free(it);
-			}
+			remove_hwdev(it);
 			it=NULL;
 		}
 		if(!it) {
 			it=(iot_hwdevregistry_item_t*)malloc(sizeof(iot_hwdevregistry_item_t)+custom_len);
 			if(!it) {
 				outlog_error("No memory for hwdev!!! Action %d dropped for DevDetector %u, %s", int(action), ident->detector_module_id, ident_iface->sprint(ident, buf, sizeof(buf)));
-				return;
+				return IOT_ERROR_TEMPORARY_ERROR;
 			}
 			memset(it, 0, sizeof(*it));
 			it->custom_len_alloced=custom_len;
@@ -86,10 +70,37 @@ void hwdev_registry_t::list_action(iot_action_t action, iot_hwdev_localident_t* 
 		}
 		it->devdata.dev_ident.dev=*ident; //address part in devdata.dev_ident.dev is the same but hwid can be different
 		it->devdata.custom_len=custom_len;
-		memmove(it->custom_data, custom_data, custom_len);
+		memcpy(it->custom_data, custom_data, custom_len);
+		it->detector_miid=detmiid;
 		modules_registry->try_find_driver_for_hwdev(it);
+		return 0;
 	}
 
+void hwdev_registry_t::remove_hwdev(iot_hwdevregistry_item_t* hwdevitem) {
+	assert(uv_thread_self()==main_thread);
+	char buf[256];
+	auto ident=&hwdevitem->devdata.dev_ident.dev;
+	outlog_debug("Removing hwdev from DevDetector %u: %s", ident->detector_module_id, hwdevitem->devdata.ident_iface->sprint(ident,buf, sizeof(buf)));
+
+	BILINKLIST_REMOVE_NOCL(hwdevitem, next, prev);
+	if(hwdevitem->devdrv_modinstlk) { //item is busy, move to list of removed items until released by driver
+		BILINKLIST_INSERTHEAD(hwdevitem, removed_dev_head, next, prev);
+		hwdevitem->is_removed=1;
+		hwdevitem->devdrv_modinstlk.modinst->stop(false, true);
+	} else {
+		free(hwdevitem);
+	}
+
+}
+
+void hwdev_registry_t::remove_hwdev_bydetector(const iot_miid_t &miid) {
+	iot_hwdevregistry_item_t* it, *itnext=actual_dev_head;
+
+	while((it=itnext)) {
+		itnext=itnext->next;
+		if(it->detector_miid==miid) remove_hwdev(it);
+	}
+}
 
 //after loading new driver module tries to find suitable hw device
 void hwdev_registry_t::try_find_hwdev_for_driver(iot_module_item_t* module) {

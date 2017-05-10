@@ -43,20 +43,21 @@ enum {
 ////////////////////////////////////////////////inputlinux:kbd_src event source  module
 /////////////////////////////////////////////////////////////////////////////////
 
-static iot_devifaceclass_data kbd_src_devclasses[]={
-	iot_devifaceclass_data([](iot_devifaceclass_data* cls_data) -> void {
-		iot_devifaceclassdata_keyboard::init_classdata(cls_data, 0, 2);
+static iot_devifacetype kbd_src_devclasses[]={
+	iot_devifacetype([](iot_devifacetype* cls_data) -> void {
+		iot_devifacetype_keyboard::init_classdata(cls_data, 0, 1);
 	})
 };
 
 struct kbd_src_instance;
 
-struct kbd_src_instance : public iot_event_source_base {
+struct kbd_src_instance : public iot_node_base {
 	uint32_t iot_id;
 	bool is_active=false; //true if instance was started
 	uv_timer_t timer_watcher={};
-	const iot_conn_clientview *device=NULL;
+	const iot_conn_clientview *device[3]={};
 /////////////evsource state:
+	uint32_t keystate[IOT_KEYBOARD_MAX_KEYCODE/32+1]; //current state of keys. is intersection of states of all keyboards
 	iot_state_error_t error_code=0;
 
 
@@ -68,7 +69,7 @@ struct kbd_src_instance : public iot_event_source_base {
 		return 0;
 	}
 
-	static int init_instance(iot_event_source_base**instance, uv_thread_t thread, uint32_t iot_id, const char *json_cfg) {
+	static int init_instance(iot_node_base**instance, uv_thread_t thread, uint32_t iot_id, const char *json_cfg) {
 		assert(uv_thread_self()==main_thread);
 
 		kapi_outlog_info("EVENT SOURCE INITED id=%u", iot_id);
@@ -91,7 +92,7 @@ struct kbd_src_instance : public iot_event_source_base {
 		return 0;
 	}
 private:
-	kbd_src_instance(uv_thread_t thread, uint32_t iot_id) : iot_event_source_base(thread), iot_id(iot_id)
+	kbd_src_instance(uv_thread_t thread, uint32_t iot_id) : iot_node_base(thread), iot_id(iot_id)
 	{
 	}
 
@@ -135,7 +136,7 @@ private:
 	//called to stop work of started instance. call can be followed by deinit or started again (if stop was manual, by user)
 	//Return values:
 	//0 - driver successfully stopped and can be deinited or restarted
-	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_modinstance_self_abort() will be called to notify kernel when stop is finished.
+	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify kernel when stop is finished.
 	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
 	//						cannot be called until stop reports OK)
 	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
@@ -153,50 +154,50 @@ private:
 		return 0;
 	}
 
-//methods from iot_event_source_base
+//methods from iot_node_base
 	virtual int device_attached(const iot_conn_clientview* conn) {
 		assert(uv_thread_self()==thread);
-		assert(device==NULL);
-		device=conn;
+		assert(device[conn->index]==NULL);
+		device[conn->index]=conn;
 
-		kapi_outlog_info("Device attached, iot_id=%u, driver inst id=%u", iot_id, (unsigned)device->driver.miid.iid);
+		kapi_outlog_info("Device index %d attached, iot_id=%u, driver inst id=%u", int(conn->index), iot_id, (unsigned)conn->driver.miid.iid);
 		return 0;
 	}
 	virtual int device_detached(const iot_conn_clientview* conn) {
 		assert(uv_thread_self()==thread);
-		assert(device!=NULL);
-		device=NULL;
+		assert(device[conn->index]!=NULL);
+		device[conn->index]=NULL;
 
-		kapi_outlog_info("Device detached, iot_id=%u", iot_id);
+		kapi_outlog_info("Device index %d detached, iot_id=%u", int(conn->index), iot_id);
 		return 0;
 	}
 	virtual int device_action(const iot_conn_clientview* conn, iot_devconn_action_t action_code, uint32_t data_size, const void* data) {
 		assert(uv_thread_self()==thread);
-		assert(device!=NULL);
+		assert(device[conn->index]==conn);
 		int err;
 		switch(action_code) {
 			case IOT_DEVCONN_ACTION_MESSAGE: //new message arrived
-				if(device->devclass.classid==IOT_DEVIFACECLASSID_KEYBOARD) {
-					iot_devifaceclass__keyboard_CL iface(&device->devclass);
+				if(conn->devclass.classid==IOT_DEVIFACECLASSID_KEYBOARD) {
+					iot_devifaceclass__keyboard_CL iface(&conn->devclass);
 					const iot_devifaceclass__keyboard_CL::msg* msg=iface.parse_event(data, data_size);
 					if(!msg) return 0;
 
 					if(msg->event_code==iface.EVENT_KEYDOWN) {
-						kapi_outlog_info("GOT keyboard DOWN for key %d", (int)msg->key);
+						kapi_outlog_info("GOT keyboard DOWN for key %d from device index %d", (int)msg->key, int(conn->index));
 						if(msg->key==KEY_ESC) {
 							kapi_outlog_info("Requesting state");
-							err=iface.request_state(device->id, this);
+							err=iface.request_state(conn->id, this);
 							assert(err==0);
 						}
 						return 0;
 					} else if(msg->event_code==iface.EVENT_KEYUP) {
-						kapi_outlog_info("GOT keyboard UP for key %d", (int)msg->key);
+						kapi_outlog_info("GOT keyboard UP for key %d from device index %d", (int)msg->key, int(conn->index));
 						return 0;
 					} else if(msg->event_code==iface.EVENT_KEYREPEAT) {
-						kapi_outlog_info("GOT keyboard REPEAT for key %d", (int)msg->key);
+						kapi_outlog_info("GOT keyboard REPEAT for key %d from device index %d", (int)msg->key, int(conn->index));
 						return 0;
 					} else if(msg->event_code==iface.EVENT_SET_STATE) {
-						kapi_outlog_info("GOT NEW STATE, datasize=%u, statesize=%u", data_size, (unsigned)(msg->statesize));
+						kapi_outlog_info("GOT NEW STATE, datasize=%u, statesize=%u", data_size, (unsigned)(msg->statesize), int(conn->index));
 						return 0;
 					}
 				}
@@ -204,7 +205,7 @@ private:
 			default:
 				break;
 		}
-		kapi_outlog_info("Device action, iot_id=%u, act code %u, datasize %u", iot_id, unsigned(action_code), data_size);
+		kapi_outlog_info("Device action, iot_id=%u, act code %u, datasize %u from device index %d", iot_id, unsigned(action_code), data_size, int(conn->index));
 		return 0;
 	}
 
@@ -223,9 +224,12 @@ private:
 //};
 
 
-static iot_iface_event_source_t kbd_src_iface_event_source = {
-	.num_devices = 1,
-	.num_values = 1,
+static iot_iface_node_t kbd_src_iface_node = {
+	.num_devices = 3,
+	.num_valueoutputs = 1,
+	.num_valueinputs = 0,
+	.num_msgoutputs = 0,
+	.num_msginputs = 0,
 	.cpu_loading = 0,
 
 	.devcfg={
@@ -234,13 +238,31 @@ static iot_iface_event_source_t kbd_src_iface_event_source = {
 			.flag_canauto = 1,
 			.flag_localonly = 1,
 			.devclasses = kbd_src_devclasses
+		},
+		{
+			.num_devclasses = sizeof(kbd_src_devclasses)/sizeof(kbd_src_devclasses[0]),
+			.flag_canauto = 1,
+			.flag_localonly = 1,
+			.devclasses = kbd_src_devclasses
+		},
+		{
+			.num_devclasses = sizeof(kbd_src_devclasses)/sizeof(kbd_src_devclasses[0]),
+			.flag_canauto = 1,
+			.flag_localonly = 1,
+			.devclasses = kbd_src_devclasses
 		}
 	},
-	.statevaluecfg={
+	.valueoutput={
 		{
 			.label = "st",
-			.vclass_id = IOT_VALUECLASSID_KEYBOARD
+			.vclass_id = IOT_VALUECLASSID_KBDSTATE
 		}
+	},
+	.valueinput={
+	},
+	.msgoutput={
+	},
+	.msginput={
 	},
 
 	//methods
@@ -260,7 +282,7 @@ iot_moduleconfig_t IOT_MODULE_CONF(kbd_src)={
 	.deinit_module = [](void) -> int {return 0;},
 	.deviface_config = NULL,
 	.devcontype_config = NULL,
-	.iface_event_source = &kbd_src_iface_event_source,
+	.iface_node = &kbd_src_iface_node,
 	.iface_device_driver = NULL,
 	.iface_device_detector = NULL
 };

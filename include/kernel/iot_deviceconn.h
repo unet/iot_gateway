@@ -38,7 +38,7 @@
 
 
 struct iot_device_connection_t {
-	iot_devifaceclass_data devclass;
+	iot_devifacetype devclass;
 	iot_hostid_t client_host;
 	union client_data_t {
 		struct { //remote client_host
@@ -146,7 +146,7 @@ public:
 		acclock.clear(std::memory_order_release);
 	}
 
-	int connect_remote(iot_miid_t& driver_inst, const iot_devifaceclass_id_t* ifaceclassids, uint8_t num_ifaceclassids);
+	int connect_remote(iot_miid_t& driver_inst, const iot_devifacetype_id_t* ifaceclassids, uint8_t num_ifaceclassids);
 	int connect_local(iot_modinstance_item_t* driver_inst);
 	int process_connect_local(bool); //called in working thread of driver instance
 	int on_drvconnect_status(int err, bool isasync); //depending on state can run in different threads

@@ -37,14 +37,14 @@ iot_device_connection_t* iot_find_device_conn(const iot_connid_t &connid) {
 	return &iot_deviceconnections[connid.id];
 }
 
-int kapi_connection_send_client_msg(const iot_connid_t &connid, iot_module_instance_base *drv_inst, iot_devifaceclass_id_t classid, const void* data, uint32_t datasize) {
+int kapi_connection_send_client_msg(const iot_connid_t &connid, iot_module_instance_base *drv_inst, iot_devifacetype_id_t classid, const void* data, uint32_t datasize) {
 	iot_device_connection_t* conn=iot_find_device_conn(connid);
 	if(!conn) return IOT_ERROR_NOT_FOUND;
 	if(conn->driver_host!=iot_current_hostid || conn->driver.local.modinstlk.modinst->instance!=drv_inst || conn->devclass.classid!=classid)
 		return IOT_ERROR_INVALID_ARGS;
 	return conn->send_client_message(data, datasize);
 }
-int kapi_connection_send_driver_msg(const iot_connid_t &connid, iot_module_instance_base *client_inst, iot_devifaceclass_id_t classid, const void* data, uint32_t datasize) {
+int kapi_connection_send_driver_msg(const iot_connid_t &connid, iot_module_instance_base *client_inst, iot_devifacetype_id_t classid, const void* data, uint32_t datasize) {
 	iot_device_connection_t* conn=iot_find_device_conn(connid);
 	if(!conn) return IOT_ERROR_NOT_FOUND;
 	if(conn->client_host!=iot_current_hostid || conn->client.local.modinstlk.modinst->instance!=client_inst || conn->devclass.classid!=classid)
@@ -79,11 +79,11 @@ void iot_device_connection_t::init_local(iot_connsid_t id, iot_modinstance_item_
 
 		switch(client_inst->type) {
 			case IOT_MODINSTTYPE_EVSOURCE: {
-				auto iface=client_inst->module->config->iface_event_source;
-				assert(idx<IOT_CONFIG_MAX_EVENTSOURCE_DEVICES);
-				client.local.conndata=&client_inst->data.evsrc.dev[idx];
+				auto iface=client_inst->module->config->iface_node;
+				assert(idx<IOT_CONFIG_MAX_NODE_DEVICES);
+				client.local.conndata=&client_inst->data.node.dev[idx];
 				client_devifaceclassfilter=&iface->devcfg[idx];
-				if(client_inst->cfgitem->numitems>idx) client_hwdevident=client_inst->cfgitem->evsrc.dev[idx]; //else NULL due to memset
+				if(client_inst->cfgitem->numitems>idx) client_hwdevident=client_inst->cfgitem->node.dev[idx]; //else NULL due to memset
 				break;
 			}
 			case IOT_MODINSTTYPE_DRIVER:
@@ -145,7 +145,7 @@ int iot_device_connection_t::close(iot_threadmsg_t* asyncmsg) { //can be called 
 			if(asyncmsg) iot_release_msg(asyncmsg);
 			return err;
 		}
-		main_thread_item.send_msg(msg);
+		main_thread_item->send_msg(msg);
 		return IOT_ERROR_NOT_READY; //successful status for case with different threads
 	}
 	//main thread
@@ -181,7 +181,7 @@ int iot_device_connection_t::close(iot_threadmsg_t* asyncmsg) { //can be called 
 					detach_pending=true; //mark that closing is delayed
 					if(clientclose_msg) { //client not notified about close
 						msg=clientclose_msg;
-						err=iot_prepare_msg(msg, IOT_MSG_CONNECTION_CLOSECL, NULL, 0, &connident, sizeof(connident), IOT_THREADMSG_DATAMEM_TEMP, true);
+						err=iot_prepare_msg(msg, IOT_MSG_CONNECTION_CLOSECL, clinst, 0, &connident, sizeof(connident), IOT_THREADMSG_DATAMEM_TEMP, true);
 						assert(!err);
 						clientclose_msg=NULL;
 						clinst->thread->send_msg(msg);
@@ -205,7 +205,7 @@ int iot_device_connection_t::close(iot_threadmsg_t* asyncmsg) { //can be called 
 					detach_pending=true; //mark that closing is delayed
 					if(driverclose_msg) { //driver not notified about close
 						msg=driverclose_msg;
-						err=iot_prepare_msg(msg, IOT_MSG_CONNECTION_CLOSEDRV, NULL, 0, &connident, sizeof(connident), IOT_THREADMSG_DATAMEM_TEMP, true);
+						err=iot_prepare_msg(msg, IOT_MSG_CONNECTION_CLOSEDRV, drvinst, 0, &connident, sizeof(connident), IOT_THREADMSG_DATAMEM_TEMP, true);
 						assert(!err);
 						driverclose_msg=NULL;
 						drvinst->thread->send_msg(msg);
@@ -263,7 +263,7 @@ int iot_device_connection_t::close(iot_threadmsg_t* asyncmsg) { //can be called 
 	return 0;
 }
 
-int iot_device_connection_t::connect_remote(iot_miid_t& driver_inst, const iot_devifaceclass_id_t* ifaceclassids, uint8_t num_ifaceclassids) {
+int iot_device_connection_t::connect_remote(iot_miid_t& driver_inst, const iot_devifacetype_id_t* ifaceclassids, uint8_t num_ifaceclassids) {
 		return 0; //TODO
 }
 
@@ -309,7 +309,7 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 		int err;
 		for(j=0; j<client_devifaceclassfilter->num_devclasses; j++) { //search requested device iface class among those supported by driver
 			for(i=0;i<IOT_CONFIG_MAX_CLASSES_PER_DEVICE && driver_inst->data.driver.devclasses[i].iface;i++) {
-				if(driver_inst->data.driver.devclasses[i].iface->matches(&driver_inst->data.driver.devclasses[i].data, &client_devifaceclassfilter->devclasses[j])) {
+				if(driver_inst->data.driver.devclasses[i].iface->matches(&driver_inst->data.driver.devclasses[i].type, &client_devifaceclassfilter->devclasses[j])) {
 					selected_iface=i;
 					break;
 				}
@@ -383,7 +383,7 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 			return IOT_ERROR_HARD_LIMIT_REACHED; //for local clients such code can be used to break loop through clients
 		}
 
-		devclass=driver_inst->data.driver.devclasses[selected_iface].data;
+		devclass=driver_inst->data.driver.devclasses[selected_iface].type;
 
 		driver_host=iot_current_hostid;
 		driver.local.modinstlk.lock(driver_inst);
@@ -537,7 +537,7 @@ int iot_device_connection_t::process_connect_local(bool isasync) { //called in w
 	//this is working thread of driver modinstance
 
 	char *buf=NULL;
-	const iot_devifaceclassdata_iface* deviface=devclass.find_iface(false);
+	const iot_devifacetype_iface* deviface=devclass.find_iface(false);
 	assert(deviface!=NULL); //was checked when creating driver instance
 
 	if(!drvinst->is_working()) { //driver instance is not started or being stopped
@@ -652,7 +652,7 @@ onexit:
 		msg->intarg=err;
 
 		driverstatus_msg=NULL;
-		main_thread_item.send_msg(msg);
+		main_thread_item->send_msg(msg);
 		return IOT_ERROR_NOT_READY;
 	}
 	return err;
@@ -693,7 +693,7 @@ void iot_device_connection_t::process_driver_ready(void) { //runs in client thre
 	switch(modinst->type) {
 		case IOT_MODINSTTYPE_EVSOURCE: {
 			outlog_debug("Device input %d of event source module %u attached", int(clientview.index)+1, modinst->module->config->module_id);
-			static_cast<iot_event_source_base*>(modinst->instance)->device_attached(&clientview);
+			static_cast<iot_node_base*>(modinst->instance)->device_attached(&clientview);
 			break;
 		}
 		case IOT_MODINSTTYPE_DRIVER: //list all illegal types
@@ -713,13 +713,12 @@ void iot_device_connection_t::process_driver_ready(void) { //runs in client thre
 	}
 }
 
-void iot_device_connection_t::process_close_client(iot_threadmsg_t* msg) { //client instance  thread
+void iot_device_connection_t::process_close_client(iot_threadmsg_t* msg) { //client instance  thread. instance must be working!!!
 	assert(client_host==iot_current_hostid);
 	assert(state==IOT_DEVCONN_READYDRV);
 
 	iot_modinstance_item_t *modinst=client.local.modinstlk.modinst;
-	assert(modinst!=NULL);
-
+	assert(modinst!=NULL && modinst->is_working());
 	assert(uv_thread_self()==modinst->thread->thread);
 
 	assert(!d2c.reader_closed);
@@ -727,7 +726,7 @@ void iot_device_connection_t::process_close_client(iot_threadmsg_t* msg) { //cli
 	switch(modinst->type) {
 		case IOT_MODINSTTYPE_EVSOURCE: {
 			outlog_debug("Device input %d of event source module %u detached", int(clientview.index)+1, modinst->module->config->module_id);
-			static_cast<iot_event_source_base*>(modinst->instance)->device_detached(&clientview);
+			static_cast<iot_node_base*>(modinst->instance)->device_detached(&clientview);
 			break;
 		}
 		case IOT_MODINSTTYPE_DRIVER: //list all illegal types
@@ -737,22 +736,18 @@ void iot_device_connection_t::process_close_client(iot_threadmsg_t* msg) { //cli
 			return;
 	}
 
-//	state=IOT_DEVCONN_FULLREADY;
 	d2c.reader_closed=true;
 	close(msg);
 }
-void iot_device_connection_t::process_close_driver(iot_threadmsg_t* msg) { //driver instance  thread
+void iot_device_connection_t::process_close_driver(iot_threadmsg_t* msg) { //driver instance  thread. instance must be working!!!
 	assert(driver_host==iot_current_hostid);
 	assert(state==IOT_DEVCONN_READYDRV);
 
 	iot_modinstance_item_t *modinst=driver.local.modinstlk.modinst;
-	assert(modinst!=NULL);
-
+	assert(modinst!=NULL && modinst->is_working());
 	assert(uv_thread_self()==modinst->thread->thread);
 
 	assert(!c2d.reader_closed);
-
-
 	static_cast<iot_device_driver_base*>(modinst->instance)->device_close(&drvview);
 
 	c2d.reader_closed=true;
@@ -762,7 +757,7 @@ void iot_device_connection_t::process_close_driver(iot_threadmsg_t* msg) { //dri
 
 void iot_device_connection_t::d2c_ready(void) { //called by driver after writing data to d2c stream buffer
 	assert(driver_host==iot_current_hostid);
-	assert(state>=IOT_DEVCONN_READYDRV || (state==IOT_DEVCONN_PENDING && d2c.buf.getsize()>0));
+	assert(state>=IOT_DEVCONN_READYDRV);
 	assert(uv_thread_self()==driver.local.modinstlk.modinst->thread->thread);
 
 	iot_threadmsg_t *msg=d2c_ready_msg;
@@ -837,7 +832,7 @@ void iot_device_connection_t::on_d2c_ready(void) { //processes IOT_MSG_CONNECTIO
 			char buf[sz];
 			rval=read<&iot_device_connection_t::d2c>(buf, sz, left, status);
 			assert(rval==sz && left==0 && status==1);
-			static_cast<iot_event_source_base*>(clinst->instance)->device_action(&clientview, IOT_DEVCONN_ACTION_MESSAGE, sz, buf);
+			static_cast<iot_node_base*>(clinst->instance)->device_action(&clientview, IOT_DEVCONN_ACTION_MESSAGE, sz, buf);
 		}
 	} while(d2c.requests.load(std::memory_order_relaxed)>0); //have more incoming data
 }
@@ -922,7 +917,7 @@ int iot_device_connection_t::send_client_message(const void* data, uint32_t data
 
 	int err=send_message<&iot_device_connection_t::d2c>(data, datasize);
 	if(err) return err;
-	d2c_ready();
+	if(state==IOT_DEVCONN_READYDRV) d2c_ready();
 //			if(client_host==iot_current_hostid && client.local.modinstlk.modinst->thread==drvinst->thread) {
 //				//TODO use more optimal way (hack libuv?)
 //				uv_async_send(&d2c.read_ready);
