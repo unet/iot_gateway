@@ -13,6 +13,7 @@
 #define IOT_VALUECLASSID_NUMBER			3			//fractional number
 
 #define IOT_VALUECLASSID_KBDSTATE		10			//bitmap of keys which are currently down
+#define IOT_VALUECLASSID_NODEERRORSTATE	11			//bitmap of error states of node
 
 
 #ifdef __linux__
@@ -35,6 +36,33 @@ public:
 		return classid;
 	}
 };
+
+class iot_valueclass_nodeerrorstate: public iot_valueclass_BASE {
+	uint32_t state; //bitmap of enabled error states
+
+public:
+	enum : uint32_t {
+		IOT_NODEERRORSTATE_NOINSTANCE=1,		//module instance still not created
+		IOT_NODEERRORSTATE_NODEVICE=2			//required device(s) not connected
+	};
+
+	iot_valueclass_nodeerrorstate(void) : iot_valueclass_BASE(IOT_VALUECLASSID_NODEERRORSTATE) {
+		datasize=sizeof(*this);
+		state=0;
+	}
+	iot_valueclass_nodeerrorstate& operator=(uint32_t st) {
+		state=st;
+		return *this;
+	}
+	explicit operator bool(void) const {
+		return state!=0;
+	}
+	bool operator!(void) const {
+		return state==0;
+	}
+};
+
+
 
 class iot_valueclass_kbdstate: public iot_valueclass_BASE {
 	uint8_t statesize; //number of items in state
@@ -115,7 +143,7 @@ public:
 
 
 
-
+/*
 //always set by kernel
 #define IOT_STATE_ERROR_INSTANCE_UNREACHABLE	1	//bound instance from another host is unreachable due to host connection problems (actual for activators and actors)
 #define IOT_STATE_ERROR_INSTANCE_INVALID		2	//bound instance cannot be instantiated or got critical bug (actual for activators and actors)
@@ -133,7 +161,7 @@ struct iot_srcstate_t {
 	} value[IOT_CONFIG_MAX_NODE_VALUEOUTPUTS];
 	char valuedata[];
 };
-
+*/
 //maximum number of custom data classes for event source state
 //#define IOT_SOURCE_STATE_MAX_CLASSES 5
 

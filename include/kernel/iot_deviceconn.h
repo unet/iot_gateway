@@ -57,7 +57,8 @@ struct iot_device_connection_t {
 		~client_data_t(void) {}
 	} client;
 	const iot_deviceconn_filter_t* client_devifaceclassfilter; //set according to module config
-	const iot_hwdev_ident_t* client_hwdevident; //set according to bound configuration item. can be NULL
+	int client_numhwdevidents;
+	const iot_hwdev_ident_t* client_hwdevidents; //set according to bound configuration item (so according to user preference). must have client_numhwdevidents valid items
 
 	iot_hostid_t driver_host;
 	union driver_data_t {

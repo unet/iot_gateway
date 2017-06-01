@@ -36,7 +36,7 @@ static iot_iid_t last_iid=0; //holds last assigned module instance id
 const char* iot_modinsttype_name[IOT_MODINSTTYPE_MAX+1]={
 	"detector",
 	"driver",
-	"event source"
+	"node"
 };
 
 //finds module's index in modules DB by module_id
@@ -65,6 +65,7 @@ static int bundlepath2symname(const char *path, char *buf, size_t bufsz) {
 const iot_hwdevident_iface* iot_hwdev_localident_t::find_iface(bool tryload) const { //searches for connection type interface class realization in local registry
 	//must run in main thread if tryload is true
 	//returns NULL if interface not found or cannot be loaded
+	if(contype==IOT_DEVCONTYPE_ANY) return NULL;
 	iot_devcontype_item_t* it=modules_registry->find_devcontype(contype, tryload);
 	if(it && it->iface->is_valid(this)) return it->iface;
 	return NULL;
@@ -232,15 +233,15 @@ void iot_module_item_t::recheck_job(bool no_jobs) { //reschedules timers and/or 
 			else delay=0; //this will choose most quick recheck timer
 		}
 	}
-/*todo	if(state[IOT_MODINSTTYPE_EVSOURCE]==IOT_MODULESTATE_BLOCKED) {
-		if(timeout[IOT_MODINSTTYPE_EVSOURCE]<=now) { //block period elapsed
-			state[IOT_MODINSTTYPE_EVSOURCE]=IOT_MODULESTATE_OK;
+/*todo	if(state[IOT_MODINSTTYPE_NODE]==IOT_MODULESTATE_BLOCKED) {
+		if(timeout[IOT_MODINSTTYPE_NODE]<=now) { //block period elapsed
+			state[IOT_MODINSTTYPE_NODE]=IOT_MODULESTATE_OK;
 			if(!no_jobs) config_registry->try_create_evsources(this);
 				else delay=0;
 		}
-		if(state[IOT_MODINSTTYPE_EVSOURCE]==IOT_MODULESTATE_BLOCKED) {
-			if(timeout[IOT_MODINSTTYPE_EVSOURCE]>now) {
-				if(timeout[IOT_MODINSTTYPE_EVSOURCE]-now<delay) delay=timeout[IOT_MODINSTTYPE_EVSOURCE]-now;
+		if(state[IOT_MODINSTTYPE_NODE]==IOT_MODULESTATE_BLOCKED) {
+			if(timeout[IOT_MODINSTTYPE_NODE]>now) {
+				if(timeout[IOT_MODINSTTYPE_NODE]-now<delay) delay=timeout[IOT_MODINSTTYPE_NODE]-now;
 			}
 			else delay=0; //this will choose most quick recheck timer
 		}
@@ -293,7 +294,7 @@ int iot_modules_registry_t::register_devifaceclasses(const iot_devifacetype_ifac
 	assert(uv_thread_self()==main_thread);
 	assert(iface!=NULL || num==0);
 	while(num>0) {
-		if(module_id>0 && IOT_DEVIFACECLASS_CUSTOM_MODULEID((*iface)->classid)!=module_id) {
+		if(module_id>0 && IOT_DEVIFACETYPE_CUSTOM_MODULEID((*iface)->classid)!=module_id) {
 			outlog_error("Module with ID %u tries to config Device Iface Class with wrong custom id %u", module_id, (*iface)->classid);
 		} else {
 			iot_devifaceclass_item_t* has=find_devifaceclass((*iface)->classid, false);
@@ -452,9 +453,9 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 	}
 	if(cfg->iface_node) {
 		if(!cfg->iface_node->init_instance || !cfg->iface_node->deinit_instance) {
-			outlog_error("Module '%s::%s' with ID %u has incomplete event source interface", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
+			outlog_error("Module '%s::%s' with ID %u has incomplete node interface", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
 		} else {
-			item->state[IOT_MODINSTTYPE_EVSOURCE]=IOT_MODULESTATE_OK;
+			item->state[IOT_MODINSTTYPE_NODE]=IOT_MODULESTATE_OK;
 			BILINKLIST_INSERTHEAD(item, node_head, next_node, prev_node);
 		}
 	}
@@ -467,7 +468,7 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 }
 
 iot_modinstance_item_t* iot_modules_registry_t::register_modinstance(iot_module_item_t* module, iot_modinstance_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance,
-		iot_config_inst_item_t* cfgitem) {
+		iot_config_inst_node_t* cfgitem) {
 	assert(uv_thread_self()==main_thread);
 	//find free index
 	for(iot_iid_t i=0;i<IOT_MAX_MODINSTANCES;i++) {
@@ -492,7 +493,7 @@ iot_modinstance_item_t* iot_modules_registry_t::register_modinstance(iot_module_
 }
 
 bool iot_modinstance_item_t::init(const iot_miid_t &miid_, iot_module_item_t* module_, iot_modinstance_type_t type_, iot_thread_item_t *thread_, iot_module_instance_base* instance_,
-		iot_config_inst_item_t* cfgitem_) {
+		iot_config_inst_node_t* cfgitem_) {
 	memset(this, 0, sizeof(*this));
 	miid=miid_;
 	state=IOT_MODINSTSTATE_INITED;
@@ -541,9 +542,9 @@ bool iot_modinstance_item_t::init(const iot_miid_t &miid_, iot_module_item_t* mo
 			cpu_loading=iface->cpu_loading;
 			break;
 		}
-		case IOT_MODINSTTYPE_EVSOURCE: {
+		case IOT_MODINSTTYPE_NODE: {
 			cfgitem=cfgitem_;
-			cfgitem->miid=miid;
+//			cfgitem->miid=miid;
 			auto iface=module->config->iface_node;
 			assert(iface!=NULL);
 			BILINKLIST_INSERTHEAD(this, module->node_instances_head, next_inmod, prev_inmod);
@@ -644,7 +645,7 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 			}
 			break;
 		}
-		case IOT_MODINSTTYPE_EVSOURCE: {
+		case IOT_MODINSTTYPE_NODE: {
 			//clean retry timeouts data
 			for(uint8_t i=0;i<IOT_CONFIG_MAX_NODE_DEVICES && modinst->data.node.dev[i].actual;i--)
 				modinst->data.node.dev[i].retry_drivers.remove_all();
@@ -667,7 +668,7 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 	//only non-hung instances here !!!!!!!!!!
 
 	if(modinst->cfgitem) {
-		modinst->cfgitem->miid.clear();
+//		modinst->cfgitem->miid.clear();
 		modinst->cfgitem=NULL;
 	}
 
@@ -692,7 +693,7 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 				err=iface->deinit_instance(modinst->instance);
 				break;
 			}
-			case IOT_MODINSTTYPE_EVSOURCE: {
+			case IOT_MODINSTTYPE_NODE: {
 				auto iface=module->config->iface_node;
 				err=iface->deinit_instance(modinst->instance);
 				break;
@@ -818,21 +819,21 @@ onerr:
 //  IOT_ERROR_TEMPORARY_ERROR - error. module can be retried for this device later
 //  IOT_ERROR_MODULE_BLOCKED - error. module was blocked on temporary or constant basis
 //  IOT_ERROR_CRITICAL_ERROR - instanciation is invalid (error in saved config of config item?)
-int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, iot_config_inst_item_t* item) {
+int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, iot_config_inst_node_t* item) {
 	assert(uv_thread_self()==main_thread);
 
 	iot_node_base *inst=NULL;
 	iot_modinstance_item_t *modinst=NULL;
-	iot_modinstance_type_t type=IOT_MODINSTTYPE_EVSOURCE;
+	iot_modinstance_type_t type=IOT_MODINSTTYPE_NODE;
 	int err;
 	auto iface=module->config->iface_node;
 	//from here all errors go to onerr
 	iot_thread_item_t* thread=thread_registry->assign_thread(iface->cpu_loading);
 	assert(thread!=NULL);
 
-	err=iface->init_instance(&inst, thread->thread, item->iot_id, item->json_cfg);
+	err=iface->init_instance(&inst, thread->thread, item->iot_id, item->json_config);
 	if(err) {
-		outlog_error("Event source instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+		outlog_error("Node instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
 		if(err!=IOT_ERROR_TEMPORARY_ERROR || module->errors[type]>10) {
 			module->state[type]=IOT_MODULESTATE_DISABLED;
 		} else {
@@ -846,7 +847,7 @@ int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, i
 	}
 	if(!inst) {
 		//no error and no instance. this is a bug
-		outlog_error("Event source instance init for module '%s::%s' with ID %u returned NULL pointer. This is a bug.",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
+		outlog_error("Node instance init for module '%s::%s' with ID %u returned NULL pointer. This is a bug.",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
 		module->state[type]=IOT_MODULESTATE_DISABLED;
 		err=IOT_ERROR_MODULE_BLOCKED;
 		goto onerr;
@@ -890,7 +891,7 @@ void iot_modules_registry_t::try_connect_driver_to_consumer(iot_modinstance_item
 		mod=nextmod;
 		nextmod=nextmod->next;
 
-		iot_modinstance_item_t *modinst=mod->node_instances_head; //loop through ev sources
+		iot_modinstance_item_t *modinst=mod->node_instances_head; //loop through nodes
 		while(modinst) {
 			auto iface=mod->config->iface_node;
 			uint8_t num_devs=iface->num_devices;
@@ -920,15 +921,20 @@ void iot_modules_registry_t::try_connect_driver_to_consumer(iot_modinstance_item
 					if(conn->state!=conn->IOT_DEVCONN_INIT) continue; //is set or in process of being set
 				}
 
-				if((!conn->client_hwdevident && !conn->client_devifaceclassfilter->flag_canauto) || //no hwdevice bound and auto detection forbidden
-					(conn->client_hwdevident && conn->client_devifaceclassfilter->flag_localonly && conn->client_hwdevident->hostid!=IOT_HOSTID_ANY &&
-																						conn->client_hwdevident->hostid != iot_current_hostid)) { //another host specified but not allowed
+				bool good=true;
+				if(!conn->client_numhwdevidents && !conn->client_devifaceclassfilter->flag_canauto) good=false; //no user preference and auto search not allowed
+				else if(conn->client_numhwdevidents>0 && conn->client_devifaceclassfilter->flag_localonly) { //user set device preference, but module accepts only local devices, so check that user preference contains at least one local or universal host specification
+					good=false;
+					for(int i=0; i<conn->client_numhwdevidents; i++)
+						if(conn->client_hwdevidents[i].hostid==IOT_HOSTID_ANY || conn->client_hwdevidents[i].hostid == iot_current_hostid) {good=true;break;}
+				}
+				if(!good) { //user selection required or all devices are remote
 					conndata->block=1;
 					conn->close();
 					continue;
 				}
 
-				if(!conn->client_hwdevident && conn->client_devifaceclassfilter->flag_canauto && num_devs>1) { //no device specified and suto search enabled
+				if(!conn->client_numhwdevidents && conn->client_devifaceclassfilter->flag_canauto && num_devs>1) { //no device specified and auto search enabled
 					//check we do not set up connection to same driver several times. TODO: enchance checks to account possible template in client_hwdevident
 					iot_driverclient_conndata_t* conndata2;
 					uint8_t dev_idx2;
@@ -938,14 +944,12 @@ void iot_modules_registry_t::try_connect_driver_to_consumer(iot_modinstance_item
 						if(!conndata2->block && conndata2->conn && conndata2->conn->state!=conn->IOT_DEVCONN_INIT && conndata2->conn->driver_host==iot_current_hostid &&
 							conndata2->conn->driver.local.modinstlk.modinst==drvinst) break;
 					}
-					if(dev_idx2<num_devs) continue; //skip current device connenction as it already has connection to same driver
+					if(dev_idx2<num_devs) continue; //skip current device connection as it already has connection to same driver
 				}
 
-				if(!conn->client_hwdevident || conn->client_hwdevident->hostid==IOT_HOSTID_ANY || conn->client_hwdevident->hostid == iot_current_hostid) { //any device host allowed or current host matches
-					//can try to connect to current local driver
-					err=conn->connect_local(drvinst);
-					if(err==IOT_ERROR_NO_MEMORY || err==IOT_ERROR_HARD_LIMIT_REACHED) return; //useless to continue after such errors. retry will be already scheduled
-				}
+				//can try to connect to current local driver
+				err=conn->connect_local(drvinst);
+				if(err==IOT_ERROR_NO_MEMORY || err==IOT_ERROR_HARD_LIMIT_REACHED) return; //useless to continue after such errors. retry will be already scheduled
 			}
 			modinst=modinst->next_inmod;
 		}
@@ -967,7 +971,7 @@ int iot_modules_registry_t::try_connect_consumer_to_driver(iot_modinstance_item_
 	iot_driverclient_conndata_t* conndata;
 
 	switch(modinst->type) {
-		case IOT_MODINSTTYPE_EVSOURCE: {
+		case IOT_MODINSTTYPE_NODE: {
 			assert(idx<IOT_CONFIG_MAX_NODE_DEVICES);
 			conndata=&modinst->data.node.dev[idx];
 			break;
@@ -999,17 +1003,30 @@ int iot_modules_registry_t::try_connect_consumer_to_driver(iot_modinstance_item_
 		if(conn->state!=conn->IOT_DEVCONN_INIT) return IOT_ERROR_NOT_READY;
 	}
 
-	if((!conn->client_hwdevident && !conn->client_devifaceclassfilter->flag_canauto) || //no hwdevice bound and auto detection forbidden
-		(conn->client_hwdevident && conn->client_devifaceclassfilter->flag_localonly && conn->client_hwdevident->hostid!=IOT_HOSTID_ANY &&
-																			conn->client_hwdevident->hostid != iot_current_hostid)) { //another host specified but not allowed
+
+	bool good=true, haslocal=true, hasremote=true;
+	if(!conn->client_numhwdevidents && !conn->client_devifaceclassfilter->flag_canauto) good=false; //no user preference and auto search not allowed
+	else if(conn->client_numhwdevidents>0) { //user set device preference, check that preference has at least one local or universal host specification
+		haslocal=false;
+		hasremote=false;
+		for(int i=0; i<conn->client_numhwdevidents; i++)
+			if(conn->client_hwdevidents[i].hostid==IOT_HOSTID_ANY) {haslocal=hasremote=true;break;}
+			else if(conn->client_hwdevidents[i].hostid == iot_current_hostid) haslocal=true;
+			else hasremote=true;
+		if(conn->client_devifaceclassfilter->flag_localonly) {// module accepts only local devices, so require haslocal to be true
+			good=haslocal;
+		}
+	}
+	if(!good) { //user selection required or all devices are remote
 		conndata->block=1;
+		conn->close();
 		return IOT_ERROR_NOT_FOUND;
 	}
 
 	int err=IOT_ERROR_NOT_FOUND;
 	bool wastemperr=false;
 
-	if(!conn->client_hwdevident || conn->client_hwdevident->hostid==IOT_HOSTID_ANY || conn->client_hwdevident->hostid == iot_current_hostid) { //any device host allowed or current host matches
+	if(haslocal) {
 		//try local devices
 		err=hwdev_registry->try_connect_local_driver(conn);
 		if(!err || err==IOT_ERROR_NOT_READY) return err; //success
@@ -1023,7 +1040,7 @@ int iot_modules_registry_t::try_connect_consumer_to_driver(iot_modinstance_item_
 		}
 	}
 
-	if(!conn->client_hwdevident || conn->client_hwdevident->hostid != iot_current_hostid) { //any device host allowed or current host does not matches (or any host allowed, IOT_HOSTID_ANY!=iot_current_hostid)
+	if(hasremote) {
 		//try remote devices
 //		err=peers_registry->try_connect_remote_driver(conn);
 /*
@@ -1219,7 +1236,7 @@ int iot_modinstance_item_t::on_start_status(int err, bool isasync) { //processes
 				}
 				modules_registry->try_connect_driver_to_consumer(this);
 				break;
-			case IOT_MODINSTTYPE_EVSOURCE: {
+			case IOT_MODINSTTYPE_NODE: {
 				for(uint8_t i=0;i<IOT_CONFIG_MAX_NODE_DEVICES && data.node.dev[i].actual;i--) modules_registry->try_connect_consumer_to_driver(this, i);
 				break;
 			}
@@ -1257,7 +1274,7 @@ int iot_modinstance_item_t::on_start_status(int err, bool isasync) { //processes
 				} //else IOT_ERROR_TEMPORARY_ERROR, IOT_ERROR_MODULE_BLOCKED - just resume search of driver, current module already blocked for its hw device
 			}
 			break;
-		case IOT_MODINSTTYPE_EVSOURCE:
+		case IOT_MODINSTTYPE_NODE:
 			//TODO
 			if(isasync) {
 				if(err==IOT_ERROR_CRITICAL_ERROR) { //block iot_id instanciation permanently until config update
@@ -1409,7 +1426,7 @@ int iot_modinstance_item_t::on_stop_status(int err, bool isasync) { //processes 
 			}
 			break;
 		}
-		case IOT_MODINSTTYPE_EVSOURCE:
+		case IOT_MODINSTTYPE_NODE:
 			//close connections
 			for(i=0;i<IOT_CONFIG_MAX_NODE_DEVICES;i++) {
 				if(data.node.dev[i].actual && data.node.dev[i].conn) data.node.dev[i].conn->close();

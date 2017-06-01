@@ -18,7 +18,7 @@ struct iot_modinstance_item_t;
 enum iot_modinstance_type_t : uint8_t {
 	IOT_MODINSTTYPE_DETECTOR=0,
 	IOT_MODINSTTYPE_DRIVER=1,	//module which realizes interface of hardware device driver iface_device_driver
-	IOT_MODINSTTYPE_EVSOURCE=2,	//module which can be source of events. Realizes iface_event_source interface
+	IOT_MODINSTTYPE_NODE=2,	//module which can be source of events. Realizes iface_event_source interface
 //	IOT_MODINSTTYPE_ACTIVATOR=3,	//module which takes N-sources and generates true/false output for another activator or action list. Realizes iface_activator interface
 //	IOT_MODINSTTYPE_EXECUTOR=4,	//module which can be manipulated by conditions and also can be source of events. Realizes both iface_event_source and iface_cond_target
 //	IOT_MODINSTTYPE__DATA=5	//module which realizes interface of data source iface_data_source
@@ -50,7 +50,7 @@ struct iot_devifaceclass_item_t;
 struct iot_thread_item_t;
 struct iot_hwdevregistry_item_t;
 struct iot_device_connection_t;
-struct iot_config_inst_item_t;
+struct iot_config_inst_node_t;
 struct iot_remote_driverinst_item_t;
 
 #define IOT_MAX_MODINSTANCES 8192
@@ -126,7 +126,7 @@ struct iot_modinstance_item_t {
 	iot_modinstance_item_t *next_inthread, *prev_inthread; //next instance for the list with head in iot_thread_item_t::instances_head
 	iot_module_item_t *module;
 	iot_thread_item_t *thread;
-	iot_config_inst_item_t* cfgitem;
+	iot_config_inst_node_t* cfgitem;
 	iot_module_instance_base *instance;
 	uint64_t started; //non-zero if instance was requested to start. this property is assigned in main thread.
 	uint64_t state_timeout; //for state-related delayed tasks time of recheck (exact task is determined by state/target_state)
@@ -184,7 +184,7 @@ public:
 	iot_modinstance_item_t(void) {
 	}
 	bool init(const iot_miid_t &miid_, iot_module_item_t* module_, iot_modinstance_type_t type_, iot_thread_item_t *thread_, iot_module_instance_base* instance_,
-		iot_config_inst_item_t* cfgitem_);
+		iot_config_inst_node_t* cfgitem_);
 	void deinit(void);
 
 	const iot_miid_t& get_miid(void) const {return miid;}
@@ -460,8 +460,8 @@ public:
 			if(item->iface->classid==clsid) return item;
 			item=item->next;
 		}
-		if(tryload && IOT_DEVIFACECLASS_CUSTOM_MODULEID(clsid)>0) {
-			if(!load_module(-1, IOT_DEVIFACECLASS_CUSTOM_MODULEID(clsid), NULL)) return find_devifaceclass(clsid, false);
+		if(tryload && IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid)>0) {
+			if(!load_module(-1, IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid), NULL)) return find_devifaceclass(clsid, false);
 		}
 		return NULL;
 	}
@@ -492,7 +492,7 @@ public:
 	//try to create driver instance for provided real device
 	int create_driver_modinstance(iot_module_item_t* module, iot_hwdevregistry_item_t* devitem); //main thread
 
-	int create_node_modinstance(iot_module_item_t* module, iot_config_inst_item_t* item); //main thread
+	int create_node_modinstance(iot_module_item_t* module, iot_config_inst_node_t* item); //main thread
 	void create_detector_modinstance(iot_module_item_t* module); //main thread
 
 	void graceful_shutdown(void) { //must be called by hwdev_registry->graceful_shutdown after stopping all modinstances
@@ -513,7 +513,7 @@ private:
 
 	int register_module(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem); //main thread
 
-	iot_modinstance_item_t* register_modinstance(iot_module_item_t* module, iot_modinstance_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance, iot_config_inst_item_t *cfgitem); //main thread
+	iot_modinstance_item_t* register_modinstance(iot_module_item_t* module, iot_modinstance_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance, iot_config_inst_node_t *cfgitem); //main thread
 	iot_modinstance_item_t* find_modinstance_byid(const iot_miid_t &miid); //kernel code in main thread
 
 };

@@ -1,0 +1,102 @@
+{
+	"nodecfg": { //changes to node configuration
+		"prev_id": 122, //previous number of configuration (difference is against it)
+		"id": 123, //current number of nodes configuration
+		"instances": { //persistent (rule-independent) and temporary (rule dependent operators) nodes
+			IOT_ID:{
+				"host_id" : 1, //host which instanciates node. determined by first device or another algorithm by configuration manager host
+				"module_id" : 3, //module which must realize node interface
+				"module_cfgver" : 0, //module's config version to test against current module
+
+				//only one or none of next 2 props should be present
+				"group_id" : 1, //can be zero (or absent) for persistent nodes
+				"mode_id" : 1, //can be zero (or absent) for persistent nodes or for temporary nodes of rules, which are common for all modes of group
+
+				"cfg_id" : 1, //node config number when user settings of node were changed last time
+				"params" : { //user params
+					"devices" : { //user device preferences
+						DEVCONN_LABEL: [ //several filters can be specified for each device connection (in order of preference)
+							{
+								"host_id" : 1, //0 or absent key means 'any host' here
+								"conntype_id" : 1, //ID of device connection type (iot_hwdevcontype_t). 0 or absent key (and thus 'ident' is not checked) means 'any'
+								"ident": <custom data>, //custom conntype specific identification data, which must be interpreted by corresponding iot_hwdevident_iface-derived class
+							}
+						]
+					},
+					"config" : <custom data> //user settings for mode in module_id specific format
+				}
+			}
+		},
+		"links": { //connections between nodes
+			INNODE_ID: { //persistent or temporary node, for which particular link is INPUT
+				IN_IDENT: [ //identification of input line with first letter either 'm' or 'v' for message and value input type correspondingly
+					{
+						//only one of next 2 props must be present
+						"group_id" : 1, //group of config where link exists. must be present ONLY if parent rule of link IS COMMON for all modes of group
+						"mode_id" : 1, //mode of config group where link exists
+
+						"outnode_id": 10, //iot_id of node for which this link is output
+						"out_ident" : "out1", //identification of output line of node in outnode_id with first letter either 'm' or 'v' for message and value output type correspondingly
+					}
+				]
+			}
+		},
+		"deleted" : { //present in config difference only. removed node instances and links
+			"instances" : [IOT_IDs],
+			"links" : [
+				{ //all fields below must form unique identification of link
+					"innode_id": 8, //iot_id of node for which this link is input
+					"in_ident" : "in1", //identification of input line of node in innode_id with first letter either 'm' or 'v' for message and value input type correspondingly
+
+					//only one of next 2 props must be present
+					"group_id" : 1, //group of config where link exists. must be present ONLY if parent rule of link IS COMMON for all modes of group
+					"mode_id" : 1, //mode of config group where link exists
+					
+					"outnode_id": 9, //iot_id of node for which this link is output
+					"out_ident" : "out1", //identification of output line of node in outnode_id with first letter either 'm' or 'v' for message and value output type correspondingly
+				}
+			]
+		}
+	}
+	"hostcfg" : { //taken from server-common table iot_gateways
+		"prev_id": 9, //previous number of configuration (difference is against it) ?????do we need diffs for host config
+		"id": 10, //current number of hosts configuration
+		"cfgmanager_host": HOST_ID, //default id of host which can send configuration updates and keeps persistent states. can be changed on per-host basis (?)
+		"logger_host":HOST_ID, //default id of host where all events and status updates are directed. can be changed on per-host basis (?)
+		"hosts": {
+			HOST_ID: {
+				"cfg_id" : 1, //host config number when settings of host were changed last time
+				"publickey" : "kjhasdkjhasd",
+				"serial" : "S12345678", //???
+				"listen_port" : 12000, //reported by gateway port on listen_ips to accept connections from other gateways. will be reused if possible in case of restart
+				"listen_ips": [ //IPs where gateway is listening for connections, so other hosts from same network can try to make direct connection if no record in connect_map
+					{
+						"ip": IPV4 or IPV6 address,
+						"prefix": 24 //network address prefix size in ip (to calculate network address)
+					}
+				],
+				"connect_host" : "mygw.dyndns.org", //manually specified by user host/IP to allow connection to gateway. used after trying conenct_map
+				"connect_port" : 12001, //manually specified by user to override listen_port to allow connection to gateway. Should be redirected to listen_port by some router.
+				"connect_map" : { //manually specified by user source-host to current host connection map
+					SRC_HOST_ID: {
+						"host": "1.2.3.4", //host/IP which must be used by SRC_HOST_ID to connect to this host. defaults to connect_host
+						"port" : 12002, //port which must be used by SRC_HOST_ID to connect to this host. defaults to connect_port. negative value forbids direct connection
+					}
+				},
+				"cfgmanager_host": HOST_ID, //id of host which can send configuration updates to current host. (?) specified host will know from this record that it must proxy conf updates to current host if it isn't default cfgmanager
+				"logger_host": HOST_ID, //id of host where all events and status updates are directed. (?) specified host will know from this record that it must proxy notifications updates from current host if it isn't default logger
+			}
+		}
+	}
+	"modecfg": {
+		"id": 10, //current number of modes configuration
+		"groups" : {
+			GROUP_ID : {
+				"modes": [MODE_ID1, MODE_ID2, ...], //list of possible custom modes. excludes implicit default mode, whose ID is the same as of group
+				"active_mode": MODE_ID, //current mode for group. can be equal to GROUP_ID if default mode is active
+				"active_set": TIMESTAMP //time when latest active mode was set
+			}
+		},
+	}
+}
+

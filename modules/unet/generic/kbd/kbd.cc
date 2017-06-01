@@ -58,7 +58,6 @@ struct kbd_src_instance : public iot_node_base {
 	const iot_conn_clientview *device[3]={};
 /////////////evsource state:
 	uint32_t keystate[IOT_KEYBOARD_MAX_KEYCODE/32+1]; //current state of keys. is intersection of states of all keyboards
-	iot_state_error_t error_code=0;
 
 
 /////////////static fields/methods for module instances management
@@ -177,7 +176,7 @@ private:
 		int err;
 		switch(action_code) {
 			case IOT_DEVCONN_ACTION_MESSAGE: //new message arrived
-				if(conn->devclass.classid==IOT_DEVIFACECLASSID_KEYBOARD) {
+				if(conn->devclass.classid==IOT_DEVIFACETYPEID_KEYBOARD) {
 					iot_devifaceclass__keyboard_CL iface(&conn->devclass);
 					const iot_devifaceclass__keyboard_CL::msg* msg=iface.parse_event(data, data_size);
 					if(!msg) return 0;
@@ -210,7 +209,7 @@ private:
 	}
 
 	void on_timer(void) {
-		error_code=IOT_STATE_ERROR_NO_DEVICE;
+//		error_code=IOT_STATE_ERROR_NO_DEVICE;
 	}
 };
 
@@ -224,28 +223,38 @@ private:
 //};
 
 
-static iot_iface_node_t kbd_src_iface_node = {
+static iot_iface_node_t kbd_iface_node = {
+	.descr = NULL,
+	.params_tmpl = NULL,
 	.num_devices = 3,
 	.num_valueoutputs = 1,
 	.num_valueinputs = 0,
 	.num_msgoutputs = 0,
 	.num_msginputs = 0,
 	.cpu_loading = 0,
+	.is_persistent = 1,
+	.is_sync = 0,
 
 	.devcfg={
 		{
+			.label = "input1",
+			.descr = "Any device with Keyboard interface",
 			.num_devclasses = sizeof(kbd_src_devclasses)/sizeof(kbd_src_devclasses[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
 			.devclasses = kbd_src_devclasses
 		},
 		{
+			.label = "input2",
+			.descr = "Any device with Keyboard interface",
 			.num_devclasses = sizeof(kbd_src_devclasses)/sizeof(kbd_src_devclasses[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
 			.devclasses = kbd_src_devclasses
 		},
 		{
+			.label = "input3",
+			.descr = "Any device with Keyboard interface",
 			.num_devclasses = sizeof(kbd_src_devclasses)/sizeof(kbd_src_devclasses[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
@@ -254,7 +263,9 @@ static iot_iface_node_t kbd_src_iface_node = {
 	},
 	.valueoutput={
 		{
-			.label = "st",
+			.label = "state",
+			.descr = "State of all keys",
+			.unit = NULL,
 			.vclass_id = IOT_VALUECLASSID_KBDSTATE
 		}
 	},
@@ -273,8 +284,11 @@ static iot_iface_node_t kbd_src_iface_node = {
 };
 
 iot_moduleconfig_t IOT_MODULE_CONF(kbd_src)={
+	.title = "Keys Event Source",
+	.descr = "Processes events from keyboards",
 	.module_id = MODULEID_kbd_src, //Registered ID of this module. Must correspond to its full name in registry
 	.version = 0x000100001,
+	.config_version = 0,
 	.num_devifaces = 0,
 	.num_devcontypes = 0,
 //	.flags = IOT_MODULEFLAG_IFACE_SOURCE,
@@ -282,7 +296,7 @@ iot_moduleconfig_t IOT_MODULE_CONF(kbd_src)={
 	.deinit_module = [](void) -> int {return 0;},
 	.deviface_config = NULL,
 	.devcontype_config = NULL,
-	.iface_node = &kbd_src_iface_node,
+	.iface_node = &kbd_iface_node,
 	.iface_device_driver = NULL,
 	.iface_device_detector = NULL
 };

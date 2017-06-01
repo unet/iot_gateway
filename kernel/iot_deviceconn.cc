@@ -37,19 +37,20 @@ iot_device_connection_t* iot_find_device_conn(const iot_connid_t &connid) {
 	return &iot_deviceconnections[connid.id];
 }
 
-int kapi_connection_send_client_msg(const iot_connid_t &connid, iot_module_instance_base *drv_inst, iot_devifacetype_id_t classid, const void* data, uint32_t datasize) {
+int iot_devifaceclass__DRVBASE::send_client_msg(const iot_connid_t &connid, iot_device_driver_base *drv_inst, const void *msg, uint32_t msgsize) {
 	iot_device_connection_t* conn=iot_find_device_conn(connid);
 	if(!conn) return IOT_ERROR_NOT_FOUND;
-	if(conn->driver_host!=iot_current_hostid || conn->driver.local.modinstlk.modinst->instance!=drv_inst || conn->devclass.classid!=classid)
+	if(conn->driver_host!=iot_current_hostid || conn->driver.local.modinstlk.modinst->instance!=drv_inst || conn->devclass.classid!=devclass->classid)
 		return IOT_ERROR_INVALID_ARGS;
-	return conn->send_client_message(data, datasize);
+	return conn->send_client_message(msg, msgsize);
 }
-int kapi_connection_send_driver_msg(const iot_connid_t &connid, iot_module_instance_base *client_inst, iot_devifacetype_id_t classid, const void* data, uint32_t datasize) {
+
+int iot_devifaceclass__CLBASE::send_driver_msg(const iot_connid_t &connid, iot_driver_client_base *client_inst, const void *msg, uint32_t msgsize) {
 	iot_device_connection_t* conn=iot_find_device_conn(connid);
 	if(!conn) return IOT_ERROR_NOT_FOUND;
-	if(conn->client_host!=iot_current_hostid || conn->client.local.modinstlk.modinst->instance!=client_inst || conn->devclass.classid!=classid)
+	if(conn->client_host!=iot_current_hostid || conn->client.local.modinstlk.modinst->instance!=client_inst || conn->devclass.classid!=devclass->classid)
 		return IOT_ERROR_INVALID_ARGS;
-	return conn->send_driver_message(data, datasize);
+	return conn->send_driver_message(msg, msgsize);
 }
 
 
@@ -78,12 +79,21 @@ void iot_device_connection_t::init_local(iot_connsid_t id, iot_modinstance_item_
 		};
 
 		switch(client_inst->type) {
-			case IOT_MODINSTTYPE_EVSOURCE: {
+			case IOT_MODINSTTYPE_NODE: {
 				auto iface=client_inst->module->config->iface_node;
 				assert(idx<IOT_CONFIG_MAX_NODE_DEVICES);
 				client.local.conndata=&client_inst->data.node.dev[idx];
 				client_devifaceclassfilter=&iface->devcfg[idx];
-				if(client_inst->cfgitem->numitems>idx) client_hwdevident=client_inst->cfgitem->node.dev[idx]; //else NULL due to memset
+				if(client_inst->cfgitem->numdevs > 0) { //find correct user device preference for current device connection matching labels
+					uint8_t i=client_inst->cfgitem->numdevs-1;
+					do {
+						if(strcmp(client_inst->cfgitem->dev[i].label, client_devifaceclassfilter->label)==0) {
+							client_numhwdevidents=client_inst->cfgitem->dev[i].numidents;
+							client_hwdevidents=client_inst->cfgitem->dev[i].idents;
+							break;
+						}
+					} while(i-- > 0);
+				}
 				break;
 			}
 			case IOT_MODINSTTYPE_DRIVER:
@@ -114,7 +124,8 @@ void iot_device_connection_t::deinit(void) {
 		assert(false);
 	}
 	client_devifaceclassfilter=NULL;
-	client_hwdevident=NULL;
+	client_numhwdevidents=0;
+	client_hwdevidents=NULL;
 	memset(&client, 0, sizeof(client));
 	client_host=0;
 
@@ -294,16 +305,20 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 
 //		if(!client_hwdevident && !client_devifaceclassfilter->flag_canauto)
 //			return IOT_ERROR_CRITICAL_ERROR; //no hwdevice assigned by customer and autoassigned disabled by module
-		assert(client_hwdevident || client_devifaceclassfilter->flag_canauto);
+		assert(client_numhwdevidents || client_devifaceclassfilter->flag_canauto);
 
 
-		//check if driver provides any of requested interface
+		//check if device matches user preference
 		iot_hwdevregistry_item_t* hwdev=driver_inst->data.driver.hwdev;
 		assert(hwdev!=NULL);
-		if(client_hwdevident) { //there is hwdevice bound to client. it can be exact or a template
-			if(!hwdev->devdata.ident_iface->matches(&hwdev->devdata.dev_ident, client_hwdevident)) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+		if(client_numhwdevidents) { //there is hwdevice filter bound to client. it can be exact or a template.
+			//DEVICE IN hwdev IS LOCAL, so no addtional check for client_devifaceclassfilter->flag_localonly
+			int i;
+			for(i=0;i<client_numhwdevidents;i++) if(hwdev->devdata.ident_iface->matches(&hwdev->devdata.dev_ident, &client_hwdevidents[i])) break;
+			if(i>=client_numhwdevidents) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
 		}
 
+		//check if driver provides any of interfaces requested by node module
 		uint8_t i, j;
 		int selected_iface=-1;
 		int err;
@@ -394,6 +409,9 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 		if(expect_false(connident.key==0)) connident.key=1; //do not allow zero value
 
 		d2c.reader_closed=true;
+
+		client_numhwdevidents=0;
+		client_hwdevidents=NULL; //clear reference to iot_config_inst_node_t
 
 		state=IOT_DEVCONN_PENDING;
 
@@ -691,8 +709,8 @@ void iot_device_connection_t::process_driver_ready(void) { //runs in client thre
 		};
 	}
 	switch(modinst->type) {
-		case IOT_MODINSTTYPE_EVSOURCE: {
-			outlog_debug("Device input %d of event source module %u attached", int(clientview.index)+1, modinst->module->config->module_id);
+		case IOT_MODINSTTYPE_NODE: {
+			outlog_debug("Device input %d of node module %u attached", int(clientview.index)+1, modinst->module->config->module_id);
 			static_cast<iot_node_base*>(modinst->instance)->device_attached(&clientview);
 			break;
 		}
@@ -724,8 +742,8 @@ void iot_device_connection_t::process_close_client(iot_threadmsg_t* msg) { //cli
 	assert(!d2c.reader_closed);
 
 	switch(modinst->type) {
-		case IOT_MODINSTTYPE_EVSOURCE: {
-			outlog_debug("Device input %d of event source module %u detached", int(clientview.index)+1, modinst->module->config->module_id);
+		case IOT_MODINSTTYPE_NODE: {
+			outlog_debug("Device input %d of node module %u detached", int(clientview.index)+1, modinst->module->config->module_id);
 			static_cast<iot_node_base*>(modinst->instance)->device_detached(&clientview);
 			break;
 		}

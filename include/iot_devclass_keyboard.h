@@ -12,16 +12,16 @@
 struct iot_devifacetype_keyboard : public iot_devifacetype_iface {
 	struct data_t { //format of interface class data (class attributes)
 		uint32_t format; //version of format or magic code
-		uint32_t max_keycode:10, //maximum possible key code. is not checked in match() method so is not used in templates (must be 0 in templates)
+		uint32_t max_keycode:10, //maximum possible key code. must be 0 in templates because not used for filtering device interfaces
 			is_pckbd:2; //flag that keyboard is normal PC keyboard with shift, ctrl, alt (when 1). value >1 is used in template to mean 'any value' of this prop
 	};
 
-	iot_devifacetype_keyboard(void) : iot_devifacetype_iface(IOT_DEVIFACECLASSID_KEYBOARD, "Keyboard") {
+	iot_devifacetype_keyboard(void) : iot_devifacetype_iface(IOT_DEVIFACETYPEID_KEYBOARD, "Keyboard") {
 	}
 
 	static void init_classdata(iot_devifacetype* devclass, uint16_t max_keycode, uint8_t is_pckbd) {
 		if(max_keycode > IOT_KEYBOARD_MAX_KEYCODE) max_keycode=IOT_KEYBOARD_MAX_KEYCODE;
-		devclass->classid=IOT_DEVIFACECLASSID_KEYBOARD;
+		devclass->classid=IOT_DEVIFACETYPEID_KEYBOARD;
 		*((data_t*)devclass->data)={
 			.format=1,
 			.max_keycode=max_keycode,
@@ -38,9 +38,17 @@ private:
 		data_t* data=(data_t*)cls_data;
 		return data->format==1;
 	}
+	virtual bool check_istmpl(const char* cls_data) const override { //actual check that data corresponds to template (so not all data components are specified)
+		data_t* data=(data_t*)cls_data;
+		return data->max_keycode==0;
+	}
 	virtual size_t print_data(const char* cls_data, char* buf, size_t bufsize) const override { //actual class data printing function. it must return number of written bytes (without NUL)
 		data_t* data=(data_t*)cls_data;
-		int len=snprintf(buf, bufsize, "%s (maxcode=%u,is_pc=%s)",name,unsigned(data->max_keycode),!data->is_pckbd ? "no" : data->is_pckbd==1 ? "yes" : "any");
+		int len;
+		if(check_istmpl(cls_data))
+			len=snprintf(buf, bufsize, "%s (is_pc=%s)",name, !data->is_pckbd ? "no" : data->is_pckbd==1 ? "yes" : "any");
+		else
+			len=snprintf(buf, bufsize, "%s (maxcode=%u,is_pc=%s)",name,unsigned(data->max_keycode),!data->is_pckbd ? "no" : data->is_pckbd==1 ? "yes" : "any");
 		return len>=int(bufsize) ? bufsize-1 : len;
 	}
 	virtual uint32_t get_d2c_maxmsgsize(const char* cls_data) const override;
@@ -48,7 +56,8 @@ private:
 	virtual bool compare(const char* cls_data, const char* tmpl_data) const override { //actual comparison function
 		data_t* data=(data_t*)cls_data;
 		data_t* tmpl=(data_t*)tmpl_data;
-		return tmpl->is_pckbd>1 || tmpl->is_pckbd==data->is_pckbd;
+		if(check_istmpl(tmpl_data)) return tmpl->is_pckbd>1 || tmpl->is_pckbd==data->is_pckbd;
+		return data->max_keycode==tmpl->max_keycode && tmpl->is_pckbd==data->is_pckbd;
 	}
 };
 
@@ -89,7 +98,7 @@ protected:
 	iot_devifaceclass__keyboard_BASE(const iot_devifacetype *devclass) {
 		const iot_devifacetype_iface* iface=devclass->find_iface();
 		assert(iface!=NULL);
-		assert(iface->classid==IOT_DEVIFACECLASSID_KEYBOARD);
+		assert(iface->classid==IOT_DEVIFACETYPEID_KEYBOARD);
 		attr=static_cast<const iot_devifacetype_keyboard*>(iface)->parse_classdata(devclass->data);
 		assert(attr!=NULL);
 	}

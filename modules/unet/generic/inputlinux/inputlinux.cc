@@ -143,6 +143,43 @@ private:
 		}
 		return len>=int(bufsize) ? bufsize-1 : len;
 	}
+	virtual size_t to_json(const char* dev_data, char* buf, size_t bufsize) const override { //actual encoder to json
+//		data_t* data=(data_t*)dev_data;
+/*
+{
+	tmpl: absent (meaning 0) or 1 to show if this data refers to template. 
+	addr: {
+		i: uint8 from 0 to 254 to mean specific input line or "*" to mean 'any line' in template
+	},
+	hwid: {
+		bus: name of specific bus or "*" in template
+		vendor: vendor code from 0 to 65534 or "*" in template
+		model: model code from 0 to 65534 or "*" in template
+		ver: model version code from 0 to 65534 or "*" in template
+		caps: subhash from {'key':1,'led':1,'snd':1,'sw':1,'rel':1} or for templates can be "*" of list with all required caps like ['key','led'].
+	}
+*/
+		return 0;
+	}
+	virtual const char* get_vistmpl(void) const override { //actual visualization template generator
+		return R"!!!({
+"shortDescr":	["concatws", " ",
+					["data", "hwid.bus"],
+					["case", 
+						[["hash_exists", ["data", "hwid.caps"], "key", "rel"],		["txt","dev_mouse"]],
+						[["hash_exists", ["data", "hwid.caps"], "key"],				["txt","dev_keyboard"]],
+						[["hash_exists", ["data", "hwid.caps"], "led"],				["txt","dev_led"]],
+						[["hash_exists", ["data", "hwid.caps"], "snd"],				["txt","dev_snd"]],
+						[["hash_exists", ["data", "hwid.caps"], "sw"],				["txt","dev_sw"]]
+					],
+					["vendor_name", ["data", "hwid.vendor"]]
+				],
+"longDescr":
+"propList":
+"newDialog":
+"editDialog":
+})!!!";
+	}
 } linuxinput_iface_obj;
 
 
@@ -257,7 +294,7 @@ class detector : public iot_device_detector_base {
 				
 				hwid={fulldevinfo[i].input, fulldevinfo[i].cap_bitmap};
 				linuxinput_iface_obj.set_hwid(&ident, &hwid);
-				err=kapi_hwdev_registry_action(IOT_ACTION_REPLACE, &ident, sizeof(fulldevinfo[i]), &fulldevinfo[i]);
+				err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, sizeof(fulldevinfo[i]), &fulldevinfo[i]);
 				if(err>=0) {
 					devinfo[i].input=fulldevinfo[i].input;
 					devinfo[i].cap_bitmap=fulldevinfo[i].cap_bitmap;
@@ -413,6 +450,8 @@ static iot_hwdevcontype_t detector_devcontypes[]={DEVCONTYPE_CUSTOM_LINUXINPUT};
 static const iot_hwdevident_iface* detector_devcontype_config[]={&linuxinput_iface_obj};
 
 static iot_iface_device_detector_t detector_iface = {
+	.descr = NULL,
+	.params_tmpl = NULL,
 	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
 	.cpu_loading = 0,
 
@@ -424,8 +463,11 @@ static iot_iface_device_detector_t detector_iface = {
 };
 
 iot_moduleconfig_t IOT_MODULE_CONF(detector)={
+	.title = "Detector of Linux Input devices",
+	.descr = "Detects Linux input devices provided by evdev kernel module",
 	.module_id = MODULEID_detector, //Registered ID of this module. Must correspond to its full name in registry
 	.version = 0x000100001,
+	.config_version = 0,
 	.num_devifaces = 0,
 	.num_devcontypes = 1,
 	.init_module = [](void) -> int {return 0;},
@@ -459,11 +501,11 @@ struct input_drv_instance : public iot_device_driver_base {
 	uint16_t want_leds_state=0; //when EV_LED capability present, bitmap of requested leds state
 	uint8_t snd_state=0; //when EV_SND capability present, bitmap of current snd state
 
-	bool have_kbd=false, //iface IOT_DEVIFACECLASSID_KEYBOARD was reported
-		have_leds=false, //iface IOT_DEVIFACECLASSID_LEDS was reported
-		have_spk=false, //iface IOT_DEVIFACECLASSID_BASIC_SPEAKER was reported
-		have_sw=false; //iface IOT_DEVIFACECLASSID_HW_SWITCHES was reported
-	iot_connid_t connid_kbd={}; //id of connection with IOT_DEVIFACECLASSID_KEYBOARD iface, if connected
+	bool have_kbd=false, //iface IOT_DEVIFACETYPEID_KEYBOARD was reported
+		have_leds=false, //iface IOT_DEVIFACETYPEID_LEDS was reported
+		have_spk=false, //iface IOT_DEVIFACETYPEID_BASIC_SPEAKER was reported
+		have_sw=false; //iface IOT_DEVIFACETYPEID_HW_SWITCHES was reported
+	iot_connid_t connid_kbd={}; //id of connection with IOT_DEVIFACETYPEID_KEYBOARD iface, if connected
 	const iot_devifacetype *attr_kbd=NULL; //interface class attribute object for connected connid_kbd
 
 	uv_loop_t* loop=NULL;
@@ -509,10 +551,10 @@ struct input_drv_instance : public iot_device_driver_base {
 			if(devifaces->add(&classdata)==0) have_kbd=true;
 		}
 //		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_LED)) {
-//			if(devifaces->add(IOT_DEVIFACECLASSID_LEDS, NULL)==0) have_leds=true;
+//			if(devifaces->add(IOT_DEVIFACETYPEID_LEDS, NULL)==0) have_leds=true;
 //		}
-//		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SND)) {if(devifaces->add(IOT_DEVIFACECLASSID_BASIC_SPEAKER, NULL)==0) have_spk=true;}
-//		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SW)) {if(devifaces->add(IOT_DEVIFACECLASSID_HW_SWITCHES, NULL)==0) have_sw=true;}
+//		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SND)) {if(devifaces->add(IOT_DEVIFACETYPEID_BASIC_SPEAKER, NULL)==0) have_spk=true;}
+//		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SW)) {if(devifaces->add(IOT_DEVIFACETYPEID_HW_SWITCHES, NULL)==0) have_sw=true;}
 
 		if(!devifaces->num) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
 
@@ -649,7 +691,7 @@ private:
 //iot_device_driver_base methods
 	virtual int device_open(const iot_conn_drvview* conn) {
 		switch(conn->devclass.classid) {
-			case IOT_DEVIFACECLASSID_KEYBOARD: {
+			case IOT_DEVIFACETYPEID_KEYBOARD: {
 				if(!have_kbd) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
 				if(connid_kbd) return IOT_ERROR_LIMIT_REACHED;
 				connid_kbd=conn->id;
@@ -668,7 +710,7 @@ private:
 	}
 	virtual int device_close(const iot_conn_drvview* conn) {
 		switch(conn->devclass.classid) {
-			case IOT_DEVIFACECLASSID_KEYBOARD:
+			case IOT_DEVIFACETYPEID_KEYBOARD:
 				if(connid_kbd==conn->id) {connid_kbd.clear(); attr_kbd=NULL;}
 				break;
 			default:
@@ -932,6 +974,7 @@ private:
 input_drv_instance* input_drv_instance::instances_head;
 
 static iot_iface_device_driver_t input_drv_iface_device_driver = {
+	.descr = NULL,
 //	.num_devclassids = 0,
 	.cpu_loading = 3,
 
@@ -941,8 +984,11 @@ static iot_iface_device_driver_t input_drv_iface_device_driver = {
 };
 
 iot_moduleconfig_t IOT_MODULE_CONF(input_drv)={
+	.title = "Driver for Linux Input devices",
+	.descr = "Supports keyboards, speaker, hardware switches",
 	.module_id = MODULEID_input_drv, //Registered ID of this module. Must correspond to its full name in registry
 	.version = 0x000100001,
+	.config_version = 0,
 	.num_devifaces = 0,
 	.num_devcontypes = 0,
 //	.flags = IOT_MODULEFLAG_IFACE_DEVDRIVER,

@@ -1,6 +1,6 @@
 #ifndef IOT_CONFIGREGISTRY_H
 #define IOT_CONFIGREGISTRY_H
-//Contains data structures and methods for device handles management
+//Contains data structures representing user configuration
 
 #include<stdint.h>
 #include<assert.h>
@@ -8,7 +8,7 @@
 #include <iot_module.h>
 #include <kernel/iot_common.h>
 
-struct iot_config_inst_item_t;
+struct iot_config_inst_node_t;
 struct iot_configregistry_t;
 struct iot_config_actlist_item_t;
 struct iot_config_group_mode_t;
@@ -18,13 +18,14 @@ struct iot_config_group_mode_t;
 
 #define IOT_CONFIG_MAX_GROUP_ID 16
 
+#include<kernel/iot_configmodel.h>
 #include<kernel/iot_deviceregistry.h>
 #include<kernel/iot_moduleregistry.h>
 #include<kernel/iot_kernel.h>
 
 
 //represents list of messages to send to several executors when chain of activators is signaled
-struct iot_config_actlist_item_t {
+/*struct iot_config_actlist_item_t {
 	iot_config_actlist_item_t *next, *prev; //for list in config_registry->actlists_head;
 	uint32_t size; //full actual size of this object. json_args are embedded just after item[] array
 
@@ -33,41 +34,62 @@ struct iot_config_actlist_item_t {
 	uint8_t group_id;
 	uint8_t mode_id;
 	uint8_t numitems;
-	uint32_t host_id;
-	iot_config_inst_item_t* actor; //must point to activator
+	iot_hostid_t host_id;
+	iot_config_inst_node_t* actor; //must point to activator
 	struct {
-		iot_config_inst_item_t* exec; //must point to executor
+		iot_config_inst_node_t* exec; //must point to executor
 		uint32_t action;
 		const char *json_args; //arguments for action
 	} item[];
 };
+*/
+//represents user configuration link between nodes
+struct iot_config_inst_outlink_t {
+	char out_label[IOT_CONFIG_LINKLABEL_MAXLEN+1];
+	iot_id_t group_id, mode_id; //only one should be non-zero
+	iot_config_inst_node_t* out_node;
+};
 
-//represents user configuration item and its connections
-struct iot_config_inst_item_t {
-	iot_config_inst_item_t *next, *prev; //for list in config_registry->items_head;
-	uint32_t size; //full actual size of this object. json_cfg is embedded just after union
 
-	uint32_t iot_id;
+//represents user configuration node item
+struct iot_config_inst_node_t {
+	iot_config_inst_node_t *next, *prev; //for list in config_registry->items_head;
+	uint32_t size; //full actual size of this object. json_cfg, dev[], valueinputs, msginputs are embedded
+
+	iot_id_t iot_id;
+	iot_hostid_t host_id;
 	uint32_t module_id;
-	iot_modinstance_type_t type; //IOT_MODINSTTYPE_EVSOURCE, IOT_MODINSTTYPE_ACTIVATOR, IOT_MODINSTTYPE_EXECUTOR
-	uint8_t group_id;
-	uint8_t mode_id;
-	uint8_t numitems; //number of items in dev[] or input[]
-	uint32_t host_id;
-	iot_miid_t miid; //filled after instantiation if host id is ours
-	time_t modtime;
-	const char *json_cfg;
-	union {
-		struct {
-			iot_hwdev_ident_t *dev[]; //can have NULL values if corresponding device not assigned. internal iot_hwdev_localident_t structure can be a template
-		} node;
-		struct {
-			iot_config_inst_item_t *input[];
-		} actor;
-		struct {
-			iot_hwdev_ident_t *dev[];
-		} exec;
-	};
+
+	iot_id_t group_id, mode_id; //can both be zero for persistent nodes. only one should be non-zero for temporary nodes
+
+	uint32_t cfg_id; //node config number when props were updated last time
+
+	struct {
+		char label[IOT_CONFIG_DEVLABEL_MAXLEN+1]; //up to 7 chars
+		uint8_t numidents; //number of items in idents
+		iot_hwdev_ident_t *idents; //list of hwdev filters set by user
+	} *dev; //internal ident.dev iot_hwdev_localident_t structure or host can be a template
+	struct {
+		char in_label[IOT_CONFIG_LINKLABEL_MAXLEN+1]; //label without type prefix. up to 7 chars
+		uint8_t numouts; //number of items in outs
+		iot_config_inst_outlink_t *outs; //list of outputs connected to current input
+	} *valueinputs;
+	struct {
+		char in_label[IOT_CONFIG_LINKLABEL_MAXLEN+1]; //label without type prefix. up to 7 chars
+		uint8_t numouts; //number of items in outs
+		iot_config_inst_outlink_t *outs; //list of outputs connected to current input
+	} *msginputs;
+
+	const char *json_config;
+
+
+	uint8_t config_ver;
+	uint8_t numdevs; //number of valid items in dev[]
+	uint8_t numvalueinputs; //number of valid items in valueinputs[]
+	uint8_t nummsginputs; //number of valid items in msginputs[]
+
+	iot_nodemodel* nodemodel;
+
 };
 
 //keeps current mode for each group
@@ -81,10 +103,10 @@ struct iot_config_group_mode_t {
 extern iot_configregistry_t* config_registry;
 
 
-extern iot_config_inst_item_t item1;
+extern iot_config_inst_node_t item1;
 
 class iot_configregistry_t {
-	iot_config_inst_item_t *items_head;
+	iot_config_inst_node_t *items_head;
 	iot_config_actlist_item_t *actlists_head;
 	iot_config_group_mode_t *modes_head;
 
@@ -102,7 +124,7 @@ public:
 
 	int load_config(const char* file) { //main thread
 		iot_current_hostid=1;
-//		iot_config_inst_item_t* iitem=(iot_config_inst_item_t*)main_allocator.allocate(sizeof(iot_config_inst_item_t));
+//		iot_config_inst_node_t* iitem=(iot_config_inst_node_t*)main_allocator.allocate(sizeof(iot_config_inst_node_t));
 //		if(!iitem) return IOT_ERROR_NO_MEMORY;
 		BILINKLIST_INSERTHEAD(&item1, items_head, next, prev);
 
