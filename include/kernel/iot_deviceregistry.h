@@ -75,6 +75,7 @@ struct iot_hwdevregistry_item_t {
 		}
 		return false;
 	}
+	void on_driver_destroy(iot_modinstance_item_t* modinst); //called when driver instance is freed
 };
 
 //singleton class to keep and manage registry of LOCAL HARDWARE devices

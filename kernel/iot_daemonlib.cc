@@ -28,14 +28,17 @@ static const char *loglevel_str[]={
 
 
 static int logfd=-1;
-char rootpath[128]="./"; //root dir for daemon
-//static size_t rootlen=0; //length of root dir
+char rootpath[128]; //root dir for daemon
+size_t rootlen; //length of root dir
 
-#ifdef NDEBUG
-int min_loglevel=LNOTICE;
-#else
-__attribute__ ((visibility ("default"))) int min_loglevel=LDEBUG;
-#endif
+int min_loglevel=-1; //means 'unset'
+
+//#ifdef NDEBUG
+//int min_loglevel=LNOTICE;
+//#else
+////__attribute__ ((visibility ("default"))) 
+//int min_loglevel=LDEBUG;
+//#endif
 
 
 #ifndef _WIN32
@@ -220,6 +223,46 @@ int create_pidfile(const char* pidfile)
 	close(pidf);
 	return 1;
 }
+
+
+bool parse_args(int argc, char **arg, const char* rundir, const char* addhelparg, const char* addhelpmsg)
+{
+	int i;
+	if(argc<2 || !arg[1]) {
+		i=snprintf(rootpath,sizeof(rootpath)-1,"%s",".");
+//		fprintf(stderr,"Missing mandatory parameter.\n"
+//"Syntax: PROGNAME workdir [loglevel]%s\n"
+//"\tworkdir\t\tdaemon home directory, where config files are searched and subdir '/%s' is used for DB, pid-file and logs\n"
+//"\tloglevel\tlevel of logging: 0-debug,1-info,2-notice,3-error (default is %d)\n"
+//"%s\n",addhelparg ? addhelparg : "", rundir, min_loglevel, addhelpmsg ? addhelpmsg : "");
+//		return false;
+	} else {
+		i=snprintf(rootpath,sizeof(rootpath)-1,"%s",arg[1]); //reserve one char for trailing '/'
+		if(i>=(int)sizeof(rootpath)-1 || i<=0) {
+			fprintf(stderr,"Error: length of workdir must not exceed %d chars\n\n",int(sizeof(rootpath))-2);
+			return false;
+		}
+	}
+	rootlen=i;
+	if(rootpath[rootlen-1]!='/') { //append '/' is necessary
+		rootpath[rootlen++]='/';
+		rootpath[rootlen]='\0';
+	}
+	if(argc>=3 && arg[2]) {
+		min_loglevel=atoi(arg[2]);
+		if(min_loglevel<LDEBUG) min_loglevel=LDEBUG;
+			else if(min_loglevel>LERROR) min_loglevel=LERROR;
+	}
+
+	char namebuf[256];
+	snprintf(namebuf,sizeof(namebuf),"%s%s",rootpath,rundir);
+	if(mkdir(namebuf, 0755) && errno!=EEXIST) {
+		fprintf(stderr,"Error creating '%s': %s\n", namebuf, strerror(errno));
+		return false;
+	}
+	return true;
+}
+
 
 #endif
 

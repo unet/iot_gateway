@@ -46,7 +46,10 @@ int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t actio
 //	IOT_ERROR_NOT_READY
 int iot_module_instance_base::kapi_self_abort(int errcode) { //can be called in modinstance thread
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
-	assert(modinstlk && modinstlk.modinst->instance==this);
+	if(!modinstlk || modinstlk.modinst->instance!=this) {
+		assert(false);
+		return 0;
+	}
 	iot_modinstance_item_t* modinst=modinstlk.modinst;
 	assert(uv_thread_self()==modinst->thread->thread);
 
@@ -61,6 +64,71 @@ int iot_module_instance_base::kapi_self_abort(int errcode) { //can be called in 
 	}
 	modinst->aborted_error=errcode;
 	return modinst->stop(false, true);
+}
+
+//	IOT_ERROR_INVALID_ARGS - provided index or type of value are illegal.
+//	IOT_ERROR_NO_MEMORY - no memory to process value change. try later.
+int iot_node_base::kapi_set_value_output(uint8_t index, iot_valueclass_BASE* value) { //value can be NULL to mean undef
+	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk.modinst->instance!=this) {
+		assert(false);
+		return 0;
+	}
+	iot_modinstance_item_t* modinst=modinstlk.modinst;
+	assert(uv_thread_self()==modinst->thread->thread);
+
+	if(!modinst->is_working()) {
+		return 0;
+	}
+	auto model=modinst->data.node.model;
+	if(!model->cfgitem) return 0; //model is being stopped and is already detached from config item. ignore signal.
+
+	auto iface=modinst->module->config->iface_node;
+	assert(iface!=NULL);
+
+	if(index>=iface->num_valueoutputs || !iface->valueoutput[index].is_compatible(value)) {
+		return IOT_ERROR_INVALID_ARGS;
+	}
+	assert(modinst->data.node.model!=NULL);
+	auto &instance_value=modinst->data.node.model->curvalueoutput[index].instance_value;
+
+	if(!value) { //undefined value is set
+		if(!instance_value) return 0; //no change
+	}
+	else if(instance_value && *instance_value==*value) {//no change
+		return 0; 
+	}
+	//value has changed
+	//try to allocate new memblock for value (if not null) and message
+	iot_valueclass_BASE* newvalue;
+	if(value) {
+		newvalue=(iot_valueclass_BASE*)modinst->thread->allocator->allocate(value->get_size(), true);
+		if(!newvalue) return IOT_ERROR_NO_MEMORY;
+		memcpy(newvalue, value, value->get_size());
+	} else newvalue=NULL;
+
+	iot_modelsignal* sig=(iot_modelsignal*)modinst->thread->allocator->allocate(sizeof(iot_modelsignal));
+	if(!sig) {
+		if(newvalue) iot_release_memblock(newvalue);
+		return IOT_ERROR_NO_MEMORY;
+	}
+	new(sig) iot_modelsignal(model, index, uv_now(modinst->thread->loop), newvalue);
+
+	iot_threadmsg_t* msg=NULL;
+	int err=iot_prepare_msg(msg, IOT_MSG_EVENTSIG_OUT, NULL, 0, sig, 0, IOT_THREADMSG_DATAMEM_MEMBLOCK_NOOPT, true, modinst->thread->allocator);
+	if(err) {
+		if(newvalue) iot_release_memblock(newvalue);
+		iot_release_memblock(sig);
+		return err;
+	}
+
+	iot_incref_memblock(newvalue); //value is now copied to sig, so will have 2 refs
+
+	if(instance_value) iot_release_memblock(instance_value);
+	instance_value=newvalue;
+
+	main_thread_item->send_msg(msg);
+	return 0;
 }
 
 

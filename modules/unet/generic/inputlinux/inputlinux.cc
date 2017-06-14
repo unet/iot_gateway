@@ -89,6 +89,9 @@ static struct linuxinput_iface : public iot_hwdevident_iface {
 	}
 
 private:
+	virtual bool from_json(json_object* obj, char* dev_data) const override { //must convert json data into correct binary representation and return true if provided obj is valid
+		return false; //TODO
+	}
 	virtual bool check_data(const char* dev_data) const override { //actual check that data is good by format
 		data_t* data=(data_t*)dev_data;
 		return data->format==1;
@@ -330,12 +333,10 @@ class detector : public iot_device_detector_base {
 	//IOT_ERROR_CRITICAL_ERROR - non-recoverable error. may be error in configuration. instanciation for specific entity (device for driver, iot_id for others) will be blocked
 	//IOT_ERROR_TEMPORARY_ERROR - module should be retried later
 	//other errors equivalent to IOT_ERROR_CRITICAL_BUG!!!
-	virtual int start(const iot_miid_t &miid_) {
+	virtual int start(void) {
 		assert(uv_thread_self()==thread);
 		assert(!is_active);
 		if(is_active) return 0;
-
-		miid=miid_;
 
 		uv_loop_t* loop=kapi_get_event_loop(thread);
 		assert(loop!=NULL);
@@ -639,14 +640,13 @@ private:
 	//IOT_ERROR_CRITICAL_ERROR - non-recoverable error. may be error in configuration. instanciation for specific entity (device for driver, iot_id for others) will be blocked
 	//IOT_ERROR_TEMPORARY_ERROR - module should be retried later
 	//other errors equivalent to IOT_ERROR_CRITICAL_BUG!!!
-	virtual int start(const iot_miid_t &miid_) {
+	virtual int start(void) {
 		assert(uv_thread_self()==thread);
 		assert(!is_active);
 
 		if(is_active) return 0; //even in release mode just return success
 		is_active=true;
 
-		miid=miid_;
 		loop=kapi_get_event_loop(thread);
 		assert(loop!=NULL);
 

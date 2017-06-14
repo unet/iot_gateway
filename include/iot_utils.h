@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 #define ECB_NO_LIBM
 #include <ecb.h>
@@ -21,6 +22,17 @@ uv_loop_t* kapi_get_event_loop(uv_thread_t thread);
 
 #define container_of(ptr, type, member) \
   ((type *) ((char *) (ptr) - offsetof(type, member)))
+
+
+//on overflow UINT64_MAX is returned and errno is set to ERANGE 
+inline uint64_t iot_strtou64(const char* str, char **endptr, int base) {
+	errno=0;
+#if ULONG_MAX == 0xFFFFFFFFUL
+	return strtoull(str, endptr, base);
+#else
+	return strtoul(str, endptr, base);
+#endif
+}
 
 
 //Uni-linked list without tail (NULL value of next field tells about EOL). headvar is of the same type as itemptr. Empty list has headvar==NULL
@@ -423,6 +435,122 @@ public:
 		BILINKLISTWT_INSERTTAIL(&it, head, tail, next, prev);
 	}
 };
+
+//Keeps references to allocated (using malloc()) memory blocks.
+class mempool {
+	void **memchunks=NULL; //array of allocated memory chunks
+	int nummemchunks=0, maxmemchunks=0; //current quantity of chunks pointers in memchunks, number of allocated items in memchunks array
+
+public:
+	~mempool(void) {
+		deinit();
+	}
+	void *allocate(uint32_t size, bool zero=false) { //allocate next chunk of memory
+	//returns NULL on allocation error
+		if(nummemchunks+1>maxmemchunks) { //reallocate memchunks array to make it bigger
+			int newmax=nummemchunks+1+50;
+			void **t=(void**)malloc(sizeof(void*)*newmax);
+			if(!t) return NULL;
+			if(nummemchunks>0) memmove(t, memchunks, sizeof(void*)*nummemchunks);
+			if(memchunks) free(memchunks);
+			memchunks=t;
+			maxmemchunks=newmax;
+		}
+		void *t=malloc(size);
+		if(!t) return NULL;
+		memchunks[nummemchunks]=t;
+		nummemchunks++;
+		if(zero) memset(t, 0, size);
+		return t;
+	}
+	void deinit(void) { //free all allocated chunks
+		if(!memchunks) return;
+		for(int i=0;i<nummemchunks;i++) free(memchunks[i]);
+		free(memchunks);
+		memchunks=NULL;
+		nummemchunks=0;
+		maxmemchunks=0;
+	}
+};
+
+
+//allocate specified minimal quantity of items and add them to uni- or bidirectional list whose head is in 'ret' (updating 'ret' as necessary)
+template<class Item, bool UsePrev=false, uint32_t OPTIMAL_BLOCK=256*1024, uint32_t MAX_BLOCK=2*1024*1024> inline bool alloc_free_items(mempool* mpool, uint32_t &n, uint32_t sz, Item * &ret, uint32_t maxn=0xFFFFFFFFu) {
+	//'n' - minimal amount to be allocated for success. on exit it is updated to show quantity of allocated items
+	//'sz' - size of each item (if Item is base class for allocated items then this size can be larger than sizeof(Item))
+	//'ret' - head of allocated unidirectional list of items will be put here. if 'ret' already has pointer to unidirectional list, this list will be prepended
+	//'maxn' - optional maximum quantity of allocated items
+	//returns false if 'n' was not satisfied (but less structs can be allocated and returned with 'n' updated to show quantity of allocated)
+		uint32_t perchunk;
+		uint32_t nchunks;
+		uint32_t chunksize;
+		
+		if(n>maxn) n=maxn;
+
+		perchunk=OPTIMAL_BLOCK/sz;
+		if(perchunk < n) {
+			//optimal block is not enough for n items, try to take bigger chunk up to MAX_BLOCK
+			chunksize=sz*n;
+			if(chunksize>MAX_BLOCK && sz<MAX_BLOCK) { //avoid allocation chunks larger than MAX_BLOCK
+				perchunk=MAX_BLOCK/sz;
+				chunksize=perchunk*sz; //will be >OPTIMAL_BLOCK and <=MAX_BLOCK
+				nchunks=(n+perchunk-1)/perchunk; //emulate integer ceil()
+				//chunks must be recalculated after first allocation
+			} else {
+				nchunks=1;
+				perchunk=n;
+			}
+		} else { //optimal block is enough for n and more
+			nchunks=1;
+			if(perchunk>maxn) perchunk=maxn;
+			chunksize=perchunk*sz;
+		}
+
+		uint32_t n_good=0;
+		while(nchunks>0) {
+			char *t=(char*)mpool->allocate(chunksize);
+			if(!t) { //malloc failure
+				if(n_good>=n || perchunk<=1) break; //stop if minimum quantity reached or chunksize cannot be decreased
+				perchunk>>=1; //decrease chunksize to have the half of items
+				chunksize=perchunk*sz;
+				nchunks=((n-n_good)+perchunk-1)/perchunk;
+				continue;
+			}
+			Item *first=(Item *)t;
+			if(UsePrev) {
+				Item* prevt=NULL;
+				for(uint32_t i=0;i<perchunk-1;i++) {
+					((Item *)t)->init_allocated_item((Item *)(t+sz), prevt);
+					prevt=(Item *)t;
+					t+=sz;
+				}
+				((Item *)t)->init_allocated_item(ret, prevt);
+				if(ret) ret->set_allocated_item_prev((Item *)t);
+			} else {
+				for(uint32_t i=0;i<perchunk-1;i++) {
+					((Item *)t)->init_allocated_item((Item *)(t+sz));
+					t+=sz;
+				}
+				((Item *)t)->init_allocated_item(ret);
+			}
+			ret=first;
+			nchunks--;
+			n_good+=perchunk;
+			if(nchunks>0 && n_good+perchunk>maxn) { //another samesized chunk will be allocated which overflows maxn
+				assert(n_good<=maxn); //problem with some math above
+				perchunk=maxn-n_good;
+				if(!perchunk) break; //maxn reached
+				nchunks=1;
+				chunksize=perchunk*sz;
+			}
+		}
+		if(n_good>=n) {
+			n=n_good;
+			return true;
+		}
+		n=n_good;
+		return false;
+	}
 
 
 #endif //IOT_UTILS_H

@@ -6,14 +6,28 @@
 //#include <stdlib.h>
 //#include <stdint.h>
 
+#ifndef DAEMON_KERNEL
+////////////////////////////////////////////////////////////////////
+///////////////////////////Specific declarations for external modules
+////////////////////////////////////////////////////////////////////
+//macro for generating ID of custom module specific class of state data
+#define IOT_VALUECLASS_CUSTOM(module_id, index) (((module_id)<<8)+((index) & 0x7f)*2)
+
+#endif
+
+
+typedef iot_dataclass_id_t iot_valueclass_id_t;	//type for class ID of value for node input/output. MUST HAVE 0 in lower bit
+
+
 
 //Build-in value classes
-#define IOT_VALUECLASSID_BOOLEAN		1			//
-#define IOT_VALUECLASSID_INTEGER		2			//integer number
-#define IOT_VALUECLASSID_NUMBER			3			//fractional number
+#define IOT_VALUECLASSID_NODEERRORSTATE	(1 << 1)			//bitmap of error states of node
 
-#define IOT_VALUECLASSID_KBDSTATE		10			//bitmap of keys which are currently down
-#define IOT_VALUECLASSID_NODEERRORSTATE	11			//bitmap of error states of node
+#define IOT_VALUECLASSID_BOOLEAN		(2 << 1)			//
+#define IOT_VALUECLASSID_INTEGER		(3 << 1)			//integer number
+#define IOT_VALUECLASSID_NUMBER			(4 << 1)			//fractional number
+
+#define IOT_VALUECLASSID_KBDSTATE		(10 << 1)			//bitmap of keys which are currently down
 
 
 #ifdef __linux__
@@ -22,19 +36,30 @@
 #else
 	#define IOT_KEYBOARD_MAX_KEYCODE 255
 #endif
+class iot_msgclass_BASE;
 
 class iot_valueclass_BASE {
 	iot_valueclass_id_t classid;
 protected:
 	uint32_t datasize; //size of whole value, including sizeof base class
 
-	iot_valueclass_BASE(iot_valueclass_id_t classid) : classid(classid) {
+	iot_valueclass_BASE(iot_valueclass_id_t classid) : classid((classid & 1) ? 0 : classid) {
 		datasize=sizeof(*this);
 	}
 public:
 	iot_valueclass_id_t get_classid(void) const {
 		return classid;
 	}
+	uint32_t get_size(void) const {
+		return datasize;
+	}
+	bool operator==(const iot_valueclass_BASE &op) const {
+		if(classid!=op.classid) return false;
+		return check_eq(&op);
+	}
+private:
+	//required virtual functions to implement in derived classes
+	virtual bool check_eq(const iot_valueclass_BASE *op) const = 0;
 };
 
 class iot_valueclass_nodeerrorstate: public iot_valueclass_BASE {
@@ -60,6 +85,11 @@ public:
 	bool operator!(void) const {
 		return state==0;
 	}
+private:
+	virtual bool check_eq(const iot_valueclass_BASE *op) const override {
+		const iot_valueclass_nodeerrorstate* opc=static_cast<const iot_valueclass_nodeerrorstate*>(op);
+		return state==opc->state;
+	}
 };
 
 
@@ -74,11 +104,11 @@ public:
 		memset(state, 0, statesize*sizeof(uint32_t));
 		datasize=sizeof(*this)+sizeof(uint32_t)*statesize;
 	}
-	iot_valueclass_kbdstate(uint16_t max_keycode, uint32_t* statemap, uint8_t statemapsize) : iot_valueclass_BASE(IOT_VALUECLASSID_KBDSTATE) {
+	iot_valueclass_kbdstate(uint16_t max_keycode, const uint32_t* statemap, uint8_t statemapsize) : iot_valueclass_BASE(IOT_VALUECLASSID_KBDSTATE) {
 		if(max_keycode>IOT_KEYBOARD_MAX_KEYCODE) max_keycode=IOT_KEYBOARD_MAX_KEYCODE;
 		assert(max_keycode>0);
 		statesize=(max_keycode / 32)+1;
-		if(statemapsize<statesize) { //provided statemap must be of correct size of larger
+		if(statemapsize<statesize) { //provided statemap must be of correct size or larger
 			assert(false);
 			if(statemapsize>0) memcpy(state, statemap, statemapsize*sizeof(uint32_t));
 			memset(state+statemapsize, 0, (statesize-statemapsize)*sizeof(uint32_t));
@@ -89,7 +119,7 @@ public:
 		datasize=sizeof(*this)+sizeof(uint32_t)*statesize;
 	}
 
-	static uint8_t calc_datasize(uint16_t max_keycode) { //allows to determine necessary memory for object to hold state map with specific max key code
+	static size_t calc_datasize(uint16_t max_keycode) { //allows to determine necessary memory for object to hold state map with specific max key code
 		//returns 0 on unallowed value
 		if(max_keycode>IOT_KEYBOARD_MAX_KEYCODE) max_keycode=IOT_KEYBOARD_MAX_KEYCODE;
 		if(!max_keycode) return 0;
@@ -137,6 +167,11 @@ public:
 	explicit operator bool(void) const {
 		for(uint8_t i=0;i<statesize;i++) if(state[i]) return true;
 		return false;
+	}
+private:
+	virtual bool check_eq(const iot_valueclass_BASE *op) const override {
+		const iot_valueclass_kbdstate* opc=static_cast<const iot_valueclass_kbdstate*>(op);
+		return statesize==opc->statesize && memcmp(state, opc->state, statesize*sizeof(state[0]))==0;
 	}
 };
 

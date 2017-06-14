@@ -295,6 +295,7 @@ void iot_thread_registry_t::on_thread_shutdown(iot_thread_item_t* thread) {
 void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 		iot_thread_item_t* thread_item=(iot_thread_item_t*)(handle->data);
 		iot_threadmsg_t* msg, *nextmsg=thread_item->msgq.pop_all();
+		bool had_modelsignals=false; //flag that some modelling signals were sent to config registry and thus commit_signals() must be called
 		while(nextmsg) {
 			msg=nextmsg;
 			nextmsg=(nextmsg->next).load(std::memory_order_relaxed);
@@ -306,7 +307,7 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 					case IOT_MSG_THREAD_SHUTDOWN: //request to current thread to stop
 						assert(uv_thread_self()!=main_thread);
 
-						iot_release_msg(msg); msg=NULL; //reuse same msg for main thread notification
+						iot_release_msg(msg); msg=NULL;
 
 						thread_item->is_shutdown=true;
 						uv_stop (thread_item->loop);
@@ -315,7 +316,7 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						assert(uv_thread_self()==main_thread);
 
 						iot_thread_item_t* th=(iot_thread_item_t*)msg->data;
-						iot_release_msg(msg); msg=NULL; //reuse same msg for main thread notification
+						iot_release_msg(msg); msg=NULL;
 
 						thread_registry->on_thread_shutdown(th);
 						break;
@@ -482,6 +483,19 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						msg=NULL;
 						break;
 					}
+					case IOT_MSG_EVENTSIG_OUT: { //new signal from node about change of value output
+						//main thread
+						assert(uv_thread_self()==main_thread);
+						assert(msg->data!=NULL);
+						iot_modelsignal* sig=(iot_modelsignal*)msg->data;
+						iot_incref_memblock(sig); //sig must be allocated as memblock, so protect it from releasing by iot_release_msg
+
+						iot_release_msg(msg); msg=NULL; //early release of message struct
+
+						config_registry->inject_signal(sig);
+						had_modelsignals=true;
+						break;
+					}
 
 					default:
 outlog_debug("got unprocessed message %u", unsigned(msg->code));
@@ -494,6 +508,7 @@ outlog_debug("got non-kernel message %u", unsigned(msg->code));
 			}
 			if(msg) iot_release_msg(msg);
 		}
+		if(had_modelsignals) config_registry->commit_event();
 	}
 
 //Return values:

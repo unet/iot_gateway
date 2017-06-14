@@ -22,3 +22,11 @@
 	.autostart_detector = false,
 	.item = NULL
 },
+{
+	.module_id = 4,
+	.bundle = &IOT_MODULESDB_BUNDLE_OBJ(unet, generic__kbd),
+	.module_name = "oper_keys",
+	.autoload = false,
+	.autostart_detector = false,
+	.item = NULL
+},

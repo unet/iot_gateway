@@ -41,6 +41,8 @@ enum iot_msg_code_t : uint16_t {
 
 	IOT_MSG_THREAD_SHUTDOWN,		//process shutdown of thread (break event loop and exit thread)
 	IOT_MSG_THREAD_SHUTDOWNREADY,	//notification to main thread about child thread stop. [data] contains thread item address
+
+	IOT_MSG_EVENTSIG_OUT,			//notification to config modeller about change of output value or new output msg. [data] contains iot_modelsignal pointer.
 };
 
 extern iot_thread_item_t* main_thread_item; //prealloc main thread item

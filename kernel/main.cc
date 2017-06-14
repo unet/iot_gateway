@@ -5,6 +5,8 @@
 #include <sys/time.h>
 #include <uv.h>
 
+#include <json-c/json.h>
+
 #include <iot_module.h>
 #include <iot_devclass_keyboard.h>
 
@@ -29,7 +31,98 @@ static const iot_devifacetype_iface* builtin_deviface_classes[]={
 volatile sig_atomic_t need_restart=0;
 void onsignal (uv_signal_t *w, int signum);
 
-#define PIDFILE_PATH "daemon.pid"
+struct daemon_setup_t {
+	iot_hostid_t host_id=0;
+	bool daemonize=true;
+	int min_loglevel=-1;
+	uint16_t listen_port=12000;
+} daemon_setup;
+
+#define PIDFILE_PATH "run/daemon.pid"
+
+bool parse_setup(void) {
+	char namebuf[256];
+	snprintf(namebuf, sizeof(namebuf), "%s%s", rootpath, "setup.json");
+
+	int fd=open(namebuf, O_RDONLY);
+	if(fd<0) {
+		fprintf(stderr, "Error opening setup file '%s': %s\n", namebuf, strerror(errno));
+		return false;
+	}
+	struct stat stat;
+	if(fstat(fd, &stat)) {
+		fprintf(stderr, "Error doing stat('%s'): %s\n", namebuf, strerror(errno));
+		close(fd);
+		return false;
+	}
+	if(stat.st_size>32767) {
+		fprintf(stderr, "Size of setup file '%s' exceeds 32767 bytes\n", namebuf);
+		close(fd);
+		return false;
+	}
+	char buf[stat.st_size+1];
+	ssize_t len=read(fd, buf, stat.st_size);
+	if(len<0) {
+		fprintf(stderr, "Error reading setup file '%s': %s\n", namebuf, strerror(errno));
+		close(fd);
+		return false;
+	}
+	close(fd);
+	buf[len]='\0';
+
+	json_tokener *tok=json_tokener_new_ex(3);
+	if(!tok) {
+		fprintf(stderr, "Lack of memory to start JSON parser\n");
+		return false;
+	}
+
+	json_object* obj=json_tokener_parse_ex(tok, buf, len);
+
+	if(json_tokener_get_error(tok) != json_tokener_success || !obj) {
+		fprintf(stderr, "Error parsing setup file '%s': %s\n", namebuf,  json_tokener_error_desc(json_tokener_get_error(tok)));
+		if (obj != NULL) json_object_put(obj);
+		obj = NULL;
+		json_tokener_free(tok);
+		return false;
+	}
+	json_tokener_free(tok);
+	if(!json_object_is_type(obj,  json_type_object)) {
+		fprintf(stderr, "Invalid setup file '%s', it must have JSON-object as top element\n", namebuf);
+		json_object_put(obj); obj = NULL;
+		return false;
+	}
+
+	json_object *val=NULL;
+	if(json_object_object_get_ex(obj, "host_id", &val)) {
+		uint64_t u64=iot_strtou64(json_object_get_string(val), NULL, 10);
+		if(!errno && u64>0 && (u64<INT64_MAX || json_object_is_type(val, json_type_string))) daemon_setup.host_id=iot_hostid_t(u64);
+	}
+	if(!daemon_setup.host_id) {
+		fprintf(stderr, "Required setup value 'host_id' not found or is invalid in setup file '%s'\n", namebuf);
+		json_object_put(obj); obj = NULL;
+		return false;
+	}
+	if(json_object_object_get_ex(obj, "loglevel", &val)) {
+		errno=0;
+		int32_t i32=json_object_get_int(val);
+		if(!errno && i32>=LDEBUG && i32<=LERROR) daemon_setup.min_loglevel=i32;
+	}
+	if(json_object_object_get_ex(obj, "daemonize", &val)) {
+		daemon_setup.daemonize = json_object_get_boolean(val) ? true : false;
+	}
+	if(json_object_object_get_ex(obj, "listen_port", &val)) {
+		errno=0;
+		int32_t i32=json_object_get_int(val);
+		if(!errno && i32>0 && i32<65536) daemon_setup.listen_port=uint16_t(i32);
+			else fprintf(stderr, "Invalid value '%s' for 'listen_port' in setup file '%s' was ignored\n",  json_object_get_string(val), namebuf);
+	}
+
+	json_object_put(obj); obj = NULL;
+	return true;
+}
+
+
+
 
 int main(int argn, char **arg) {
 	int err;
@@ -38,17 +131,32 @@ int main(int argn, char **arg) {
 	assert(sizeof(iot_threadmsg_t)==64);
 	assert(sizeof(iot_hwdev_ident_t)==128);
 
-	if(!init_log("daemon.log")) {
-		printf("Cannot init log, exiting\n");
+	if(!parse_args(argn, arg, "run")) {
+		return 1;
+	}
+
+	if(!parse_setup()) {
+		return 1;
+	}
+
+	if(min_loglevel<0) {
+		if(daemon_setup.min_loglevel>=0) min_loglevel=daemon_setup.min_loglevel;
+		else min_loglevel=LMIN;
+	}
+
+	if(!init_log("run/daemon.log")) {
+		fprintf(stderr, "Cannot init log, exiting\n");
 		return 1;
 	}
 
 #ifndef _WIN32
-//	printf("Daemonizing...\n");
-//	if(daemon(1,0)==-1) {
-//		outlog(LERROR,"error becoming a daemon: %s",strerror(errno));
-//		goto onexit;
-//	}
+	if(daemon_setup.daemonize) {
+		printf("Daemonizing...\n");
+		if(daemon(1,0)==-1) {
+			outlog(LERROR,"error becoming a daemon: %s",strerror(errno));
+			goto onexit;
+		}
+	}
 
 	if(!create_pidfile(PIDFILE_PATH)) goto onexit;
 	pidcreated=true;
@@ -70,17 +178,30 @@ int main(int argn, char **arg) {
 	iot_starttime_ms=uv_now(main_loop);
 	gettimeofday(&_start_timeval, NULL);
 
-	outlog_debug("Started");
+	iot_current_hostid=daemon_setup.host_id;
+	outlog_debug("Started, my host id is %" IOT_PRIhostid, iot_current_hostid);
 
-	err=config_registry->load_config("config.js");
+	json_object* cfg;
+	cfg=config_registry->read_jsonfile(IOTCONFIG_PATH, "config");
+	if(!cfg) goto onexit;
+
+	err=config_registry->load_hosts_config(cfg);
 	if(err) {
 		outlog_error("Cannot load config: %s", kapi_strerror(err));
-		//try to continue and get config from server or start with empty config
+		json_object_put(cfg);
+		goto onexit;
 	}
-
 
 	//Here setup server connection to actualize config before instantiation
 	//
+
+	err=config_registry->load_config(cfg, true);
+	if(err) {
+		outlog_error("Cannot load config: %s", err==IOT_ERROR_NOT_FOUND ? "inconsistent data" : kapi_strerror(err));
+		//try to continue and get config from server or start with empty config
+	}
+	json_object_put(cfg);
+	cfg=NULL;
 
 	//Assume config was actualized or no server connection and some config got from file or we wait while server connection succeeds
 
@@ -127,6 +248,8 @@ int main(int argn, char **arg) {
 
 			outlog_notice("Graceful shutdown initiated");
 
+			config_registry->free_config(); //must stop evaluation of configuration
+
 			//Do graceful stop
 			thread_registry->graceful_shutdown();
 
@@ -139,7 +262,7 @@ onexit:
 	outlog_info("Exiting...");
 	//do hard stop
 
-//	config_registry->stop_config(); //must stop evaluation of configuration
+	config_registry->free_config(); //must stop evaluation of configuration
 
 //	stop all additional threads
 
@@ -174,3 +297,5 @@ void onsignal (uv_signal_t *w, int signum) {
 		return;
 	}
 }
+
+

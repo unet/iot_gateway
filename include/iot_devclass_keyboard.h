@@ -151,6 +151,9 @@ public:
 	int request_state(const iot_connid_t &connid, iot_driver_client_base *client_inst) {
 		return send_request(connid, client_inst, REQ_GET_STATE);
 	}
+	uint16_t get_max_keycode(void) const {
+		return attr->max_keycode;
+	}
 
 private:
 	int send_request(const iot_connid_t &connid, iot_driver_client_base *client_inst, req_t req_code) {

@@ -84,15 +84,15 @@ void iot_device_connection_t::init_local(iot_connsid_t id, iot_modinstance_item_
 				assert(idx<IOT_CONFIG_MAX_NODE_DEVICES);
 				client.local.conndata=&client_inst->data.node.dev[idx];
 				client_devifaceclassfilter=&iface->devcfg[idx];
-				if(client_inst->cfgitem->numdevs > 0) { //find correct user device preference for current device connection matching labels
-					uint8_t i=client_inst->cfgitem->numdevs-1;
-					do {
-						if(strcmp(client_inst->cfgitem->dev[i].label, client_devifaceclassfilter->label)==0) {
-							client_numhwdevidents=client_inst->cfgitem->dev[i].numidents;
-							client_hwdevidents=client_inst->cfgitem->dev[i].idents;
+				if(client_inst->data.node.model->cfgitem->dev) { //find correct user device preference for current device connection matching labels
+					auto cur=client_inst->data.node.model->cfgitem->dev;
+					while(cur) {
+						if(strcmp(cur->label, client_devifaceclassfilter->label)==0) {
+							client_numhwdevidents=cur->numidents;
+							client_hwdevidents=cur->idents;
 							break;
 						}
-					} while(i-- > 0);
+					}
 				}
 				break;
 			}
@@ -411,7 +411,7 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 		d2c.reader_closed=true;
 
 		client_numhwdevidents=0;
-		client_hwdevidents=NULL; //clear reference to iot_config_inst_node_t
+		client_hwdevidents=NULL; //clear reference to iot_config_item_node_t
 
 		state=IOT_DEVCONN_PENDING;
 

@@ -1,4 +1,5 @@
 {
+	"host_id": 1, //host id which corresponds to this own host configuration
 	"modtime": 1234567890, //timestamp of last update
 	"load_modules" : {
 		MODULE_ID: 0 or false to disable loading of module (if it is loaded by default), true or version to enable module loading with mininal version

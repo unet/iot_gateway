@@ -1,0 +1,7 @@
+{
+	"host_id" : 1, //my host ID. for values >= INT64_MAX must be specified as string
+	"daemonize" : false,
+	"loglevel" : 0,
+	"listen_port" : 12000,
+	"listen" : ["0.0.0.0/0"]
+}

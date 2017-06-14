@@ -79,6 +79,33 @@ const iot_devifacetype_iface* iot_devifacetype::find_iface(bool tryload) const {
 	return NULL;
 }
 
+bool iot_hwdevident_iface::restore_from_json(json_object* obj, iot_hwdev_ident_t &dev_ident) { //returns true if data was correct and dev_ident filled with valid info
+		json_object* val=NULL;
+		iot_hostid_t hostid=IOT_HOSTID_ANY;
+		if(json_object_object_get_ex(obj, "host_id", &val)) { //zero or absent value leaves IOT_HOSTID_ANY
+			uint64_t u64=iot_strtou64(json_object_get_string(val), NULL, 10);
+			if(!errno && u64>0 && (u64<INT64_MAX || json_object_is_type(val, json_type_string))) hostid=iot_hostid_t(u64);
+		}
+		iot_hwdevcontype_t contype=IOT_DEVCONTYPE_ANY;
+		if(json_object_object_get_ex(obj, "conntype_id", &val)) { //zero or absent value leaves IOT_DEVCONTYPE_ANY
+			errno=0;
+			int64_t i64=json_object_get_int64(val);
+			if(!errno && i64>0 && i64<=UINT32_MAX) {
+				contype=iot_hwdevcontype_t(i64);
+				iot_devcontype_item_t* it=modules_registry->find_devcontype(contype, true);
+				if(!it) return false; //connection type unknown
+				val=NULL;
+				json_object_object_get_ex(obj, "ident", &val);
+				if(!it->iface->from_json(val, dev_ident.dev.data)) return false;
+			}
+		}
+		//OK
+		dev_ident.dev.contype=contype;
+		dev_ident.dev.detector_module_id=0;
+		dev_ident.hostid=hostid;
+		return true;
+}
+
 
 void iot_modules_registry_t::create_detector_modinstance(iot_module_item_t* module) {
 	assert(uv_thread_self()==main_thread);
@@ -134,7 +161,7 @@ void iot_modules_registry_t::create_detector_modinstance(iot_module_item_t* modu
 		goto onerr;
 	}
 
-	modinst=register_modinstance(module, type, thread, inst, NULL);
+	modinst=register_modinstance(module, type, thread, inst);
 	if(!modinst) goto ontemperr;
 	inst=NULL; //already saved in modinstance structure, so will be deinit when freeing it
 
@@ -344,7 +371,11 @@ int iot_modules_registry_t::register_devcontypes(const iot_hwdevident_iface** if
 }
 
 
-
+//returns error code:
+//0 - success
+//IOT_ERROR_NOT_FOUND
+//IOT_ERROR_CRITICAL_ERROR - module cannot be loaded, is misconfigured or init failed
+//IOT_ERROR_NO_MEMORY
 int iot_modules_registry_t::load_module(int module_index, uint32_t module_id, iot_module_item_t**rval) { //tries to load module and register. module's module_init method is also called
 //module_index is index of module's db item in modules_db array. It can be <0 to request search by provided module_id
 //module_id is ignored if module_index>=0 provided. otherwise used to find modules_db index with module data
@@ -400,11 +431,17 @@ int iot_modules_registry_t::load_module(int module_index, uint32_t module_id, io
 	int err=register_module(cfg, &modules_db[module_index]);
 	if(!err) {
 		if(rval) *rval=modules_db[module_index].item;
+		return 0;
 	}
-	return err;
+	return err==IOT_ERROR_NO_MEMORY ? err : IOT_ERROR_CRITICAL_ERROR;
 }
 
 //creates module entry in the registry of loaded and inited modules
+//returns:
+//0 - success
+//IOT_ERROR_CRITICAL_ERROR
+//IOT_ERROR_NO_MEMORY
+//IOT_ERROR_NOT_INITED
 int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem) {
 	assert(uv_thread_self()==main_thread);
 
@@ -454,6 +491,9 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 	if(cfg->iface_node) {
 		if(!cfg->iface_node->init_instance || !cfg->iface_node->deinit_instance) {
 			outlog_error("Module '%s::%s' with ID %u has incomplete node interface", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
+		} else if(cfg->iface_node->num_valueoutputs>IOT_CONFIG_MAX_NODE_VALUEOUTPUTS || cfg->iface_node->num_valueinputs>IOT_CONFIG_MAX_NODE_VALUEINPUTS
+				|| cfg->iface_node->num_msgoutputs>IOT_CONFIG_MAX_NODE_MSGOUTPUTS || cfg->iface_node->num_msginputs>IOT_CONFIG_MAX_NODE_MSGINPUTS) {
+			outlog_error("Module '%s::%s' with ID %u has illegal number of inputs or outputs", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
 		} else {
 			item->state[IOT_MODINSTTYPE_NODE]=IOT_MODULESTATE_OK;
 			BILINKLIST_INSERTHEAD(item, node_head, next_node, prev_node);
@@ -467,8 +507,7 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 	return 0;
 }
 
-iot_modinstance_item_t* iot_modules_registry_t::register_modinstance(iot_module_item_t* module, iot_modinstance_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance,
-		iot_config_inst_node_t* cfgitem) {
+iot_modinstance_item_t* iot_modules_registry_t::register_modinstance(iot_module_item_t* module, iot_modinstance_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance) {
 	assert(uv_thread_self()==main_thread);
 	//find free index
 	for(iot_iid_t i=0;i<IOT_MAX_MODINSTANCES;i++) {
@@ -481,7 +520,7 @@ iot_modinstance_item_t* iot_modules_registry_t::register_modinstance(iot_module_
 //		bool waslock=iot_modinstances[last_iid].acclock.test_and_set(std::memory_order_acquire);
 //		assert(waslock==false); //this is the only place to change iid from zero to nonzero, so once iot_modinstances[last_iid].miid.iid is false, it must not become true somewhere else
 
-		if(!iot_modinstances[last_iid].init(iot_miid_t(curtime, last_iid), module, type, thread, instance, cfgitem)) {
+		if(!iot_modinstances[last_iid].init(iot_miid_t(curtime, last_iid), module, type, thread, instance)) {
 //			iot_modinstances[last_iid].acclock.clear(std::memory_order_release);
 			return NULL;
 		}
@@ -492,8 +531,7 @@ iot_modinstance_item_t* iot_modules_registry_t::register_modinstance(iot_module_
 	return NULL;
 }
 
-bool iot_modinstance_item_t::init(const iot_miid_t &miid_, iot_module_item_t* module_, iot_modinstance_type_t type_, iot_thread_item_t *thread_, iot_module_instance_base* instance_,
-		iot_config_inst_node_t* cfgitem_) {
+bool iot_modinstance_item_t::init(const iot_miid_t &miid_, iot_module_item_t* module_, iot_modinstance_type_t type_, iot_thread_item_t *thread_, iot_module_instance_base* instance_) {
 	memset(this, 0, sizeof(*this));
 	miid=miid_;
 	state=IOT_MODINSTSTATE_INITED;
@@ -526,7 +564,6 @@ bool iot_modinstance_item_t::init(const iot_miid_t &miid_, iot_module_item_t* mo
 
 	switch(type) {
 		case IOT_MODINSTTYPE_DETECTOR: {
-			cfgitem=NULL;
 			auto iface=module->config->iface_device_detector;
 			assert(iface!=NULL);
 			assert(module->detector_instance==NULL);
@@ -535,7 +572,6 @@ bool iot_modinstance_item_t::init(const iot_miid_t &miid_, iot_module_item_t* mo
 			break;
 		}
 		case IOT_MODINSTTYPE_DRIVER: {
-			cfgitem=NULL;
 			auto iface=module->config->iface_device_driver;
 			assert(iface!=NULL);
 			BILINKLIST_INSERTHEAD(this, module->driver_instances_head, next_inmod, prev_inmod);
@@ -543,8 +579,6 @@ bool iot_modinstance_item_t::init(const iot_miid_t &miid_, iot_module_item_t* mo
 			break;
 		}
 		case IOT_MODINSTTYPE_NODE: {
-			cfgitem=cfgitem_;
-//			cfgitem->miid=miid;
 			auto iface=module->config->iface_node;
 			assert(iface!=NULL);
 			BILINKLIST_INSERTHEAD(this, module->node_instances_head, next_inmod, prev_inmod);
@@ -618,37 +652,23 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 
 	iot_module_item_t *module=modinst->module;
 
-	//type dependent actions to clear unnecessary references to modinstance (both locked and unlocked)
+	//type dependent actions to clear unnecessary references to modinstance (both locked and unlocked) if references are set BEFORE starting instance (otherwise do actions on on_stop_status)
 	switch(modinst->type) {
 		case IOT_MODINSTTYPE_DETECTOR:
 			break;
 		case IOT_MODINSTTYPE_DRIVER: {
-			//clean retry timeouts data
-			modinst->data.driver.retry_clients.remove_all();
 
-			iot_hwdevregistry_item_t* devitem=modinst->data.driver.hwdev;
-
+			iot_hwdevregistry_item_t* &devitem=modinst->data.driver.hwdev;
 			//disconnect from hwdevice
-			if(modinst->state==IOT_MODINSTSTATE_INITED) { //stopped successfully or not ever started
-				if(devitem) {
-					devitem->devdrv_modinstlk.unlock();
-					modinst->data.driver.hwdev=NULL;
-					if(devitem->is_removed) hwdev_registry->finish_hwdev_removal(devitem);
-						else modules_registry->try_find_driver_for_hwdev(devitem);
-				}
-			} else { //hung
-				if(devitem->is_removed) { //allow to clean removed devices from registry even with hung driver
-					devitem->devdrv_modinstlk.unlock();
-					modinst->data.driver.hwdev=NULL;
-					hwdev_registry->finish_hwdev_removal(devitem);
-				}
+			if(devitem) {
+				devitem->on_driver_destroy(modinst);
+				devitem=NULL;
 			}
 			break;
 		}
 		case IOT_MODINSTTYPE_NODE: {
-			//clean retry timeouts data
-			for(uint8_t i=0;i<IOT_CONFIG_MAX_NODE_DEVICES && modinst->data.node.dev[i].actual;i--)
-				modinst->data.node.dev[i].retry_drivers.remove_all();
+			//stop node model
+			if(modinst->data.node.model) iot_nodemodel::on_instance_destroy(modinst->data.node.model, modinst);
 
 			break;
 		}
@@ -666,12 +686,6 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 	}
 
 	//only non-hung instances here !!!!!!!!!!
-
-	if(modinst->cfgitem) {
-//		modinst->cfgitem->miid.clear();
-		modinst->cfgitem=NULL;
-	}
-
 
 	if(!modinst->mark_pendfree()) {
 		//cannot be freed right now. last lock holder will notify when structure is unlocked
@@ -767,7 +781,7 @@ int iot_modules_registry_t::create_driver_modinstance(iot_module_item_t* module,
 		goto onerr;
 	}
 
-	modinst=register_modinstance(module, type, thread, inst, NULL);
+	modinst=register_modinstance(module, type, thread, inst);
 	if(!modinst) {
 		err=IOT_ERROR_TEMPORARY_ERROR; //here registering failed which means memory error (or not enough iid space. TODO)
 		goto onerr;
@@ -819,8 +833,9 @@ onerr:
 //  IOT_ERROR_TEMPORARY_ERROR - error. module can be retried for this device later
 //  IOT_ERROR_MODULE_BLOCKED - error. module was blocked on temporary or constant basis
 //  IOT_ERROR_CRITICAL_ERROR - instanciation is invalid (error in saved config of config item?)
-int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, iot_config_inst_node_t* item) {
+int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, iot_nodemodel* nodemodel) {
 	assert(uv_thread_self()==main_thread);
+	assert(nodemodel!=NULL && nodemodel->cfgitem!=NULL);
 
 	iot_node_base *inst=NULL;
 	iot_modinstance_item_t *modinst=NULL;
@@ -831,7 +846,7 @@ int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, i
 	iot_thread_item_t* thread=thread_registry->assign_thread(iface->cpu_loading);
 	assert(thread!=NULL);
 
-	err=iface->init_instance(&inst, thread->thread, item->iot_id, item->json_config);
+	err=iface->init_instance(&inst, thread->thread, nodemodel->node_id, nodemodel->cfgitem->json_config);
 	if(err) {
 		outlog_error("Node instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
 		if(err!=IOT_ERROR_TEMPORARY_ERROR || module->errors[type]>10) {
@@ -853,12 +868,16 @@ int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, i
 		goto onerr;
 	}
 
-	modinst=register_modinstance(module, type, thread, inst, item);
+	modinst=register_modinstance(module, type, thread, inst);
 	if(!modinst) {
 		err=IOT_ERROR_TEMPORARY_ERROR; //here registering failed which means memory error (or not enough iid space. TODO)
 		goto onerr;
 	}
 	inst=NULL; //already saved in modinstance structure, so will be deinit when freeing it
+
+	//finish node instanciation
+	modinst->data.node.model=nodemodel;
+	nodemodel->modinstlk.lock(modinst);
 
 	return modinst->start(false);
 
@@ -907,7 +926,7 @@ void iot_modules_registry_t::try_connect_driver_to_consumer(iot_modinstance_item
 				if(!conn) {
 					conn=iot_create_connection(modinst, dev_idx); //updates conndata->conn on success
 					if(!conn) { //no connection slots?
-						outlog_error("Cannot allocate connection for device line %d of %s iot_id=%u", int(dev_idx)+1, iot_modinsttype_name[modinst->type], modinst->cfgitem->iot_id);
+						outlog_error("Cannot allocate connection for device line %d of %s node_id=%" IOT_PRIiotid, int(dev_idx)+1, iot_modinsttype_name[modinst->type], modinst->data.node.model->node_id);
 
 						uint32_t now32=uint32_t((uv_now(main_loop)+500)/1000);
 						if(conndata->retry_drivers_timeout<now32+30) { //retry to set up connection
@@ -990,7 +1009,7 @@ int iot_modules_registry_t::try_connect_consumer_to_driver(iot_modinstance_item_
 	if(!conn) {
 		conn=iot_create_connection(modinst, idx); //updates conndata->conn on success
 		if(!conn) { //no connection slots?
-			outlog_error("Cannot allocate connection for device line %d of %s iot_id=%u", int(idx)+1, iot_modinsttype_name[modinst->type], modinst->cfgitem->iot_id);
+			outlog_error("Cannot allocate connection for device line %d of %s node_id=%" IOT_PRIiotid, int(idx)+1, iot_modinsttype_name[modinst->type], modinst->data.node.model->node_id);
 
 			if(conndata->retry_drivers_timeout<now32+30) {
 				conndata->retry_drivers_timeout=now32+30;
@@ -1186,7 +1205,8 @@ int iot_modinstance_item_t::start(bool isasync) { //called in working thread of 
 	}
 
 	now=uv_now(thread->loop);
-	err=instance->start(miid);
+	instance->miid=miid;
+	err=instance->start();
 	if(err) {
 		outlog_error("Error starting %s instance of module '%s::%s' with ID %u (%d error(s) so far): %s", iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, int(module->errors[type]+1), kapi_strerror(err));
 		if(err!=IOT_ERROR_TEMPORARY_ERROR && err!=IOT_ERROR_CRITICAL_ERROR) err=IOT_ERROR_CRITICAL_BUG;
@@ -1408,6 +1428,8 @@ int iot_modinstance_item_t::on_stop_status(int err, bool isasync) { //processes 
 		err=IOT_ERROR_CRITICAL_BUG;
 	}
 
+
+	//do cleanup connectedd with started state
 	switch(type) {
 		case IOT_MODINSTTYPE_DETECTOR:
 			hwdev_registry->remove_hwdev_bydetector(miid);
@@ -1424,13 +1446,22 @@ int iot_modinstance_item_t::on_stop_status(int err, bool isasync) { //processes 
 			for(i=0;i<IOT_MAX_DRIVER_CLIENTS;i++) {
 				if(data.driver.conn[i]) data.driver.conn[i]->close();
 			}
+
+			//clean retry timeouts data
+			data.driver.retry_clients.remove_all();
+
 			break;
 		}
 		case IOT_MODINSTTYPE_NODE:
+
 			//close connections
 			for(i=0;i<IOT_CONFIG_MAX_NODE_DEVICES;i++) {
 				if(data.node.dev[i].actual && data.node.dev[i].conn) data.node.dev[i].conn->close();
 			}
+
+			//clean retry timeouts data
+			for(uint8_t i=0;i<IOT_CONFIG_MAX_NODE_DEVICES && data.node.dev[i].actual;i--)
+				data.node.dev[i].retry_drivers.remove_all();
 			break;
 	}
 

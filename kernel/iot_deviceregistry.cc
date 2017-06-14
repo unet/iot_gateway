@@ -175,3 +175,19 @@ int hwdev_registry_t::try_connect_local_driver(iot_device_connection_t* conn) { 
 	return wastemperr ? IOT_ERROR_TEMPORARY_ERROR : IOT_ERROR_NOT_FOUND;
 }
 
+void iot_hwdevregistry_item_t::on_driver_destroy(iot_modinstance_item_t* modinst) { //called when driver instance is freed
+		if(!devdrv_modinstlk) return;
+		assert(devdrv_modinstlk.modinst==modinst);
+
+		devdrv_modinstlk.unlock();
+		if(modinst->state==IOT_MODINSTSTATE_INITED) { //stopped successfully or not ever started
+			if(is_removed) hwdev_registry->finish_hwdev_removal(this);
+				else modules_registry->try_find_driver_for_hwdev(this);
+		} else { //hung
+			assert(modinst->state==IOT_MODINSTSTATE_HUNG);
+			if(is_removed) { //allow to clean removed devices from registry even with hung driver
+				hwdev_registry->finish_hwdev_removal(this);
+			}
+		}
+	}
+

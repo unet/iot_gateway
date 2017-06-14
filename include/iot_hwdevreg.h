@@ -3,6 +3,19 @@
 //Contains constants, methods and data structures for hardware devices representation
 
 
+#ifndef DAEMON_KERNEL
+////////////////////////////////////////////////////////////////////
+///////////////////////////Specific declarations for external modules
+////////////////////////////////////////////////////////////////////
+
+//macro for generating ID of custom module specific hw device connection type
+#define IOT_DEVCONTYPE_CUSTOM(module_id, index) (((module_id)<<8)+((index) & 0xff))
+
+//macro for generating ID of custom module specific device interface class
+#define IOT_DEVIFACETYPE_CUSTOM(module_id, index) (((module_id)<<8)+((index) & 0xff))
+
+#endif
+
 //////////////////////////////////////////////////////////////////////
 //////////////////////////hw device connection type and identification
 //////////////////////////////////////////////////////////////////////
@@ -13,7 +26,6 @@ typedef uint32_t iot_hwdevcontype_t;		//type for HardWare DEVice CONection TYPE 
 
 
 
-
 //make iot_hwdevident_iface be 128 bytes
 #define IOT_HWDEV_DATA_MAXSIZE	(128 - sizeof(iot_hwdevcontype_t) - sizeof(uint32_t) - 1 - sizeof(iot_hostid_t))
 //struct which locally identifies hardware device depending on connection type. interface to this data is of class iot_hwdevident_iface.
@@ -21,7 +33,7 @@ struct iot_hwdevident_iface;
 
 struct iot_hwdev_localident_t {
 	iot_hwdevcontype_t contype;			//type of connection identification among predefined IOT_DEVCONTYPE_ constants or DeviceDetector
-										//module-specific built by IOT_DEVCONTYPE_CUSTOM macro. Value IOT_DEVCONTYPE_ANY meand any conntype. data is useless in such case
+										//module-specific built by IOT_DEVCONTYPE_CUSTOM macro. Value IOT_DEVCONTYPE_ANY means any conntype. data is useless in such case
 	uint32_t detector_module_id;		//id of Device Detector module which added this device
 	char data[IOT_HWDEV_DATA_MAXSIZE];	//raw buffer for storing contype-dependent information about device address and hardware id. should be aligned by 4 to allow overwriting with any struct
 
@@ -150,9 +162,12 @@ struct iot_hwdevident_iface {
 		return check_data(dev_ident->data);
 	}
 
+	static bool restore_from_json(json_object* obj, iot_hwdev_ident_t &dev_ident); //returns true if data was correct and dev_ident filled with valid info
+
 //customizable part of interface:
 private:
 	virtual size_t to_json(const char* dev_data, char* buf, size_t bufsize) const = 0;
+	virtual bool from_json(json_object* obj, char* dev_data) const = 0;
 	virtual const char* get_vistmpl(void) const = 0;
 	virtual bool check_data(const char* dev_data) const = 0; //actual check that data is good by format
 	virtual bool check_istmpl(const char* dev_data) const = 0; //actual check that data corresponds to template (so not all data components are specified)
