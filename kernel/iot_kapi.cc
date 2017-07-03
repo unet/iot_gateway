@@ -9,6 +9,7 @@
 #include <ecb.h>
 #include <iot_module.h>
 #include <iot_devclass_keyboard.h>
+#include <iot_devclass_activatable.h>
 #include <kernel/iot_daemonlib.h>
 #include <kernel/iot_deviceregistry.h>
 
@@ -33,6 +34,15 @@ int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t actio
 	}
 	return 0;
 }
+
+
+iot_module_instance_base::iot_module_instance_base(uv_thread_t thread) : thread(thread), miid(0,0) {
+	iot_thread_item_t* th=thread_registry->find_thread(thread);
+	assert(th!=NULL);
+//	memallocator=th->allocator;
+	loop=th->loop;
+}
+
 
 //accepted error codes:
 //	0 - for case of delayed stop (state of modinst must be IOT_MODINSTSTATE_STOPPING)
@@ -66,9 +76,7 @@ int iot_module_instance_base::kapi_self_abort(int errcode) { //can be called in 
 	return modinst->stop(false, true);
 }
 
-//	IOT_ERROR_INVALID_ARGS - provided index or type of value are illegal.
-//	IOT_ERROR_NO_MEMORY - no memory to process value change. try later.
-int iot_node_base::kapi_set_value_output(uint8_t index, iot_valueclass_BASE* value) { //value can be NULL to mean undef
+int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valueclass_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgclass_BASE** msgs) {
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk || modinstlk.modinst->instance!=this) {
 		assert(false);
@@ -77,61 +85,12 @@ int iot_node_base::kapi_set_value_output(uint8_t index, iot_valueclass_BASE* val
 	iot_modinstance_item_t* modinst=modinstlk.modinst;
 	assert(uv_thread_self()==modinst->thread->thread);
 
-	if(!modinst->is_working()) {
-		return 0;
-	}
+	if(!modinst->is_working()) return 0;
 	auto model=modinst->data.node.model;
 	if(!model->cfgitem) return 0; //model is being stopped and is already detached from config item. ignore signal.
 
-	auto iface=modinst->module->config->iface_node;
-	assert(iface!=NULL);
-
-	if(index>=iface->num_valueoutputs || !iface->valueoutput[index].is_compatible(value)) {
-		return IOT_ERROR_INVALID_ARGS;
-	}
-	assert(modinst->data.node.model!=NULL);
-	auto &instance_value=modinst->data.node.model->curvalueoutput[index].instance_value;
-
-	if(!value) { //undefined value is set
-		if(!instance_value) return 0; //no change
-	}
-	else if(instance_value && *instance_value==*value) {//no change
-		return 0; 
-	}
-	//value has changed
-	//try to allocate new memblock for value (if not null) and message
-	iot_valueclass_BASE* newvalue;
-	if(value) {
-		newvalue=(iot_valueclass_BASE*)modinst->thread->allocator->allocate(value->get_size(), true);
-		if(!newvalue) return IOT_ERROR_NO_MEMORY;
-		memcpy(newvalue, value, value->get_size());
-	} else newvalue=NULL;
-
-	iot_modelsignal* sig=(iot_modelsignal*)modinst->thread->allocator->allocate(sizeof(iot_modelsignal));
-	if(!sig) {
-		if(newvalue) iot_release_memblock(newvalue);
-		return IOT_ERROR_NO_MEMORY;
-	}
-	new(sig) iot_modelsignal(model, index, uv_now(modinst->thread->loop), newvalue);
-
-	iot_threadmsg_t* msg=NULL;
-	int err=iot_prepare_msg(msg, IOT_MSG_EVENTSIG_OUT, NULL, 0, sig, 0, IOT_THREADMSG_DATAMEM_MEMBLOCK_NOOPT, true, modinst->thread->allocator);
-	if(err) {
-		if(newvalue) iot_release_memblock(newvalue);
-		iot_release_memblock(sig);
-		return err;
-	}
-
-	iot_incref_memblock(newvalue); //value is now copied to sig, so will have 2 refs
-
-	if(instance_value) iot_release_memblock(instance_value);
-	instance_value=newvalue;
-
-	main_thread_item->send_msg(msg);
-	return 0;
+	return model->do_update_outputs(reason_eventid, num_values, valueout_indexes, values, num_msgs, msgout_indexes, msgs);
 }
-
-
 
 uv_loop_t* kapi_get_event_loop(uv_thread_t thread) {
 	return thread_registry->find_loop(thread);
@@ -165,7 +124,15 @@ uint32_t iot_devifacetype_keyboard::get_c2d_maxmsgsize(const char* cls_data) con
 	return iot_devifaceclass__keyboard_BASE::get_maxmsgsize(data->max_keycode);
 }
 
+uint32_t iot_devifacetype_activatable::get_c2d_maxmsgsize(const char* cls_data) const {
+	return iot_devifaceclass__activatable_BASE::get_maxmsgsize();
+}
 
+//use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created
+constexpr iot_valueclass_nodeerrorstate iot_valueclass_nodeerrorstate::const_noinst(iot_valueclass_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
+
+constexpr iot_valueclass_boolean iot_valueclass_boolean::const_true(true);
+constexpr iot_valueclass_boolean iot_valueclass_boolean::const_false(false);
 
 /*
 //kapi_fd_watcher implementation

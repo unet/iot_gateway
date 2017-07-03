@@ -27,7 +27,7 @@ void flash_led(int fd) {
 	}
 
 	ev[i].type=EV_KEY;
-	ev[i].code=KEY_0;
+	ev[i].code=KEY_ESC;
 	ev[i].value=state;
 	i++;
 

@@ -43,6 +43,7 @@ inline uint64_t iot_strtou64(const char* str, char **endptr, int base) {
 		headvar = itemptr;								\
 	} while(0)
 
+//removing of any element. itemptr CANNOT BE same expression as headvar
 #define ULINKLIST_REMOVE(itemptr, headvar, nextfld)	\
 	do {											\
 		if((itemptr)==headvar) {					\
@@ -61,6 +62,36 @@ inline uint64_t iot_strtou64(const char* str, char **endptr, int base) {
 		}											\
 	} while(0)
 
+//version of remove without cleaning next field value. itemptr CANNOT BE same expression as headvar
+#define ULINKLIST_REMOVE_NOCL(itemptr, headvar, nextfld)	\
+	do {											\
+		if((itemptr)==headvar) {					\
+			headvar=(itemptr)->nextfld;				\
+		} else {									\
+			auto t=headvar;							\
+			while(t->nextfld) {						\
+				if(t->nextfld==(itemptr)) {			\
+					t->nextfld=(itemptr)->nextfld;	\
+					break;							\
+				}									\
+				t=t->nextfld;						\
+			}										\
+		}											\
+	} while(0)
+
+//removing of head element. must NOT be used without check that headvar is not NULL
+#define ULINKLIST_REMOVEHEAD(headvar, nextfld)		\
+	do {											\
+		auto tmp=headvar;							\
+		headvar=(headvar)->nextfld;					\
+		tmp->nextfld=NULL;							\
+	} while(0)
+
+//version of head remove without cleaning next field value. must NOT be used without check that headvar is not NULL
+#define ULINKLIST_REMOVEHEAD_NOCL(headvar, nextfld)	\
+	do {											\
+		headvar=(headvar)->nextfld;					\
+	} while(0)
 
 
 //Bi-linked list without tail (NULL value of next field tells about EOL, prev value of first item contains special mark and address of head variable)

@@ -33,8 +33,9 @@
 		},
 		"links": { //connections between nodes
 			LINK_ID: {
-				"group_id" : 1, //group of config where link exists. must be present ALWAYS
+				"group_id" : 1, //config group where link exists. must be present ALWAYS
 				"mode_id" : 1, //mode of config group where link exists unless list is group-common (then mode_id can be zero or absent). is specified, must match group_id
+				"rule_id" : 5 //id or parent rule
 			}
 		}
 	},

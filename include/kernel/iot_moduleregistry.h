@@ -166,7 +166,7 @@ struct iot_modinstance_item_t {
 											//cleared until moment when ALL client connections are closed
 		} driver;
 
-		struct { //ev src
+		struct { //node
 			iot_driverclient_conndata_t dev[IOT_CONFIG_MAX_NODE_DEVICES]; //data per each possible driver connection
 			iot_nodemodel *model;
 		} node;

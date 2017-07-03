@@ -38,14 +38,14 @@ struct iot_memobject {
 	void* backtrace[3];
 	timeval alloctimeval;
 #endif
-	volatile std::atomic<uint8_t> refcount; //reference count of this object. object is returned to free list when its refcount goes to zero
+	volatile std::atomic<uint32_t> refcount; //reference count of this object. object is returned to free list when its refcount goes to zero
+	uint16_t	memchunk; //index of parent memchunk in parent->memchunks array
 	uint8_t listindex:4;  //valid if refcount>0. special value 14 additionally means that data is really iot_membuf_chain object
 								//15 means that memory object is temporary and has arbitrary size
-	uint16_t	memchunk; //index of parent memchunk in parent->memchunks array
-	uint32_t data[1]; //arbitrary data or iot_membuf_chain if listindex==14. ansure aslignment by 4 using uint32_t
+	uint32_t data[1]; //arbitrary data or iot_membuf_chain if listindex==14. ensure alignment by 4 using uint32_t
 };
 
-
+#define IOT_MEMOBJECT_SIGNATURE ('M'*65536*256+'e'*65536+'m'*256+'O')
 
 //Manages memory allocations for one thread. Allows to release allocated blocks from any thread
 class /*alignas(IOT_MEMOBJECT_PARENT_ALIGN)*/ iot_memallocator {
@@ -61,6 +61,8 @@ class /*alignas(IOT_MEMOBJECT_PARENT_ALIGN)*/ iot_memallocator {
 	uint32_t nummemchunks, maxmemchunks; //current quantity of chunk pointers in memchunks, number of allocated items in memchunks array
 	volatile std::atomic<uint32_t> numholes; //current number of holes in memchunks array (they appear during freeing OS-allocated blocks)
 public:
+	const uint32_t signature=IOT_MEMOBJECT_SIGNATURE;
+
 	iot_memallocator(void) :
 //		totalinfly({0}),
 		memchunks(NULL),  memchunks_refs(NULL), nummemchunks(0), maxmemchunks(0), numholes({0}) {

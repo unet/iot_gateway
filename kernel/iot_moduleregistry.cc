@@ -699,17 +699,17 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 		switch(modinst->type) {
 			case IOT_MODINSTTYPE_DETECTOR: {
 				auto iface=module->config->iface_device_detector;
-				err=iface->deinit_instance(modinst->instance);
+				err=iface->deinit_instance(static_cast<iot_device_detector_base*>(modinst->instance));
 				break;
 			}
 			case IOT_MODINSTTYPE_DRIVER: {
 				auto iface=module->config->iface_device_driver;
-				err=iface->deinit_instance(modinst->instance);
+				err=iface->deinit_instance(static_cast<iot_device_driver_base*>(modinst->instance));
 				break;
 			}
 			case IOT_MODINSTTYPE_NODE: {
 				auto iface=module->config->iface_node;
-				err=iface->deinit_instance(modinst->instance);
+				err=iface->deinit_instance(static_cast<iot_node_base*>(modinst->instance));
 				break;
 			}
 			default: err=0;
@@ -848,7 +848,8 @@ int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, i
 
 	err=iface->init_instance(&inst, thread->thread, nodemodel->node_id, nodemodel->cfgitem->json_config);
 	if(err) {
-		outlog_error("Node instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+		outlog_error("Instance INIT for node ID=%" IOT_PRIiotid " (module %s::%s [%u]) returned error: %s",
+			nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
 		if(err!=IOT_ERROR_TEMPORARY_ERROR || module->errors[type]>10) {
 			module->state[type]=IOT_MODULESTATE_DISABLED;
 		} else {
@@ -862,11 +863,14 @@ int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, i
 	}
 	if(!inst) {
 		//no error and no instance. this is a bug
-		outlog_error("Node instance init for module '%s::%s' with ID %u returned NULL pointer. This is a bug.",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
+		outlog_error("Instance INIT for node ID=%" IOT_PRIiotid " (module %s::%s [%u]) returned NULL pointer. This is a bug.",
+			nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
 		module->state[type]=IOT_MODULESTATE_DISABLED;
 		err=IOT_ERROR_MODULE_BLOCKED;
 		goto onerr;
 	}
+	outlog_debug("Instance INIT for node ID=%" IOT_PRIiotid " (module %s::%s [%u]) succeeded",
+		nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
 
 	modinst=register_modinstance(module, type, thread, inst);
 	if(!modinst) {
@@ -1257,6 +1261,7 @@ int iot_modinstance_item_t::on_start_status(int err, bool isasync) { //processes
 				modules_registry->try_connect_driver_to_consumer(this);
 				break;
 			case IOT_MODINSTTYPE_NODE: {
+				data.node.model->on_instance_start(this);
 				for(uint8_t i=0;i<IOT_CONFIG_MAX_NODE_DEVICES && data.node.dev[i].actual;i--) modules_registry->try_connect_consumer_to_driver(this, i);
 				break;
 			}

@@ -460,9 +460,9 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						break;
 					}
 					case IOT_MSG_CONNECTION_CLOSECL: { //notify client about closed connection
-						if(!modinstlk) break; //client can be already stopped and/or freed and thus its connection side already closed or being closed right now
-						assert(uv_thread_self()==modinstlk.modinst->thread->thread);
-						if(!modinstlk.modinst->is_working()) break;
+						if(!modinst) break; //client can be already stopped and/or freed and thus its connection side already closed or being closed right now
+						assert(uv_thread_self()==modinst->thread->thread);
+						if(!modinst->is_working()) break;
 						//data contains address of iot_connid_t structure
 						iot_device_connection_t *conn=iot_find_device_conn(*(iot_connid_t*)msg->data); //also does connident.key check before getting the lock
 						if(!conn) break; //connection was closed, no action required
@@ -472,9 +472,9 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						break;
 					}
 					case IOT_MSG_CONNECTION_CLOSEDRV: { //notify driver about closed connection
-						if(!modinstlk) break; //client can be already stopped and/or freed and thus its connection side already closed or being closed right now
-						assert(uv_thread_self()==modinstlk.modinst->thread->thread);
-						if(!modinstlk.modinst->is_working()) break;
+						if(!modinst) break; //client can be already stopped and/or freed and thus its connection side already closed or being closed right now
+						assert(uv_thread_self()==modinst->thread->thread);
+						if(!modinst->is_working()) break;
 						//data contains address of iot_connid_t structure
 						iot_device_connection_t *conn=iot_find_device_conn(*(iot_connid_t*)msg->data); //also does connident.key check before getting the lock
 						if(!conn) break; //connection was closed, no action required
@@ -486,14 +486,23 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 					case IOT_MSG_EVENTSIG_OUT: { //new signal from node about change of value output
 						//main thread
 						assert(uv_thread_self()==main_thread);
-						assert(msg->data!=NULL);
-						iot_modelsignal* sig=(iot_modelsignal*)msg->data;
-						iot_incref_memblock(sig); //sig must be allocated as memblock, so protect it from releasing by iot_release_msg
+						assert(msg->data!=NULL && msg->is_releasable);
+						iot_modelsignal* sig=static_cast<iot_modelsignal*>((iot_releasable*)msg->data);
+						msg->data=NULL;
 
 						iot_release_msg(msg); msg=NULL; //early release of message struct
 
-						config_registry->inject_signal(sig);
+						config_registry->inject_signals(sig);
 						had_modelsignals=true;
+						break;
+					}
+					case IOT_MSG_EVENTSIG_NOUPDATE: { //new signal from node about change of value output
+						//main thread
+						assert(uv_thread_self()==main_thread);
+						iot_modelnegsignal neg=*(static_cast<iot_modelnegsignal*>(msg->data));
+						iot_release_msg(msg); msg=NULL; //early release of message struct
+
+						config_registry->inject_negative_signal(&neg);
 						break;
 					}
 
@@ -503,8 +512,47 @@ outlog_debug("got unprocessed message %u", unsigned(msg->code));
 						break;
 				}
 			} else {
-outlog_debug("got non-kernel message %u", unsigned(msg->code));
-				assert(modinst!=NULL);
+				if(!modinst) {
+					iot_release_msg(msg);
+					continue;
+				}
+				switch(msg->code) {
+					case IOT_MSG_NOTIFY_INPUTSUPDATED: {
+						assert(uv_thread_self()==modinst->thread->thread);
+						if(!modinst->is_working()) break;
+						auto model=modinst->data.node.model;
+						if(!model->cfgitem) break; //model is being stopped and is already detached from config item. ignore signal.
+
+						assert(msg->data!=NULL && msg->is_releasable);
+						iot_notify_inputsupdate* notifyupdate=static_cast<iot_notify_inputsupdate*>((iot_releasable*)msg->data);
+
+						iot_modelnegsignal neg={event_id : notifyupdate->reason_event, node_id : model->node_id};
+
+						iot_modelsignal* result_signals=NULL;
+
+						if(model->do_execute(msg->bytearg==1, msg, result_signals)) {
+							//sync reply is ready in outsignals
+							assert(msg!=NULL);
+							iot_release_msg(msg, true); //leave only msg struct
+							int err;
+							if(result_signals) {
+printf("Got new signals from node %" IOT_PRIiotid " for event %" PRIu64 "\n", model->node_id, neg.event_id.numerator);
+								err=iot_prepare_msg_releasable(msg, IOT_MSG_EVENTSIG_OUT, NULL, 0, static_cast<iot_releasable*>(result_signals), 0, IOT_THREADMSG_DATAMEM_MEMBLOCK_NOOPT, true);
+							} else { //empty updates
+printf("Got empty update from node %" IOT_PRIiotid " for event %" PRIu64 "\n", model->node_id, neg.event_id.numerator);
+								err=iot_prepare_msg(msg, IOT_MSG_EVENTSIG_NOUPDATE, NULL, 0, &neg, sizeof(neg), IOT_THREADMSG_DATAMEM_TEMP_NOALLOC, true);
+							}
+							assert(err==0);
+							main_thread_item->send_msg(msg);
+							msg=NULL;
+						}
+
+						break;
+					}
+					default:
+outlog_debug("got unprocessed non-kernel message %u", unsigned(msg->code));
+						break;
+				}
 			}
 			if(msg) iot_release_msg(msg);
 		}
@@ -631,17 +679,26 @@ errexit:
 	}
 
 
-void iot_release_msg(iot_threadmsg_t *msg, bool nofree_msgmemblock) { //nofree_msgmemblock if true, then msg struct with is_msgmemblock set is not released (only cleared)
+void iot_release_msg(iot_threadmsg_t *&msg, bool nofree_msgmemblock) { //nofree_msgmemblock if true, then msg struct with is_msgmemblock set is not released (only cleared)
 	if(msg->code!=IOT_MSG_INVALID) { //content is valid, so must be released
-		if(msg->is_memblock) {
-			assert(msg->is_malloc==0);
-			iot_release_memblock(msg->data);
-			msg->is_memblock=0;
-		} else if(msg->is_malloc) {
-			free(msg->data);
-			msg->is_malloc=0;
+		if(msg->data) { //data pointer can and must be cleared before calling this method to preserve data
+			if(msg->is_releasable) { //object in data was saved as iot_releasable derivative, so its internal data must be released
+				iot_releasable *rel=(iot_releasable *)msg->data;
+				rel->releasedata();
+				msg->is_releasable=0;
+			}
+			if(msg->is_memblock) {
+				assert(msg->is_malloc==0);
+				iot_release_memblock(msg->data);
+				msg->is_memblock=0;
+			} else if(msg->is_malloc) {
+				free(msg->data);
+				msg->is_malloc=0;
+			}
+			msg->data=NULL;
+		} else {
+			msg->is_releasable=msg->is_memblock=msg->is_malloc=0;
 		}
-		msg->data=NULL;
 		msg->bytearg=0;
 		msg->intarg=0;
 //		if(!msg->is_msginstreserv) msg->miid.clear();
@@ -651,7 +708,7 @@ void iot_release_msg(iot_threadmsg_t *msg, bool nofree_msgmemblock) { //nofree_m
 	}
 	if(msg->is_msgmemblock) {
 //		assert(msg->is_msginstreserv==0);
-		if(!nofree_msgmemblock) iot_release_memblock(msg);
+		if(!nofree_msgmemblock) {iot_release_memblock(msg);msg=NULL;}
 		return;
 	}
 	assert(!nofree_msgmemblock); //do not allow this options to be passed for non-msgmemblock allocated structs. this can show on mistake

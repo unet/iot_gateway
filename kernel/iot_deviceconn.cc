@@ -710,7 +710,8 @@ void iot_device_connection_t::process_driver_ready(void) { //runs in client thre
 	}
 	switch(modinst->type) {
 		case IOT_MODINSTTYPE_NODE: {
-			outlog_debug("Device input %d of node module %u attached", int(clientview.index)+1, modinst->module->config->module_id);
+			outlog_debug("Device input %d of node id=%" IOT_PRIiotid " attached to driver instance %u", 
+				int(clientview.index), modinst->data.node.model->node_id, unsigned(clientview.driver.miid.iid));
 			static_cast<iot_node_base*>(modinst->instance)->device_attached(&clientview);
 			break;
 		}
@@ -743,7 +744,7 @@ void iot_device_connection_t::process_close_client(iot_threadmsg_t* msg) { //cli
 
 	switch(modinst->type) {
 		case IOT_MODINSTTYPE_NODE: {
-			outlog_debug("Device input %d of node module %u detached", int(clientview.index)+1, modinst->module->config->module_id);
+			outlog_debug("Device input %d of node module %u detached", int(clientview.index), modinst->module->config->module_id);
 			static_cast<iot_node_base*>(modinst->instance)->device_detached(&clientview);
 			break;
 		}

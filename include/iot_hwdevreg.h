@@ -275,9 +275,10 @@ private:
 //IOT DEVCLASSID codes with type iot_devifacetype_id_t
 #define IOT_DEVIFACETYPE_IDMAP(XX) \
 	XX(KEYBOARD, 1) /*sizeof(iot_devifaceclass__keyboard_ATTR) set of keys or standard keyboard (with SHIFT, CTRL and ALT keys)*/	\
-	XX(LEDS, 2) /*set of lamps (or single lamp) which can be turned on and off*/							\
-	XX(HW_SWITCHES, 3) /*set of hardware switchers like notebook lid opening sensor*/			\
-	XX(BASIC_SPEAKER, 4) /*basic sound source which can generate tone of given frequency during given time*/
+	XX(LEDS, 2) /*set of lamps (or single lamp) which can be turned on and off*/													\
+	XX(HW_SWITCHES, 3) /*set of hardware switchers like notebook lid opening sensor*/												\
+	XX(BASIC_SPEAKER, 4) /*basic sound source which can generate tone of given frequency during given time*/						\
+	XX(ACTIVATABLE, 5) /*simplest interface of device which can be activated or deactivated without current status information */
 
 //	XX(LEDS, 2, "LEDs", 32, 32, 0)
 //	XX(HW_SWITCHES, 3, "Hardware switch", 32, 32, 0
@@ -289,6 +290,8 @@ enum iot_devifaceclass_basic_ids : uint8_t {
 #undef XX
 	IOT_DEVIFACETYPEID_MAX = 255
 };
+
+
 
 
 

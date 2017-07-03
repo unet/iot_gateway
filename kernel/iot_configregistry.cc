@@ -449,8 +449,7 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 			assert(res==1);
 			return IOT_ERROR_NO_MEMORY;
 		}
-		memset(node, 0, sz);
-		node->node_id=nodeid;
+		new(node) iot_config_item_node_t(nodeid);
 		*pnode=node;
 	} else {
 		assert(node->node_id==nodeid);
@@ -510,7 +509,7 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 
 	if(json_object_object_get_ex(obj, "inputs", &inputs) && json_object_is_type(inputs, json_type_object)) {
 		json_object_object_foreach(inputs, label, links) {
-			if(label[0]!='v' && label[0]!='m') continue; //label has type prefix
+			if(label[0]!='v' && label[0]!='m') continue; //label must have type prefix
 			size_t llen=strlen(label);
 			if(!json_object_is_type(links, json_type_array) || llen>IOT_CONFIG_LINKLABEL_MAXLEN+1) continue;
 			int len=json_object_array_length(links);
@@ -531,16 +530,13 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 				size_t sz=sizeof(iot_config_node_in_t);
 				cur=(iot_config_node_in_t*)main_allocator.allocate(sz, true);
 				if(!cur) {err=IOT_ERROR_NO_MEMORY; goto on_exit;}
-				memset(cur, 0, sz);
-				strcpy(cur->label, label);
-				cur->node=node;
-				cur->real_index=-1;
+				cur=new(cur) iot_config_node_in_t(node, label);
 			} else {
 				//disconnect old links
 				while(cur->outs_head) {
 					cur->outs_head->in=NULL;
-					cur->outs_head->is_valid=false;
-					cur->outs_head=cur->outs_head->next_input;
+					cur->outs_head->invalidate();
+					cur->outs_head=cur->outs_head->next_output;
 				}
 			}
 			//process list of link ids
@@ -556,10 +552,10 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 						outlog_error("Node at config path nodecfg.nodes.%" IOT_PRIiotid ".inputs.%s refers to non-existing link %" IOT_PRIiotlinkid ", skipping it", nodeid, label, link_id);
 						continue;
 					}
-					lnk->next_input=cur->outs_head;
+					lnk->next_output=cur->outs_head;
 					cur->outs_head=lnk;
 					lnk->in=cur;
-					lnk->is_valid=false;
+					lnk->invalidate();
 				}
 			}
 			cur->next=node->inputs;
@@ -567,6 +563,33 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 			cur->is_connected=false;
 		}
 	}
+	//oldin can still contain unconnected or previously connected inputs, which has corrent index and thus exist in node instanciation, they must be preserved
+	if(oldin) {
+		iot_config_node_in_t* cur=oldin, *prev=NULL;
+		while(cur) {
+			if(cur->real_index>=0) {
+				//found, remove from old list
+				if(prev) prev->next=cur->next;
+					else oldin=cur->next;
+				//add to new list
+				cur->next=node->inputs;
+				node->inputs=cur;
+
+				cur->is_connected=false;
+				while(cur->outs_head) {
+					cur->outs_head->in=NULL;
+					cur->outs_head->invalidate();
+					cur->outs_head=cur->outs_head->next_output;
+				}
+
+				cur=prev ? prev->next : oldin;
+				continue;
+			}
+			prev=cur;
+			cur=cur->next;
+		}
+	}
+
 	if(json_object_object_get_ex(obj, "outputs", &outputs) && json_object_is_type(outputs, json_type_object)) {
 		json_object_object_foreach(outputs, label, links) {
 			if(label[0]!='v' && label[0]!='m') continue; //label has type prefix
@@ -590,16 +613,13 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 				size_t sz=sizeof(iot_config_node_out_t);
 				cur=(iot_config_node_out_t*)main_allocator.allocate(sz, true);
 				if(!cur) {err=IOT_ERROR_NO_MEMORY; goto on_exit;}
-				memset(cur, 0, sz);
-				strcpy(cur->label, label);
-				cur->node=node;
-				cur->real_index=-1;
+				cur=new(cur) iot_config_node_out_t(node, label);
 			} else {
 				//disconnect old links
 				while(cur->ins_head) {
-					cur->ins_head->in=NULL;
-					cur->ins_head->is_valid=false;
-					cur->ins_head=cur->ins_head->next_output;
+					cur->ins_head->out=NULL;
+					cur->ins_head->invalidate();
+					cur->ins_head=cur->ins_head->next_input;
 				}
 			}
 			//process list of link ids
@@ -615,15 +635,41 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 						outlog_error("Node at config path nodecfg.nodes.%" IOT_PRIiotid ".outputs.%s refers to non-existing link %" IOT_PRIiotlinkid ", skipping it", nodeid, label, link_id);
 						continue;
 					}
-					lnk->next_output=cur->ins_head;
+					lnk->next_input=cur->ins_head;
 					cur->ins_head=lnk;
 					lnk->out=cur;
-					lnk->is_valid=false;
+					lnk->invalidate();
 				}
 			}
 			cur->next=node->outputs;
 			node->outputs=cur;
 			cur->is_connected=false;
+		}
+	}
+	//oldout can still contain unconnected or previously connected outputs, which has corrent index and thus exist in node instanciation, they must be preserved
+	if(oldout) {
+		iot_config_node_out_t* cur=oldout, *prev=NULL;
+		while(cur) {
+			if(cur->real_index>=0) {
+				//found, remove from old list
+				if(prev) prev->next=cur->next;
+					else oldout=cur->next;
+				//add to new list
+				cur->next=node->outputs;
+				node->outputs=cur;
+
+				cur->is_connected=false;
+				while(cur->ins_head) {
+					cur->ins_head->out=NULL;
+					cur->ins_head->invalidate();
+					cur->ins_head=cur->ins_head->next_input;
+				}
+
+				cur=prev ? prev->next : oldout;
+				continue;
+			}
+			prev=cur;
+			cur=cur->next;
 		}
 	}
 
@@ -660,8 +706,8 @@ on_exit:
 		iot_config_node_in_t* next=oldin->next;
 		while(oldin->outs_head) {
 			oldin->outs_head->in=NULL;
-			oldin->outs_head->is_valid=false;
-			oldin->outs_head=oldin->outs_head->next_input;
+			oldin->outs_head->invalidate();
+			oldin->outs_head=oldin->outs_head->next_output;
 		}
 		iot_release_memblock(oldin);
 		oldin=next;
@@ -670,7 +716,7 @@ on_exit:
 		iot_config_node_out_t* next=oldout->next;
 		while(oldout->ins_head) {
 			oldout->ins_head->out=NULL;
-			oldout->ins_head->is_valid=false;
+			oldout->ins_head->invalidate();
 			oldout->ins_head=oldout->ins_head->next_input;
 		}
 		iot_release_memblock(oldout);
@@ -689,6 +735,7 @@ void iot_configregistry_t::start_config(void) {
 		}
 		inited=true;
 		uv_check_init(main_loop, &events_executor);
+
 
 		iot_config_item_node_t** node=NULL;
 		decltype(nodes_index)::treepath path;
@@ -718,6 +765,8 @@ void iot_configregistry_t::free_config(void) {
 
 	clean_config();
 
+	
+
 /*		iot_config_item_node_t* item, *nextitem=nodes_head;
 		while((item=nextitem)) {
 			nextitem=nextitem->next;
@@ -736,69 +785,79 @@ void iot_configregistry_t::free_config(void) {
 	}
 
 void iot_configregistry_t::clean_config(void) { //free all items marked for deletion
+
 	//clean nodes first
 	iot_config_item_node_t** pnode=NULL;
 	decltype(nodes_index)::treepath path;
 	int res=nodes_index.get_first(NULL, &pnode, path);
 	assert(res>=0);
-	while(res==1) {
-		if((*pnode)->is_del) {
-			iot_config_item_node_t *node=*pnode;
-			res=nodes_index.remove(node->node_id, NULL, &path);
-			assert(res==1);
+	for(; res==1; res=nodes_index.get_next(NULL, &pnode, path)) {
+		if(!(*pnode)->is_del) continue;
 
-			//free device filters
-			iot_config_node_dev_t *olddev=node->dev;
-			node->dev=NULL;
-			while(olddev) {
-				iot_config_node_dev_t* nextdev=olddev->next;
-				iot_release_memblock(olddev);
-				olddev=nextdev;
-			}
+		iot_config_item_node_t *node=*pnode;
+		res=nodes_index.remove(node->node_id, NULL, &path);
+		assert(res==1);
 
-			//free input connectors and references to links
-			iot_config_node_in_t *oldin=node->inputs;
-			node->inputs=NULL;
-			while(oldin) {
-				iot_config_node_in_t* next=oldin->next;
-				while(oldin->outs_head) {
-					oldin->outs_head->in=NULL;
-					oldin->outs_head->is_valid=false;
-					oldin->outs_head=oldin->outs_head->next_input;
-				}
-				iot_release_memblock(oldin);
-				oldin=next;
-			}
-
-			//free output connectors and references to links
-			iot_config_node_out_t *oldout=node->outputs;
-			node->outputs=NULL;
-			while(oldout) {
-				iot_config_node_out_t* next=oldout->next;
-				while(oldout->ins_head) {
-					oldout->ins_head->out=NULL;
-					oldout->ins_head->is_valid=false;
-					oldout->ins_head=oldout->ins_head->next_input;
-				}
-				iot_release_memblock(oldout);
-				oldout=next;
-			}
-
-			if(node->nodemodel) {
-				auto model=node->nodemodel;
-				if(model->stop()) { //will clean node->nodemodel pointer!!
-					iot_nodemodel::destroy(model);
-				}
-			}
-
-			if(node->json_config) {
-				json_object_put(node->json_config);
-				node->json_config=NULL;
-			}
-
-			iot_release_memblock(node);
+		//free device filters
+		iot_config_node_dev_t *olddev=node->dev;
+		node->dev=NULL;
+		while(olddev) {
+			iot_config_node_dev_t* nextdev=olddev->next;
+			iot_release_memblock(olddev);
+			olddev=nextdev;
 		}
-		res=nodes_index.get_next(NULL, &pnode, path);
+
+		//free input connectors and references to links
+		iot_config_node_in_t *oldin=node->inputs;
+		node->inputs=NULL;
+		while(oldin) {
+			iot_config_node_in_t* next=oldin->next;
+			while(oldin->outs_head) {
+				oldin->outs_head->in=NULL;
+				oldin->outs_head->invalidate();
+				oldin->outs_head=oldin->outs_head->next_output;
+			}
+			if(oldin->is_value()) {
+				if(oldin->current_value) {oldin->current_value->release();oldin->current_value=NULL;}
+			} else {
+				if(oldin->inject_msg) {oldin->inject_msg->release();oldin->inject_msg=NULL;}
+			}
+
+			iot_release_memblock(oldin);
+			oldin=next;
+		}
+
+		//free output connectors and references to links
+		iot_config_node_out_t *oldout=node->outputs;
+		node->outputs=NULL;
+		while(oldout) {
+			iot_config_node_out_t* next=oldout->next;
+			while(oldout->ins_head) {
+				oldout->ins_head->out=NULL;
+				oldout->ins_head->invalidate();
+				oldout->ins_head=oldout->ins_head->next_input;
+			}
+			if(oldout->current_value) {oldout->current_value->release();oldout->current_value=NULL;}
+			if(oldout->prealloc_signal) iot_modelsignal::release(oldout->prealloc_signal); //auto nullified
+			
+			iot_release_memblock(oldout);
+			oldout=next;
+		}
+
+		if(node->nodemodel) {
+			auto model=node->nodemodel;
+			if(model->stop()) { //will clean node->nodemodel pointer!!
+				iot_nodemodel::destroy(model);
+			}
+		}
+
+		if(node->json_config) {
+			json_object_put(node->json_config);
+			node->json_config=NULL;
+		}
+		if(node->prealloc_execmsg) iot_release_msg(node->prealloc_execmsg); //auto nullified
+
+		iot_release_memblock(node);
 	}
 
 	//clean links
@@ -806,17 +865,16 @@ void iot_configregistry_t::clean_config(void) { //free all items marked for dele
 	decltype(links_index)::treepath lpath;
 	res=links_index.get_first(NULL, &plink, lpath);
 	assert(res>=0);
-	while(res==1) {
-		if((*plink)->is_del) {
-			iot_config_item_link_t *lnk=*plink;
-			res=links_index.remove(lnk->link_id, NULL, &lpath);
-			assert(res==1);
+	for(; res==1; res=links_index.get_next(NULL, &plink, lpath)) {
+		if(!(*plink)->is_del) continue;
 
-			assert(lnk->in==NULL && lnk->out==NULL);
+		iot_config_item_link_t *lnk=*plink;
+		res=links_index.remove(lnk->link_id, NULL, &lpath);
+		assert(res==1);
 
-			iot_release_memblock(lnk);
-		}
-		res=links_index.get_next(NULL, &plink, lpath);
+		assert(lnk->in==NULL && lnk->out==NULL);
+
+		iot_release_memblock(lnk);
 	}
 
 	//clean groups
@@ -843,3 +901,158 @@ void iot_configregistry_t::clean_config(void) { //free all items marked for dele
 	}
 
 }
+
+bool iot_config_item_node_t::prepare_execute(bool forceasync) { //must be called to preallocate memory before execute()
+	//returns false on memory error, true on success BUT needexec and initial flags can be cleared
+		assert(blockedby!=NULL);
+		assert(needs_exec());
+
+		//calculate necessary items
+		uint16_t num_insignals=0;
+		for(iot_config_node_in_t *in=inputs; in; in=in->next) { //loop by all inputs of node and calculate updated inputs
+			if(!in->is_undelivered) continue; //real_index can be negative here but it can become valid during execute()
+			if(in->is_msg()) { //msg
+				if(in->inject_msg) num_insignals++;
+				for(iot_config_item_link_t* link=in->outs_head; link; link=link->next_output) { //loop by all valid outputs connected to current input
+					if(link->prev_msg) num_insignals++;
+					if(link->current_msg) num_insignals++;
+				}
+			} else num_insignals++; //value
+		}
+		if(num_insignals==0) {
+			assert(false);
+			clear_needexec();
+			if(is_initial()) clear_initial();
+			return true;
+		}
+
+		if(is_sync()) { //for sync nodes preallocate space for output signals
+			//prealloc signal structs for outputs
+			for(iot_config_node_out_t *out=outputs; out; out=out->next) { //loop by outputs of node
+				//real_index can be negative here but it can become valid during execute()
+				//ensure there is preallocated signal struct
+				if(!out->prealloc_signal) {
+					out->prealloc_signal=(iot_modelsignal*)main_allocator.allocate(sizeof(iot_modelsignal));
+					if(!out->prealloc_signal) return false;
+					out->prealloc_signal=new(out->prealloc_signal) iot_modelsignal();
+				}
+			}
+		}
+
+		iot_notify_inputsupdate* notifyupdate;
+		if(prealloc_execmsg && prealloc_execmsg->data) { //there is preallocated msg struct and iot_notify_inputsupdate object in it
+			assert(prealloc_execmsg->is_releasable==1);
+			notifyupdate=static_cast<iot_notify_inputsupdate*>((iot_releasable*)prealloc_execmsg->data);
+			if(notifyupdate->numalloced<num_insignals) { //no enough space, release msg data (this will release iot_notify_inputsupdate object if it was memblock and releasedata in it)
+				iot_release_msg(prealloc_execmsg, true);
+				notifyupdate=NULL;
+			} else {
+				assert(notifyupdate->numitems==0 && !notifyupdate->prealloc_signals); //must be released
+				notifyupdate->releasedata();
+			}
+		} else notifyupdate=NULL;
+
+		if(!notifyupdate) {
+			size_t sz=iot_notify_inputsupdate::calc_size(num_insignals);
+			alignas(iot_notify_inputsupdate) char notifyupdatebuf[sz];
+			notifyupdate=new(notifyupdatebuf) iot_notify_inputsupdate(num_insignals);
+
+			int err=iot_prepare_msg_releasable(prealloc_execmsg, IOT_MSG_NOTIFY_INPUTSUPDATED, NULL, 0, notifyupdate, sz, IOT_THREADMSG_DATAMEM_TEMP, false, &main_allocator);
+			//miid and bytearg MUST BE ASSIGNED correctly before sending msg
+			if(err) {
+				assert(err==IOT_ERROR_NO_MEMORY);
+				return false;
+			}
+		}
+		return true;
+	}
+void iot_config_item_node_t::execute(bool forceasync) {
+		assert(blockedby!=NULL);
+		assert(needs_exec());
+		assert(prealloc_execmsg!=NULL && prealloc_execmsg->data!=NULL && prealloc_execmsg->is_releasable==1);
+
+		clear_needexec();
+
+		iot_notify_inputsupdate* notifyupdate=static_cast<iot_notify_inputsupdate*>((iot_releasable*)prealloc_execmsg->data);
+
+		//FILL INPUT SIGNALS
+		uint16_t num_insignals=0;
+		for(iot_config_node_in_t *in=inputs; in; in=in->next) { //loop by all inputs of node and calculate updated inputs
+			if(!in->is_undelivered) continue;
+			in->is_undelivered=false;
+			if(in->real_index<0) { //inputs without index cannot be sent to instance (or host)
+				if(in->is_msg()) { //msgs must be dropped
+					if(in->inject_msg) {in->inject_msg->release(); in->inject_msg=NULL;}
+					for(iot_config_item_link_t* link=in->outs_head; link; link=link->next_output) { //loop by all valid outputs connected to current input
+						if(!link->is_undelivered) continue;
+						link->is_undelivered=false;
+						if(link->prev_msg) {link->prev_msg->release(); link->prev_msg=NULL;}
+						if(link->current_msg) {link->current_msg->release(); link->current_msg=NULL;}
+					}
+				}
+				continue;
+			}
+			if(in->is_msg()) { //msg
+				if(in->inject_msg) {
+					assert(num_insignals<notifyupdate->numalloced);
+					notifyupdate->item[num_insignals++]={in->real_index, in->inject_msg}; //incref unchanged because we MOVE value
+					in->inject_msg=NULL;
+				}
+				for(iot_config_item_link_t* link=in->outs_head; link; link=link->next_output) { //loop by all valid outputs connected to current input
+					if(!link->is_undelivered) continue;
+					link->is_undelivered=false;
+					if(link->prev_msg) {
+						assert(num_insignals<notifyupdate->numalloced);
+						notifyupdate->item[num_insignals++]={in->real_index, link->prev_msg};
+						link->prev_msg=NULL; //incref unchanged because we MOVE value
+					}
+					if(link->current_msg) {
+						assert(num_insignals<notifyupdate->numalloced);
+						notifyupdate->item[num_insignals++]={in->real_index, link->current_msg};
+						link->current_msg=NULL; //incref unchanged because we MOVE value
+					}
+				}
+			} else {
+				assert(num_insignals<notifyupdate->numalloced);
+				notifyupdate->item[num_insignals++]={in->real_index, in->current_value}; //COPY value
+				if(in->current_value) in->current_value->incref(); //incref
+			}
+		}
+		if(num_insignals==0) { //no real inputs updated or no instance
+			return;
+		}
+		notifyupdate->numitems=num_insignals;
+		notifyupdate->reason_event=blockedby->id;
+
+		if(is_sync()) {
+			for(iot_config_node_out_t *out=outputs; out; out=out->next) { //loop by outputs of node
+				if(out->real_index<0) continue; //outputs without index cannot be updated by instance
+				assert(out->prealloc_signal!=NULL);
+
+				ULINKLIST_INSERTHEAD(out->prealloc_signal, notifyupdate->prealloc_signals, next);
+				out->prealloc_signal=NULL; //MOVE signal struct into notifyupdate
+			}
+		}
+
+		if(!nodemodel) {
+			if(host!=config_registry->current_host) {
+				//TODO
+				return;
+			}
+			//model still not created
+			assert(false); //must have negative real_indexes for inputs and not be here
+			return;
+		}
+		iot_modelsignal *signals=NULL; //will be updated in case of simple sync execution if there are any signals (outputs update)
+
+		if(!is_sync()) {
+			nodemodel->execute(true, prealloc_execmsg, signals);
+		} else {
+			if(!nodemodel->execute(false, prealloc_execmsg, signals)) {
+				//node is not simple sync, so must wait
+				set_waitexec(blockedby);
+			} else { //simple sync
+				if(signals) blockedby->add_signals(signals);
+			}
+		}
+	}

@@ -75,19 +75,22 @@ extern int min_loglevel;
 
 
 
-#define IOT_CONFIG_MAX_NODE_DEVICES 3
-#define IOT_CONFIG_MAX_CLASSES_PER_DEVICE 4          //max number if 15
-#define IOT_CONFIG_MAX_NODE_VALUEOUTPUTS 31
-#define IOT_CONFIG_MAX_NODE_VALUEINPUTS 31
-#define IOT_CONFIG_MAX_NODE_MSGOUTPUTS 8
+#define IOT_CONFIG_MAX_NODE_DEVICES 3				//max possible is 7
+#define IOT_CONFIG_MAX_CLASSES_PER_DEVICE 4         //max possible is 15
+#define IOT_CONFIG_MAX_NODE_VALUEOUTPUTS 31			//max possible is 31
+#define IOT_CONFIG_MAX_NODE_VALUEINPUTS 31			//max possible is 31
+#define IOT_CONFIG_MAX_NODE_MSGOUTPUTS 8			//max possible is 31
 #define IOT_CONFIG_MAX_NODE_MSGINPUTS 8
-#define IOT_CONFIG_MAX_NODE_MSGLINKTYPES 8
+#define IOT_CONFIG_MAX_NODE_MSGLINKTYPES 8			//max possible is 254
 #define IOT_CONFIG_DEVLABEL_MAXLEN 7
-#define IOT_CONFIG_LINKLABEL_MAXLEN 7
+#define IOT_CONFIG_LINKLABEL_MAXLEN 6
+
+
+#define IOT_CONFIG_NODE_ERROUT_LABEL "err"			//label for implicit error output of node
 
 #define IOT_MEMOBJECT_MAXPLAINSIZE 8192
 
-#define IOT_MEMOBJECT_MAXREF 250
+#define IOT_MEMOBJECT_MAXREF 65536
 
 extern uv_thread_t main_thread;
 extern uint64_t iot_starttime_ms; //start time of process like returned by uv_now (in ms since unknown point)
@@ -130,6 +133,12 @@ struct iot_event_id_t {
 
 	bool operator!(void) const {
 		return numerator==0;
+	}
+	explicit operator bool(void) const {
+		return numerator!=0;
+	}
+	bool operator==(const iot_event_id_t &op) {
+		return numerator==op.numerator && host_id==op.host_id;
 	}
 };
 
@@ -344,9 +353,10 @@ static inline time_t fix_time32(uint32_t tm) { //restores normal timestamp value
 struct iot_module_instance_base {
 	uv_thread_t thread; //working thread of this instance after start
 	iot_miid_t miid;    //modinstance id of this instance after start
+//	iot_memallocator *memallocator=NULL;
+	uv_loop_t *loop=NULL;
 
-	iot_module_instance_base(uv_thread_t thread) : thread(thread), miid(0,0) {
-	}
+	iot_module_instance_base(uv_thread_t thread);
 
 //called in instance thread:
 
@@ -362,17 +372,17 @@ struct iot_module_instance_base {
 
 
 	//Called to start work of previously inited instance.
-	//Return values:
-	//0 - driver successfully started. It could start with temporary error state and have own retry strategy.
+	//Accepted return values:
+	//0 - instance successfully started. It could start with temporary error state and have own retry strategy.
 	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked till program restart. this instance will be deinited.
-	//IOT_ERROR_CRITICAL_ERROR - non-recoverable error. may be error in configuration. instanciation for specific entity (device for driver, whole system for detector, iot_id for others) will be blocked
+	//IOT_ERROR_CRITICAL_ERROR - non-recoverable error. may be error in configuration. instanciation for specific entity (device for driver, whole system for detector, node_id for others) will be blocked
 	//IOT_ERROR_TEMPORARY_ERROR - module should be retried later
 	//other errors equivalent to IOT_ERROR_CRITICAL_BUG!!!
-	virtual int start(void)=0; 
+	virtual int start(void)=0;
 
-	//called to stop work of started instance. call can be followed by deinit or started again (if stop was manual, by user)
+	//called to stop work of started instance. call is always followed by instance_deinit
 	//Return values:
-	//0 - driver successfully stopped and can be deinited or restarted
+	//0 - driver successfully stopped and can be deinited
 	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify kernel when stop is finished.
 	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
 	//						cannot be called until stop reports OK)
@@ -408,13 +418,13 @@ struct iot_iface_device_detector_t {
 	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be disabled. next driver should be tried
 	//IOT_ERROR_TEMPORARY_ERROR - driver init should be retried after some time (with progressive interval). next driver should be tried immediately.
 	//other errors treated as IOT_ERROR_CRITICAL_BUG
-	int (*init_instance)(iot_device_detector_base**instance, uv_thread_t thread);
+	int (*init_instance)(iot_device_detector_base** instance, uv_thread_t thread);
 
 	//called to deinit single instance.
 	//Return values:
 	//0 - success
 	//any other error leaves instance in hang state
-	int (*deinit_instance)(iot_module_instance_base*instance);		//always called in main thread
+	int (*deinit_instance)(iot_device_detector_base* instance);		//always called in main thread
 
 
 	//Can be called to check if detector can work on current system. Can be called from any thread and is not connected with specific instance.
@@ -555,7 +565,7 @@ struct iot_iface_device_driver_t {
 	//Return values:
 	//0 - success
 	//any other error leaves instance in hang state
-	int (*deinit_instance)(iot_module_instance_base*instance);		//always called in main thread
+	int (*deinit_instance)(iot_device_driver_base* instance);		//always called in main thread
 
 
 	//Can be called to check if driver can work with specific device. Can be called from any thread and is not connected with specific instance.
@@ -591,11 +601,28 @@ struct iot_driver_client_base : public iot_module_instance_base {
 struct iot_node_base : public iot_driver_client_base {
 	iot_node_base(uv_thread_t thread) : iot_driver_client_base(thread) {
 	}
+	struct iot_value_signal {
+		const iot_valueclass_BASE* new_value, *prev_value;
+	};
+
+	struct iot_msg_signal {
+		const iot_msgclass_BASE** msgs;
+		uint16_t num;
+	};
 
 //called in instance thread:
-	//sets value for output.
+	//sets value object pointer for value output. provided value can be allocated in any way and can be NULL to mean "undefined". instance allocates and deallocates
+	//it by itself. Function automatically calls kapi_value_output_updated when switching between NULL pointer or *valueobj!=*prev_valueobj (if both not NULL)
 	//Possible errors:
-	int kapi_set_value_output(uint8_t index, iot_valueclass_BASE* value);
+//	int kapi_set_value_output_object(uint8_t index, iot_valueclass_BASE* valueobj, iot_valueclass_BASE* &prev_valueobj);
+
+//	IOT_ERROR_INVALID_ARGS - provided index or type of value are illegal.
+//	IOT_ERROR_NO_MEMORY - no memory to process value change. try later.
+	int kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valueclass_BASE** values, uint8_t num_msgs=0, const uint8_t *msgout_indexes=NULL, const iot_msgclass_BASE** msgs=NULL);
+
+	virtual int process_input_signals(iot_event_id_t eventid, uint8_t num_valueinputs, const iot_value_signal *valueinputs, uint8_t num_msginputs, const iot_msg_signal *msginputs) {
+		return 0; //by default say that outputs are not changed
+	}
 
 };
 
@@ -619,8 +646,8 @@ struct iot_node_valuelinkcfg_t {
 	bool is_compatible(iot_valueclass_id_t cls) const {
 		return vclass_id==cls;
 	}
-	bool is_compatible(const iot_valueclass_BASE *val) const { //NULL means undef and is compatible with any value type
-		return val==NULL || vclass_id==val->get_classid();
+	bool is_compatible(const iot_dataclass_base *val) const { //NULL means undef and is compatible with any value type
+		return val==NULL || (!val->is_msg() && vclass_id==static_cast<const iot_valueclass_BASE *>(val)->get_classid());
 	}
 	bool is_compatible(const iot_node_valuelinkcfg_t *op) const {
 		return vclass_id==op->vclass_id;
@@ -637,6 +664,9 @@ struct iot_node_msglinkcfg_t {
 		for(uint8_t i=0;i<num_msgclasses;i++) if(msgclass_id[i]==cls) return true;
 		return false;
 	}
+	bool is_compatible(const iot_dataclass_base *val) const { //NULL means undef and is compatible with any value type
+		return val!=NULL && val->is_msg() && is_compatible(static_cast<const iot_msgclass_BASE *>(val)->get_classid());
+	}
 	bool is_compatible(const iot_node_msglinkcfg_t* op) const { //checks if msgclass_id are compatible (there is at least one common class ID)
 		for(uint8_t i=0;i<num_msgclasses;i++) if(op->is_compatible(msgclass_id[i])) return true;
 		return false;
@@ -646,7 +676,7 @@ struct iot_node_msglinkcfg_t {
 struct iot_iface_node_t {
 	const char *descr; //text description of module node functionality. If begins with '[', then must be evaluated as template
 	const char *params_tmpl; //set of templates for showing/editing user params of node. can be NULL if module has no params
-	uint32_t num_devices:2,						//number of devices this module should be connected to. limited by IOT_CONFIG_MAX_NODE_DEVICES
+	uint32_t num_devices:3,						//number of devices this module should be connected to. limited by IOT_CONFIG_MAX_NODE_DEVICES
 			num_valueoutputs:5,					//number of output value lines this module provides. limited by IOT_CONFIG_MAX_NODE_VALUEOUTPUTS. "error" output
 												//is always present and not counted here
 			num_valueinputs:5,					//number of input value lines this module accepts. limited by IOT_CONFIG_MAX_NODE_VALUEINPUTS
@@ -655,8 +685,17 @@ struct iot_iface_node_t {
 			cpu_loading:2,						//average level of cpu loading of started instance. 0 - minimal loading (unlimited number of such tasks can work
 												//in same working thread), 3 - very high loading (this module requires separate working thread per instance)
 			is_persistent:1,					//flag that node is persistent (event source or executor). otherwise (when 0) it is operator
-			is_sync:1;							//flag that node can transform input signals into output synchronously and thus its instance will be started in
-												//main thread. node must have both inputs and explicit outputs
+			is_sync:1;							//flag that node (with at least one explicit output) can and promises to transform input signals into output explicitly
+												//and unambiguously. i.e. after getting notification about input signals update such node must either give corresponding
+												//output signals immediately (or say 'no change') or give promise to answer later. such nodes can generate output
+												//signals unrelated to inputs change BUT they must be ready for loosing intermediate signals (i.e. in series of
+												//some value output values or msg output messages only latest will be noticed and processed) when node is blocked
+												//during some related rule processing.
+												//Additionally nodes with this flag and zero cpu_loading start in 'simple synchronous mode' if they are started 
+												//in main thread. In simple mode instance gets input change notification directly during event processing
+												//bypassing thread message queue and gives outputs directly to event processing routine. This greatly speeds up
+												//processing. But simple mode is disabled when instance gives delayed answer or generates unrelated signal for the
+												//first time
 	iot_deviceconn_filter_t devcfg[IOT_CONFIG_MAX_NODE_DEVICES];
 
 	iot_node_valuelinkcfg_t valueoutput[IOT_CONFIG_MAX_NODE_VALUEOUTPUTS]; //describes type of value for corresponding labeled VALUE output.
@@ -670,14 +709,14 @@ struct iot_iface_node_t {
 //	size_t state_size;							//real size of state struct (sizeof(iot_srcstate_t) + custom_len)
 
 	//reads current state of module into provided statebuf. size of statebuf must be at least state_size. Can be called from any thread. returns 0 on success or negative error code
-	int (*init_instance)(iot_node_base**instance, uv_thread_t thread, uint32_t iot_id, json_object *json_cfg); //always called in main thread
+	int (*init_instance)(iot_node_base** instance, uv_thread_t thread, uint32_t iot_id, json_object *json_cfg); //always called in main thread
 //	int (*get_state)(void* instance, iot_srcstate_t* statebuf, size_t bufsize);
 
 	//called to deinit instance.
 	//Return values:
 	//0 - success
 	//any other error leaves instance in hang state
-	int (*deinit_instance)(iot_module_instance_base*instance);		//always called in main thread
+	int (*deinit_instance)(iot_node_base* instance);		//always called in main thread
 
 //	iot_state_classid* stclassids;				//pointer to array (with num_stclassids items) of class ids of state data which this module provides
 };

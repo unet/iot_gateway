@@ -395,7 +395,7 @@ public:
 	//Return values:
 	//0 - success
 	//any other error leaves instance in hang state
-	static int deinit_instance(iot_module_instance_base* instance) {
+	static int deinit_instance(iot_device_detector_base* instance) {
 		assert(uv_thread_self()==main_thread);
 		detector *inst=static_cast<detector*>(instance);
 		int err=inst->deinit();
@@ -509,8 +509,6 @@ struct input_drv_instance : public iot_device_driver_base {
 	iot_connid_t connid_kbd={}; //id of connection with IOT_DEVIFACETYPEID_KEYBOARD iface, if connected
 	const iot_devifacetype *attr_kbd=NULL; //interface class attribute object for connected connid_kbd
 
-	uv_loop_t* loop=NULL;
-
 /////////////static fields/methods for driver instances management
 	static input_drv_instance* instances_head;
 	static int init_module(void) {
@@ -587,7 +585,7 @@ struct input_drv_instance : public iot_device_driver_base {
 	//Return values:
 	//0 - success
 	//any other error leaves instance in hang state
-	static int deinit_instance(iot_module_instance_base* instance) {
+	static int deinit_instance(iot_device_driver_base* instance) {
 		assert(uv_thread_self()==main_thread);
 		input_drv_instance *inst=static_cast<input_drv_instance*>(instance);
 		int err=inst->deinit();
@@ -646,9 +644,6 @@ private:
 
 		if(is_active) return 0; //even in release mode just return success
 		is_active=true;
-
-		loop=kapi_get_event_loop(thread);
-		assert(loop!=NULL);
 
 		eventfd=-1;
 		internal_error=ERR_NONE;
@@ -821,6 +816,7 @@ private:
 						criterror=true;
 						break;
 					}
+printf("STATE=0x%x\n\n", keys_state[0]);
 				}
 				if(bitmap32_test_bit(&dev_info.cap_bitmap, EV_SW)) { //has EV_SW cap
 					if(ioctl(eventfd, EVIOCGSW(sizeof(sw_state)), &sw_state)==-1) { //get current switches state

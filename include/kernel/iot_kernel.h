@@ -43,6 +43,11 @@ enum iot_msg_code_t : uint16_t {
 	IOT_MSG_THREAD_SHUTDOWNREADY,	//notification to main thread about child thread stop. [data] contains thread item address
 
 	IOT_MSG_EVENTSIG_OUT,			//notification to config modeller about change of output value or new output msg. [data] contains iot_modelsignal pointer.
+	IOT_MSG_EVENTSIG_NOUPDATE,		//notification to config modeller that sync execution of node changed NO outputs. [data] contains iot_modelnegsignal pointer.
+
+//node instance destined messages
+	IOT_MSG_NOTIFY_INPUTSUPDATED,	//notification to modinstance about change of input value(s) and/or new input msg(s). [data] contains iot_notify_inputsupdate
+									//pointer. [bytearg] contains sync mode at the time of message generation in main thread
 };
 
 extern iot_thread_item_t* main_thread_item; //prealloc main thread item
@@ -73,19 +78,26 @@ enum iot_threadmsg_datamem_t : uint8_t {
 
 //#define IOT_THREADMSG_LOADING_MAX 1000
 
+struct iot_releasable {
+	virtual void releasedata(void) = 0; //called to free/release dynamic data connected with object
+};
+
 struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 	volatile std::atomic<iot_threadmsg_t*> next; //points to next message in message queue
 	iot_miid_t miid; //msg destination instance or can be 0 for kernel with is_kernel flag set
 	iot_msg_code_t code;
 	uint8_t bytearg; //arbitrary byte argument for command in code
-	uint8_t is_memblock:1, //flag that DATA pointer must be released using iot_release_memblock(), conflicts with 'is_malloc'
-		is_malloc:1, //flag that DATA pointer must be released using free(), conflicts with 'is_memblock'
+	uint8_t is_memblock:1,	//flag that DATA pointer must be released using iot_release_memblock(), conflicts with 'is_malloc'
+		is_malloc:1,		//flag that DATA pointer must be released using free(), conflicts with 'is_memblock'
+		is_releasable:1,	//flag that DATA points to iot_releasable-derived class and its releasedata() method must be called when releasing msg struct.
+							//(iot_releasable*) POINTER MUST BE PROVIDED for DATA pointer!!!
 
 		is_msgmemblock:1, //flag that THIS struct must be released using iot_release_memblock(), conflicts with 'is_msginstreserv'
 //		is_msginstreserv:1, //flag that THIS struct is from module instance reserv ('msgstructs' array) and must be just marked as free in 'msgstructs_usage',
 //							//conflicts with 'is_msgmemblock'
 
 		is_kernel:1; //message is for kernel and thus miid is message argument, not destination instance
+
 	uint32_t datasize; //size of data pointed by data. must be checked for correctness for each command during its processing. Should be zero if
 					//'data' is used to store arbitraty integer.
 	void* data; //data corresponding to code. can point to builtin buffer if IOT_MSG_BUFSIZE is enough or be allocated as memblock (is_memblock==1) or
@@ -97,6 +109,12 @@ struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 	bool is_free(void) volatile { //for use with static msg structs to determine is struct is not in use just now
 		return code==IOT_MSG_INVALID;
 	}
+	void set_next(iot_threadmsg_t* n) { //shortcut for relaxed access of next pointer outside message queue position
+		next.store(n, std::memory_order_relaxed);
+	}
+	iot_threadmsg_t* get_next(void) const { //shortcut for relaxed access of next pointer outside message queue position
+		return next.load(std::memory_order_relaxed);
+	}
 };
 #define IOT_MSG_BUFSIZE (sizeof(iot_threadmsg_t)-offsetof(struct iot_threadmsg_t, buf))
 #define IOT_MSG_INTARG_SAFEDATASIZE (offsetof(struct iot_threadmsg_t, intarg) - offsetof(struct iot_threadmsg_t, buf))
@@ -104,6 +122,27 @@ struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 
 
 #include <kernel/iot_memalloc.h>
+
+//fills thread message struct
+//'msg' arg can be NULL to request struct allocation from provided allocator (which can be NULL to request its auto selection).
+//Otherwise (if struct is already allocated) it must be zeroed and 'is_msgmemblock' set correctly.
+//Interprets data pointer according to datamem
+//returns error if no memory or critical error (when datasize>0 but data is NULL or datamem is IOT_THREADMSG_DATAMEM_TEMP_NOALLOC
+//and datasize exceedes IOT_MSG_BUFSIZE or illegal datamem)
+int iot_prepare_msg(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_item_t* modinst, uint8_t bytearg, void* data, size_t datasize, 
+		iot_threadmsg_datamem_t datamem, bool is_kernel=false, iot_memallocator* allocator=NULL);
+
+inline int iot_prepare_msg_releasable(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_item_t* modinst, uint8_t bytearg, iot_releasable* data, size_t datasize, 
+		iot_threadmsg_datamem_t datamem, bool is_kernel=false, iot_memallocator* allocator=NULL) {
+	int err=iot_prepare_msg(msg, code, modinst, bytearg, (void*)data, datasize, datamem, is_kernel, allocator);
+	if(!err) msg->is_releasable=1;
+	return err;
+}
+
+
+void iot_release_msg(iot_threadmsg_t *&msg, bool = false);
+
+
 //#include <kernel/iot_deviceregistry.h>
 #include <kernel/iot_moduleregistry.h>
 
@@ -174,6 +213,8 @@ public:
 	static void on_thread_msg(uv_async_t* handle);
 
 	iot_thread_item_t* find_thread(uv_thread_t th_id) {
+		assert(uv_thread_self()==main_thread);
+
 		iot_thread_item_t* th=threads_head;
 		while(th) {
 			if(th->thread==th_id) return th;
@@ -197,16 +238,6 @@ public:
 	void on_thread_shutdown(iot_thread_item_t* thread);
 };
 
-//fills thread message struct
-//'msg' arg can be NULL to request struct allocation from provided allocator (which can be NULL to request its auto selection).
-//Otherwise (if struct is already allocated) it must be zeroed and 'is_msgmemblock' set correctly.
-//Interprets data pointer according to datamem
-//returns error if no memory or critical error (when datasize>0 but data is NULL or datamem is IOT_THREADMSG_DATAMEM_TEMP_NOALLOC
-//and datasize exceedes IOT_MSG_BUFSIZE or illegal datamem)
-int iot_prepare_msg(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_item_t* modinst, uint8_t bytearg, void* data, size_t datasize, 
-		iot_threadmsg_datamem_t datamem, bool is_kernel=false, iot_memallocator* allocator=NULL);
-
-void iot_release_msg(iot_threadmsg_t *msg, bool = false);
 
 void iot_process_module_bug(iot_module_item_t *module);
 

@@ -159,7 +159,7 @@ void* iot_memallocator::allocate(uint32_t size, bool allow_direct) { //true allo
 bool iot_memallocator::incref(void* ptr) { //increase object's reference count if possible (returns true). max number of refs is IOT_MEMOBJECT_MAXREF. can be called from any thread
 		iot_memobject* obj=(iot_memobject*)container_of(ptr, struct iot_memobject, data);
 		assert(obj->parent==this);
-		uint8_t oldrefcount=obj->refcount.fetch_add(1, std::memory_order_acq_rel);
+		uint32_t oldrefcount=obj->refcount.fetch_add(1, std::memory_order_acq_rel);
 		assert(oldrefcount>0);
 		if(oldrefcount>=IOT_MEMOBJECT_MAXREF) {
 			obj->refcount.fetch_sub(1, std::memory_order_release);
@@ -178,12 +178,14 @@ void *iot_allocate_memblock(uint32_t size, bool allow_direct) {
 void iot_release_memblock(void *memblock) {
 	assert(memblock!=NULL);
 	iot_memobject* obj=(iot_memobject*)container_of(memblock, struct iot_memobject, data);
+	assert(obj->parent->signature==IOT_MEMOBJECT_SIGNATURE);
 	obj->parent->release(memblock);
 }
 
 bool iot_incref_memblock(void *memblock) {
 	assert(memblock!=NULL);
 	iot_memobject* obj=(iot_memobject*)container_of(memblock, struct iot_memobject, data);
+	assert(obj->parent->signature==IOT_MEMOBJECT_SIGNATURE);
 	return obj->parent->incref(memblock);
 }
 
@@ -191,7 +193,7 @@ bool iot_incref_memblock(void *memblock) {
 void iot_memallocator::release(void* ptr) { //decrease object's reference count. can be called from any thread
 		iot_memobject* obj=(iot_memobject*)container_of(ptr, struct iot_memobject, data);
 		assert(obj->parent==this);
-		uint8_t refcount=obj->refcount.fetch_sub(1, std::memory_order_acq_rel);
+		uint32_t refcount=obj->refcount.fetch_sub(1, std::memory_order_acq_rel);
 		assert(refcount>0);
 		if(refcount>1) return; //there are other refs
 		//refcount was 1, so became 0
