@@ -284,6 +284,8 @@ struct iot_connid_t {
 struct iot_module_instance_base;
 struct iot_device_driver_base;
 struct iot_driver_client_base;
+struct iot_conn_clientview;
+struct iot_conn_drvview;
 
 #include <iot_hwdevreg.h>
 
@@ -448,9 +450,12 @@ struct iot_iface_device_detector_t {
 ////////////////////////////////////////////////////
 
 enum iot_devconn_action_t : uint8_t {
-	IOT_DEVCONN_ACTION_MESSAGE, //new message (in full) came from another side of connection. data_size contains full size of message.
+	IOT_DEVCONN_ACTION_FULLREQUEST, //new message (in full) came from another side of connection. data_size contains full size of message.
 								//data contains address of temporary buffer with message body. message must be interpreted by corresponding device interface class with corresponding attributes
-	IOT_DEVCONN_ACTION_READY	//sent to DRIVER side when connection is fully inited and messages can be sent over it (in 'open' handler connection is not ready still)
+	IOT_DEVCONN_ACTION_CANWRITE,//write_avail_notify(true) was called and there appeared free space in send buffer, so new write attempt can be made
+	IOT_DEVCONN_ACTION_CANREADNEW,
+	IOT_DEVCONN_ACTION_CANREADCONT
+//	IOT_DEVCONN_ACTION_READY	//sent to DRIVER side when connection is fully inited and messages can be sent over it (in 'open' handler connection is not ready still)
 };
 
 //globally (between all itogateways and unet) identifies instance of module, like HOST-PID identifies OS processes in cluster on machines
@@ -499,6 +504,9 @@ struct iot_device_driver_base : public iot_module_instance_base {
 	iot_device_driver_base(uv_thread_t thread) : iot_module_instance_base(thread) {
 	}
 //called in instance thread:
+
+	//enables or disables notifications about free space in send buffer
+	int kapi_notify_write_avail(const iot_conn_drvview* conn, bool enable);
 
 //device handle operations map
 
@@ -592,10 +600,14 @@ struct iot_driver_client_base : public iot_module_instance_base {
 	iot_driver_client_base(uv_thread_t thread) : iot_module_instance_base(thread) {
 	}
 
+	//enables or disables notifications about free space in send buffer
+	int kapi_notify_write_avail(const iot_conn_clientview* conn, bool enable);
+
+
 //device handle operations map
-	virtual int device_attached(const iot_conn_clientview* conn)=0;
-	virtual int device_detached(const iot_conn_clientview* conn)=0;
-	virtual int device_action(const iot_conn_clientview* conn, iot_devconn_action_t action_code, uint32_t data_size, const void* data)=0;
+	virtual int device_attached(const iot_conn_clientview* conn) {return 0;}
+	virtual int device_detached(const iot_conn_clientview* conn) {return 0;}
+	virtual int device_action(const iot_conn_clientview* conn, iot_devconn_action_t action_code, uint32_t data_size, const void* data) {return 0;}
 };
 
 struct iot_node_base : public iot_driver_client_base {

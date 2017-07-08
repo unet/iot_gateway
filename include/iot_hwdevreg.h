@@ -275,14 +275,9 @@ private:
 //IOT DEVCLASSID codes with type iot_devifacetype_id_t
 #define IOT_DEVIFACETYPE_IDMAP(XX) \
 	XX(KEYBOARD, 1) /*sizeof(iot_devifaceclass__keyboard_ATTR) set of keys or standard keyboard (with SHIFT, CTRL and ALT keys)*/	\
-	XX(LEDS, 2) /*set of lamps (or single lamp) which can be turned on and off*/													\
-	XX(HW_SWITCHES, 3) /*set of hardware switchers like notebook lid opening sensor*/												\
-	XX(BASIC_SPEAKER, 4) /*basic sound source which can generate tone of given frequency during given time*/						\
-	XX(ACTIVATABLE, 5) /*simplest interface of device which can be activated or deactivated without current status information */
-
-//	XX(LEDS, 2, "LEDs", 32, 32, 0)
-//	XX(HW_SWITCHES, 3, "Hardware switch", 32, 32, 0
-//	XX(BASIC_SPEAKER, 4, "Speaker", 32, 32, 0)
+	XX(ACTIVATABLE, 2) /*simplest interface of set of devices which can be activated or deactivated without current status information */	\
+	XX(TONEPLAYER, 3) /*basic sound source which can play list of tone specifications (lengh + frequency) */						\
+	XX(HW_SWITCHES, 4) /*set of hardware switchers like notebook lid opening sensor*/												
 
 enum iot_devifaceclass_basic_ids : uint8_t {
 #define XX(nm, cc) IOT_DEVIFACETYPEID_ ## nm = cc,
@@ -309,7 +304,8 @@ class iot_devifaceclass__DRVBASE {
 protected:
 	iot_devifaceclass__DRVBASE(const iot_devifacetype* devclass) : devclass(devclass) {
 	}
-	int send_client_msg(const iot_connid_t &connid, iot_device_driver_base *drv_inst, const void *msg, uint32_t msgsize);
+	int send_client_msg(const iot_conn_drvview *conn, const void *msg, uint32_t msgsize);
+	int read_client_req(const iot_conn_drvview *conn_, void* buf, uint32_t bufsize, uint32_t &dataread, uint32_t &szleft);
 };
 
 class iot_devifaceclass__CLBASE {
@@ -317,7 +313,9 @@ class iot_devifaceclass__CLBASE {
 protected:
 	iot_devifaceclass__CLBASE(const iot_devifacetype* devclass) : devclass(devclass) {
 	}
-	int send_driver_msg(const iot_connid_t &connid, iot_driver_client_base *client_inst, const void *msg, uint32_t msgsize);
+	int send_driver_msg(const iot_conn_clientview* conn, const void *msg, uint32_t msgsize);
+	int32_t start_driver_req(const iot_conn_clientview* conn_, const void *data, uint32_t datasize, uint32_t fulldatasize=0);
+	int32_t continue_driver_req(const iot_conn_clientview* conn_, const void *data, uint32_t datasize);
 };
 
 

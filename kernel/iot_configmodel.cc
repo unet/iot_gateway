@@ -390,26 +390,27 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 	//fill value updates and count msgs in parallel
 	for(uint16_t i=0; i<notifyupdate->numitems; i++) {
 		auto item=&notifyupdate->item[i];
+		auto j=item->real_index;
 		if(item->data && item->data->is_msg()) { //msg signal
 			nummsgs++;
 		} else { //value signal
-			if(item->real_index>=node_iface->num_valueinputs) {
+			if(j>=node_iface->num_valueinputs) {
 				assert(false);
 				continue;
 			}
 			//check value type is compatible
-			if(!node_iface->valueinput[item->real_index].is_compatible(item->data)) {
-				outlog_debug("New value for input %u of node %" IOT_PRIiotid " is not compatible with config (is type %u, must be type %u)", unsigned(item->real_index), node_id, item->data ? static_cast<const iot_valueclass_BASE*>(item->data)->get_classid() : 0, node_iface->valueinput[item->real_index].vclass_id);
+			if(!node_iface->valueinput[j].is_compatible(item->data)) {
+				outlog_debug("New value for input %u of node %" IOT_PRIiotid " is not compatible with config (is type %u, must be type %u)", unsigned(j), node_id, item->data ? static_cast<const iot_valueclass_BASE*>(item->data)->get_classid() : 0, node_iface->valueinput[j].vclass_id);
 				continue;
 			}
-			if(item->data==valuesignals[i].prev_value || (item->data && valuesignals[i].prev_value && *(item->data)==*(valuesignals[i].prev_value))) continue; //value unchanged
-			if(valueset[item->real_index]) {
+			if(item->data==valuesignals[j].prev_value || (item->data && valuesignals[j].prev_value && *(item->data)==*(valuesignals[j].prev_value))) continue; //value unchanged
+			if(valueset[j]) {
 				assert(false);
-				if(curvalueinput[i].instance_value) curvalueinput[i].instance_value->release(); //be ready to bug and correctly release unnecessary ref
+				if(curvalueinput[j].instance_value) curvalueinput[j].instance_value->release(); //be ready to bug and correctly release unnecessary ref
 			} else {
-				valueset[item->real_index]=true;
+				valueset[j]=true;
 			}
-			curvalueinput[i].instance_value = valuesignals[i].new_value = static_cast<const iot_valueclass_BASE*>(item->data);
+			curvalueinput[j].instance_value = valuesignals[j].new_value = static_cast<const iot_valueclass_BASE*>(item->data);
 			item->data=NULL; //value moved from notifyupdate to instance_value, so no refcount change (valuesignals structure is temporary and not accounted)
 		}
 	}
@@ -422,21 +423,22 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 
 	for(uint16_t i=0; i<notifyupdate->numitems; i++) {
 		auto item=&notifyupdate->item[i];
+		auto j=item->real_index;
 		if(!item->data || !item->data->is_msg()) continue;
-		if(item->real_index>=node_iface->num_msginputs) {
+		if(j>=node_iface->num_msginputs) {
 			assert(false);
 			continue;
 		}
-		if(msgsignals[item->real_index].num==0) { 
-			msgsignals[item->real_index].msgs=&msgs[msgidx];
+		if(msgsignals[j].num==0) { 
+			msgsignals[j].msgs=&msgs[msgidx];
 		} else {
-			assert(i>0 && notifyupdate->item[i-1].real_index==item->real_index); //msgs with same real_index MUST GO SEQUENTIALLY!!!
+			assert(i>0 && notifyupdate->item[i-1].real_index==j); //msgs with same real_index MUST GO SEQUENTIALLY!!!
 			continue;
 		}
 		msgs[msgidx]=static_cast<const iot_msgclass_BASE*>(item->data);
 		item->data=NULL;
 		msgidx++;
-		msgsignals[item->real_index].num++;
+		msgsignals[j].num++;
 	}
 
 	iot_event_id_t eventid=notifyupdate->reason_event;

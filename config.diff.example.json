@@ -8,9 +8,7 @@
 				"module_id" : 3, //module which must realize node interface
 				"module_cfgver" : 0, //module's config version to test against current module
 
-				//only one or none of next 2 props should be present
-				"group_id" : 1, //can be zero (or absent) for persistent nodes. must be non-zero for temporary (rule-specific operators) nodes.
-				"mode_id" : 1, //can be zero (or absent) for persistent nodes or for temporary nodes of rules, which are common for all modes of group. else must match group_id (be its mode)
+				"rule_id" : 1, //can be zero (or absent) for persistent nodes. must be non-zero for temporary (rule-specific operators) nodes.
 
 				"cfg_id" : 1, //node config number when user settings of node were changed last time
 				"params" : <custom data> //user settings for node in module_id specific format
@@ -31,12 +29,15 @@
 				}
 			}
 		},
-		"links": { //connections between nodes
-			LINK_ID: {
-				"group_id" : 1, //config group where link exists. must be present ALWAYS
-				"mode_id" : 1, //mode of config group where link exists unless list is group-common (then mode_id can be zero or absent). is specified, must match group_id
-				"rule_id" : 5 //id or parent rule
+		"rules": {
+			RULE_ID: {
+				"group_id" : 1, //parent config group of rule. must be present ALWAYS
+				"mode_id" : 1, //parent mode of config group of rule. unless list is group-common (then mode_id can be zero or absent).
+								//if specified, must match group_id (be in groups list of modes or be group default mode)
 			}
+		},
+		"links": { //connections between nodes
+			LINK_ID: RULE_ID //id or parent rule
 		}
 	},
 	"hostcfg" : { //taken from server-common table iot_gateways

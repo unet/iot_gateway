@@ -10,6 +10,7 @@
 #include <iot_module.h>
 #include <iot_devclass_keyboard.h>
 #include <iot_devclass_activatable.h>
+#include <iot_devclass_toneplayer.h>
 
 #include <kernel/iot_daemonlib.h>
 #include <kernel/iot_kernel.h>
@@ -21,11 +22,13 @@ static timeval _start_timeval;
 
 static iot_devifacetype_keyboard builtin_deviface_keyboard;
 static iot_devifacetype_activatable builtin_deviface_activatable;
+static iot_devifacetype_toneplayer builtin_deviface_toneplayer;
 
 //list of built-in device interface types to register at startup
 static const iot_devifacetype_iface* builtin_deviface_classes[]={
 	&builtin_deviface_keyboard,
-	&builtin_deviface_activatable
+	&builtin_deviface_activatable,
+	&builtin_deviface_toneplayer
 };
 
 //iot_devifaceclass__keyboard_ATTR iot_devifaceclass__keyboard_ATTR::def(IOT_KEYBOARD_MAX_KEYCODE, true);

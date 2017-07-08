@@ -28,7 +28,7 @@ public:
 	bool push(Node* newnode) { //returns true if first item is added (e.g. to send signal that queue is not empty)
 		(newnode->*NextPtr).store(NULL, std::memory_order_relaxed);
 		NodeBase* prevtail=tail.exchange(newnode, std::memory_order_acq_rel);
-		//(critial point)
+		//(critial point) - last element of list (when traversing from head) does not coinside with tail pointer
 		(prevtail->*NextPtr).store(newnode, std::memory_order_release);
 		return (prevtail==stub);
 	}
@@ -52,7 +52,7 @@ public:
 		NodeBase* oldhead=head;
 		NodeBase* next=(oldhead->*NextPtr).load(std::memory_order_acquire);
 		if(oldhead==stub) { //head points to stub, so queue is empty or stub should just be removed
-			if(!next) return NULL; //queue is empty
+			if(!next) return NULL; //queue is empty (push of first element can be in progress)
 			//remove stub from queue and continue
 			head=oldhead=next;
 			next=(next->*NextPtr).load(std::memory_order_acquire);
@@ -61,7 +61,8 @@ public:
 			head=next;
 		} else { //queue contains one item, so head must be equal to tail
 			(stub->*NextPtr).store(NULL, std::memory_order_release); //init stub
-			if(tail.compare_exchange_strong(oldhead, stub, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue becomes empty
+			if(tail.compare_exchange_strong(head, stub, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue becomes empty
+										/*  head will be modified if FALSE!!! */
 				head=stub;
 			} else { //push is right in progress. it can be at critial point so we must wait when it will be passed and 'next' gets non-NULL value
 				unsigned char c=0;
@@ -83,14 +84,16 @@ public:
 			head=oldhead=next;
 			next=(next->*NextPtr).load(std::memory_order_acquire);
 		}
+		(stub->*NextPtr).store(NULL, std::memory_order_release); //init stub
 		do {
 			while(next) { //not last item in head
 				head=next;
 				next=(next->*NextPtr).load(std::memory_order_acquire);
 			}
 			//here head must be equal to tail, item pointed by head has next==NULL
-			(stub->*NextPtr).store(NULL, std::memory_order_release); //init stub
-			if(tail.compare_exchange_strong(head, stub, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue becomes empty
+			NodeBase* tmp=head;
+			if(tail.compare_exchange_strong(tmp, stub, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue becomes empty
+										/*  tmp will be modified if FALSE!!! */
 				head=stub;
 				break;
 			}

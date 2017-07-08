@@ -10,6 +10,7 @@
 #include <iot_module.h>
 #include <iot_devclass_keyboard.h>
 #include <iot_devclass_activatable.h>
+#include <iot_devclass_toneplayer.h>
 #include <kernel/iot_daemonlib.h>
 #include <kernel/iot_deviceregistry.h>
 
@@ -126,6 +127,16 @@ uint32_t iot_devifacetype_keyboard::get_c2d_maxmsgsize(const char* cls_data) con
 
 uint32_t iot_devifacetype_activatable::get_c2d_maxmsgsize(const char* cls_data) const {
 	return iot_devifaceclass__activatable_BASE::get_maxmsgsize();
+}
+uint32_t iot_devifacetype_activatable::get_d2c_maxmsgsize(const char* cls_data) const {
+	return iot_devifaceclass__activatable_BASE::get_maxmsgsize();
+}
+
+uint32_t iot_devifacetype_toneplayer::get_c2d_maxmsgsize(const char* cls_data) const {
+	return iot_devifaceclass__toneplayer_BASE::get_maxmsgsize();
+}
+uint32_t iot_devifacetype_toneplayer::get_d2c_maxmsgsize(const char* cls_data) const {
+	return iot_devifaceclass__toneplayer_BASE::get_maxmsgsize();
 }
 
 //use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created

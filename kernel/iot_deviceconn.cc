@@ -37,20 +37,72 @@ iot_device_connection_t* iot_find_device_conn(const iot_connid_t &connid) {
 	return &iot_deviceconnections[connid.id];
 }
 
-int iot_devifaceclass__DRVBASE::send_client_msg(const iot_connid_t &connid, iot_device_driver_base *drv_inst, const void *msg, uint32_t msgsize) {
-	iot_device_connection_t* conn=iot_find_device_conn(connid);
+int iot_devifaceclass__DRVBASE::send_client_msg(const iot_conn_drvview *conn_, const void *msg, uint32_t msgsize) {
+	if(!conn_) return IOT_ERROR_INVALID_ARGS;
+	iot_device_connection_t* conn=iot_find_device_conn(conn_->id);
 	if(!conn) return IOT_ERROR_NOT_FOUND;
-	if(conn->driver_host!=iot_current_hostid || conn->driver.local.modinstlk.modinst->instance!=drv_inst || conn->devclass.classid!=devclass->classid)
-		return IOT_ERROR_INVALID_ARGS;
+	if(conn->driver_host!=iot_current_hostid || &conn->drvview!=conn_ || conn->devclass.classid!=devclass->classid) return IOT_ERROR_INVALID_ARGS;
 	return conn->send_client_message(msg, msgsize);
 }
 
-int iot_devifaceclass__CLBASE::send_driver_msg(const iot_connid_t &connid, iot_driver_client_base *client_inst, const void *msg, uint32_t msgsize) {
-	iot_device_connection_t* conn=iot_find_device_conn(connid);
+int iot_devifaceclass__DRVBASE::read_client_req(const iot_conn_drvview *conn_, void* buf, uint32_t bufsize, uint32_t &dataread, uint32_t &szleft) {
+	if(!conn_) return IOT_ERROR_INVALID_ARGS;
+	iot_device_connection_t* conn=iot_find_device_conn(conn_->id);
 	if(!conn) return IOT_ERROR_NOT_FOUND;
-	if(conn->client_host!=iot_current_hostid || conn->client.local.modinstlk.modinst->instance!=client_inst || conn->devclass.classid!=devclass->classid)
-		return IOT_ERROR_INVALID_ARGS;
+	if(conn->driver_host!=iot_current_hostid || &conn->drvview!=conn_ || conn->devclass.classid!=devclass->classid) return IOT_ERROR_INVALID_ARGS;
+	return conn->read_client_request(buf, bufsize, dataread, szleft);
+}
+
+
+int iot_devifaceclass__CLBASE::send_driver_msg(const iot_conn_clientview* conn_, const void *msg, uint32_t msgsize) {
+	if(!conn_) return IOT_ERROR_INVALID_ARGS;
+	iot_device_connection_t* conn=iot_find_device_conn(conn_->id);
+	if(!conn) return IOT_ERROR_NOT_FOUND;
+	if(conn->client_host!=iot_current_hostid || &conn->clientview!=conn_ || conn->devclass.classid!=devclass->classid) return IOT_ERROR_INVALID_ARGS;
 	return conn->send_driver_message(msg, msgsize);
+}
+
+int32_t iot_devifaceclass__CLBASE::start_driver_req(const iot_conn_clientview* conn_, const void *data, uint32_t datasize, uint32_t fulldatasize) {
+	if(!conn_) return IOT_ERROR_INVALID_ARGS;
+	iot_device_connection_t* conn=iot_find_device_conn(conn_->id);
+	if(!conn) return IOT_ERROR_NOT_FOUND;
+	if(conn->client_host!=iot_current_hostid || &conn->clientview!=conn_ || conn->devclass.classid!=devclass->classid) return IOT_ERROR_INVALID_ARGS;
+	return conn->start_driver_request(data, datasize, fulldatasize);
+}
+
+int32_t iot_devifaceclass__CLBASE::continue_driver_req(const iot_conn_clientview* conn_, const void *data, uint32_t datasize) {
+	if(!conn_) return IOT_ERROR_INVALID_ARGS;
+	iot_device_connection_t* conn=iot_find_device_conn(conn_->id);
+	if(!conn) return IOT_ERROR_NOT_FOUND;
+	if(conn->client_host!=iot_current_hostid || &conn->clientview!=conn_ || conn->devclass.classid!=devclass->classid) return IOT_ERROR_INVALID_ARGS;
+	return conn->continue_driver_request(data, datasize);
+}
+
+int iot_device_driver_base::kapi_notify_write_avail(const iot_conn_drvview* conn_, bool enable) {
+	if(!conn_) return IOT_ERROR_INVALID_ARGS;
+	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk.modinst->instance!=this) {
+		assert(false);
+		return 0;
+	}
+	iot_device_connection_t* conn=iot_find_device_conn(conn_->id);
+	if(!conn) return IOT_ERROR_NOT_FOUND;
+	if(conn->driver_host!=iot_current_hostid || conn->driver.local.modinstlk.modinst->instance!=this) return IOT_ERROR_INVALID_ARGS;
+	conn->client_write_avail_notify(enable);
+	return 0;
+}
+int iot_driver_client_base::kapi_notify_write_avail(const iot_conn_clientview* conn_, bool enable) {
+	if(!conn_) return IOT_ERROR_INVALID_ARGS;
+	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk.modinst->instance!=this) {
+		assert(false);
+		return 0;
+	}
+	iot_device_connection_t* conn=iot_find_device_conn(conn_->id);
+	if(!conn) return IOT_ERROR_NOT_FOUND;
+	if(conn->client_host!=iot_current_hostid || conn->client.local.modinstlk.modinst->instance!=this) return IOT_ERROR_INVALID_ARGS;
+	conn->driver_write_avail_notify(enable);
+	return 0;
 }
 
 
@@ -457,8 +509,11 @@ int iot_device_connection_t::on_drvconnect_status(int err, bool isasync) {
 		}
 		return 0;
 	}
+	if(err==IOT_ERROR_NOT_READY) {
+		assert(state==IOT_DEVCONN_PENDING || state==IOT_DEVCONN_READYDRV); //driver could manage to finish connect and upgrade state, so allow state to be READYDRV
+		return err;
+	}
 	assert(state==IOT_DEVCONN_PENDING);
-	if(err==IOT_ERROR_NOT_READY) return err;
 
 	//downgrade to INIT state
 
@@ -613,6 +668,8 @@ int iot_device_connection_t::process_connect_local(bool isasync) { //called in w
 		err=IOT_ERROR_TEMPORARY_ERROR;
 		goto onexit;
 	}
+	c2d.got_writespace=true;
+	d2c.got_writespace=true;
 
 	err=static_cast<iot_device_driver_base*>(drvinst->instance)->device_open(&drvview);
 	if(err) {
@@ -724,7 +781,7 @@ void iot_device_connection_t::process_driver_ready(void) { //runs in client thre
 //	state=IOT_DEVCONN_FULLREADY;
 	d2c.reader_closed=false;
 
-	if((c2d.want_write && c2d.buf.avail_write()>0) || d2c.buf.pending_read()>0) { //this check will always see if message from driver was sent in its device_open because IOT_MSG_CONNECTION_DRVREADY
+	if((c2d.want_write && c2d.buf.avail_write()>0) || d2c.buf.pending_read()>0 || d2c.want_write) { //this check will always see if message from driver was sent in its device_open because IOT_MSG_CONNECTION_DRVREADY
 		//is sent after device_open(). driver writes after changing state to IOT_DEVCONN_READYDRV will always put IOT_MSG_CONNECTION_D2C_READREADY to client
 		//queue after current IOT_MSG_CONNECTION_DRVREADY
 		on_d2c_ready(); //this will process all currently visible reads, so some IOT_MSG_CONNECTION_D2C_READREADY msg which can be now in fly
@@ -774,27 +831,124 @@ void iot_device_connection_t::process_close_driver(iot_threadmsg_t* msg) { //dri
 }
 
 
-void iot_device_connection_t::d2c_ready(void) { //called by driver after writing data to d2c stream buffer
-	assert(driver_host==iot_current_hostid);
-	assert(state>=IOT_DEVCONN_READYDRV);
-	assert(uv_thread_self()==driver.local.modinstlk.modinst->thread->thread);
 
-	iot_threadmsg_t *msg=d2c_ready_msg;
-	if(!msg) return; //message is already in fly
-
-	if(client_host==iot_current_hostid) {
-		int err=iot_prepare_msg(msg, IOT_MSG_CONNECTION_D2C_READY, NULL, 0, &connident, sizeof(connident), IOT_THREADMSG_DATAMEM_TEMP, true);
-		assert(err==0);
-		d2c_ready_msg=NULL;
-
-		client.local.modinstlk.modinst->thread->send_msg(msg);
-	} else if(client_host) {
-		//todo for remote
-		assert(false);
-	}
-}
 //void iot_device_connection_t::c2d_write_ready(void) { //called by driver after reading data from c2d stream buffer if c2d.want_write is true
 //}
+
+//tries to write a message to driver's in-queue in full
+//returns:
+//0 - success
+//IOT_ERROR_INVALID_ARGS - datasize is zero
+//IOT_ERROR_TRY_AGAIN - not enough space in queue, but it can appear later (buffer size is enough). driver_write_space_notify(true) can be used to enable notification about free space
+//IOT_ERROR_NO_BUFSPACE - not enough space in queue, and it cannot appear later (TODO use another type of call)
+//IOT_ERROR_NO_PEER - driver side of connection is closed
+int iot_device_connection_t::send_driver_message(const void* data, uint32_t datasize) { //can be called in client thread only
+	assert(client_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV);
+	if(c2d.reader_closed) return IOT_ERROR_NO_PEER; //driver already closed
+//		if(state!=IOT_DEVCONN_FULLREADY && state!=IOT_DEVCONN_READYDRV) return IOT_ERROR_NOT_READY;
+	assert(uv_thread_self()==client.local.modinstlk.modinst->thread->thread);
+
+	int err=send_message<&iot_device_connection_t::c2d>(data, datasize);
+	if(err) return err;
+	c2d_ready();
+//			if(driver_host==iot_current_hostid && clinst->thread==driver.local.modinstlk.modinst->thread) {
+//				//TODO use more optimal way (hack libuv?)
+//				uv_async_send(&c2d.read_ready);
+//			} else {
+//				uv_async_send(&c2d.read_ready);
+//			}
+	return 0;
+}
+
+//can be called by CLIENT to enable/disable notifications about free write space in driver's buffer
+void iot_device_connection_t::driver_write_avail_notify(bool want_write) {
+	assert(client_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV);
+	assert(uv_thread_self()==client.local.modinstlk.modinst->thread->thread);
+	if(c2d.want_write==want_write) return;
+	c2d.want_write=want_write;
+	if(!want_write) return;
+	c2d_ready();
+}
+
+//starts writing new request to driver. if there is unfinished previous request, is will be marked as bad.
+//fulldatasize (defaults to datasize if zero) must specify full request data size, while datasize shows how many bytes are ready to be written.
+//So fulldatasize cannot be less than datasize, datasize cannot be 0 and fulldatasize cannot exceed or be equal to 1GB.
+//On success returns positive number of actually written bytes. If this number is less than fulldatasize, additional calls to continue_driver_request() must be done
+//On error result is negative error code:
+//	IOT_ERROR_NO_PEER - peer already closed connection
+//	IOT_ERROR_INVALID_ARGS - invalid arguments
+//	IOT_ERROR_TRY_AGAIN - no space in buffer available. call can be retried (the same or a new one) after getting CANWRITE notification.
+int32_t iot_device_connection_t::start_driver_request(const void* data, uint32_t datasize, uint32_t fulldatasize) { //can be called in client thread only
+	assert(client_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV);
+//		if(state!=IOT_DEVCONN_FULLREADY && state!=IOT_DEVCONN_READYDRV) return IOT_ERROR_NOT_READY;
+	assert(uv_thread_self()==client.local.modinstlk.modinst->thread->thread);
+
+	if(c2d.reader_closed) return IOT_ERROR_NO_PEER; //driver already closed
+
+	if(!fulldatasize) fulldatasize=datasize;
+	if(!data || !datasize || fulldatasize<datasize || fulldatasize>0x3fffffff) return IOT_ERROR_INVALID_ARGS;
+
+	uint32_t rval=write_driver_start(data, datasize, fulldatasize);
+	if(rval==0) return IOT_ERROR_TRY_AGAIN;
+
+	c2d_ready();
+
+	return int32_t(rval);
+}
+
+//continues writing request to driver.
+//fulldatasize (defaults to datasize if zero) must specify full request data size, while datasize shows how many bytes are ready to be written.
+//On success returns positive number of actually written bytes (can be < datasize)
+//On error result is negative error code:
+//	IOT_ERROR_NO_PEER - peer already closed connection
+//	IOT_ERROR_INVALID_ARGS - invalid arguments OR there is NO unfinished request to continue OR excess data provided (written datasize + provided datasize exceed fulldatasize)
+//	IOT_ERROR_TRY_AGAIN - no space in buffer available. call must be retried after getting CANWRITE notification.
+int32_t iot_device_connection_t::continue_driver_request(const void* data, uint32_t datasize) { //can be called in client thread only
+	assert(client_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV);
+//		if(state!=IOT_DEVCONN_FULLREADY && state!=IOT_DEVCONN_READYDRV) return IOT_ERROR_NOT_READY;
+	assert(uv_thread_self()==client.local.modinstlk.modinst->thread->thread);
+
+	if(c2d.reader_closed) return IOT_ERROR_NO_PEER; //driver already closed
+
+	if(!data || !datasize) return IOT_ERROR_INVALID_ARGS;
+
+	uint32_t rval=write_driver_end(data, datasize);
+	if(rval==0) return IOT_ERROR_TRY_AGAIN;
+	if(rval==0xffffffffu) return IOT_ERROR_INVALID_ARGS;
+
+	c2d_ready();
+
+	return int32_t(rval);
+}
+
+//read (or discard when buf==NULL) request for client
+//buf can be NULL to discard read bytes of request.
+//bufsize can be 0 if only obtaining szleft is necessary
+//On exit dataread shows many bytes were written into buf (or discarded if buf is NULL), 
+//szleft shows how many bytes of request left (if IOT_ERROR_TRY_AGAIN is returned), so that necessary buffer could be provided in full. zero indicates that 
+//	either nothing to read, or request tail is still on its way to say if request is OK or corrupted.
+//Returns:
+//	0 - dataread bytes of request were read into buf (or discarded), request is complete and good
+//	IOT_ERROR_TRY_AGAIN - dataread bytes of request were read into buf (or discarded), request is incomplete (szleft bytes left to read) or no requests.
+//	IOT_ERROR_BAD_REQUEST - dataread bytes of request were read into buf (or discarded), request is complete but corrupted (writer didn't supplied enough bytes,
+//							so read data will contain zeros from some point and till the end)
+int iot_device_connection_t::read_client_request(void* buf, uint32_t bufsize, uint32_t &dataread, uint32_t &szleft) { //can be called in client thread only
+	assert(driver_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV);
+	assert(uv_thread_self()==client.local.modinstlk.modinst->thread->thread);
+
+	int status;
+	uint32_t rval=read_client(buf, bufsize, szleft, status);
+	dataread=rval;
+	if(status==0) return IOT_ERROR_TRY_AGAIN;  //request is not full yet or not confirmed
+	if(status==1) return 0;
+	return IOT_ERROR_BAD_REQUEST;
+}
+
 
 void iot_device_connection_t::c2d_ready(void) { //called by client after writing data to c2d stream buffer
 	assert(client_host==iot_current_hostid);
@@ -818,44 +972,6 @@ void iot_device_connection_t::c2d_ready(void) { //called by client after writing
 //void iot_device_connection_t::d2c_write_ready(void) { //called by client after reading data from d2c stream buffer if d2c.want_write is true
 //}
 
-
-void iot_device_connection_t::on_d2c_ready(void) { //processes IOT_MSG_CONNECTION_D2C_READY msg
-	assert(client_host==iot_current_hostid);
-	assert(state>=IOT_DEVCONN_READYDRV);
-
-	if(d2c.reader_closed) return; //client hasn't yet attached the connection or already closed
-
-	iot_modinstance_item_t *clinst=client.local.modinstlk.modinst;
-	assert(uv_thread_self()==clinst->thread->thread);
-
-	uint32_t sz, rval;
-	int status;
-
-	if(!clinst->is_working()) return;
-
-	if(c2d.want_write && c2d.buf.avail_write()>0) {
-		//TODO
-		assert(false);
-	}
-
-	do {
-		peek_msg<&iot_device_connection_t::d2c>(NULL, 0, sz, status);
-		if(!status || status==-2) break; //no full request
-		if(status<0) { //corrupted message, must be cleared
-			uint32_t left;
-			rval=read<&iot_device_connection_t::d2c>(NULL, sz, left, status);
-			assert(rval==sz && left==0 && status==-1);
-		} else {
-			assert(status==1 && sz>0);
-			uint32_t left;
-			char buf[sz];
-			rval=read<&iot_device_connection_t::d2c>(buf, sz, left, status);
-			assert(rval==sz && left==0 && status==1);
-			static_cast<iot_node_base*>(clinst->instance)->device_action(&clientview, IOT_DEVCONN_ACTION_MESSAGE, sz, buf);
-		}
-	} while(d2c.requests.load(std::memory_order_relaxed)>0); //have more incoming data
-}
-
 void iot_device_connection_t::on_c2d_ready(void) { //processes IOT_MSG_CONNECTION_C2D_READREADY msg
 	assert(driver_host==iot_current_hostid);
 	assert(state>=IOT_DEVCONN_READYDRV);
@@ -870,55 +986,52 @@ void iot_device_connection_t::on_c2d_ready(void) { //processes IOT_MSG_CONNECTIO
 
 	if(!drvinst->is_working()) return;
 
-	if(d2c.want_write && c2d.buf.avail_write()>0) {
-		//TODO
-		assert(false);
+	if(d2c.want_write && d2c.buf.avail_write()>0) {
+		static_cast<iot_device_driver_base*>(drvinst->instance)->device_action(&drvview, IOT_DEVCONN_ACTION_CANWRITE, 0, NULL);
 	}
 
-	do {
-		peek_msg<&iot_device_connection_t::c2d>(NULL, 0, sz, status);
-		if(!status || status==-2) break; //no full request
-		if(status<0) { //corrupted message, must be cleared
-			uint32_t left;
-			rval=read<&iot_device_connection_t::c2d>(NULL, sz, left, status);
-			assert(rval==sz && left==0 && status==-1);
-		} else {
-			assert(status==1 && sz>0);
-			uint32_t left;
-			char buf[sz];
-			rval=read<&iot_device_connection_t::c2d>(buf, sz, left, status);
-			assert(rval==sz && left==0 && status==1);
-			static_cast<iot_device_driver_base*>(drvinst->instance)->device_action(&drvview, IOT_DEVCONN_ACTION_MESSAGE, sz, buf);
+	peek_msg<&iot_device_connection_t::c2d>(NULL, 0, sz, status);
+
+	uint32_t wasspace=c2d.buf.avail_write();
+	if(status!=0) {
+		if(status==-2) { //there is half-read request, notify instance
+			static_cast<iot_device_driver_base*>(drvinst->instance)->device_action(&drvview, IOT_DEVCONN_ACTION_CANREADCONT, sz, NULL);
+			peek_msg<&iot_device_connection_t::c2d>(NULL, 0, sz, status); //repeat call on first iteration if we sent CANREAD notification, instance could read tail of request
 		}
-	} while(c2d.requests.load(std::memory_order_relaxed)>0); //have more incoming data
+
+		//read full requests
+		do {
+			if(!status || status==-2) break; //no full request
+			if(status<0) { //corrupted message, must be cleared
+				uint32_t left;
+				rval=read<&iot_device_connection_t::c2d>(NULL, sz, left, status);
+				assert(rval==sz && left==0 && status==-1);
+			} else {
+				assert(status==1 && sz>0);
+				uint32_t left;
+				alignas(8) char buf[sz];
+				rval=read<&iot_device_connection_t::c2d>(buf, sz, left, status);
+				assert(rval==sz && left==0 && status==1);
+				static_cast<iot_device_driver_base*>(drvinst->instance)->device_action(&drvview, IOT_DEVCONN_ACTION_FULLREQUEST, sz, buf);
+			}
+			peek_msg<&iot_device_connection_t::c2d>(NULL, 0, sz, status); //repeat call on first iteration if we sent CANREAD notification, instance could read tail of request
+		} while(c2d.requests.load(std::memory_order_relaxed)>0); //have more incoming data
+	}
+	if(status==0 && sz>0) { //there is half-written request, notify instance
+		static_cast<iot_device_driver_base*>(drvinst->instance)->device_action(&drvview, IOT_DEVCONN_ACTION_CANREADNEW, sz, NULL);
+	}
+	if(c2d.buf.avail_write()>wasspace) c2d.got_writespace=true; //got free space
+
+	if(c2d.want_write && c2d.got_writespace) { //client wants to know about free space for writing and driver freed some space
+		c2d.got_writespace=false; //reset to avoid endless ping-pong effect
+		d2c_ready();
+	}
 }
 
 
-//tries to write a message to driver's in-queue in full
-//returns:
-//0 - success
-//IOT_ERROR_INVALID_ARGS - datasize is zero
-//IOT_ERROR_TRY_AGAIN - not enough space in queue, but it can appear later (buffer size is enough)
-//IOT_ERROR_NO_BUFSPACE - not enough space in queue, and it cannot appear later (TODO use another type of call)
-//IOT_ERROR_NO_PEER - driver side of connection is closed
-int iot_device_connection_t::send_driver_message(const void* data, uint32_t datasize) { //can be called in client thread only
-	assert(client_host==iot_current_hostid);
-	assert(state>=IOT_DEVCONN_READYDRV);
-	if(c2d.reader_closed) return IOT_ERROR_NO_PEER; //driver already closed
-//		if(state!=IOT_DEVCONN_FULLREADY && state!=IOT_DEVCONN_READYDRV) return IOT_ERROR_NOT_READY;
-	assert(uv_thread_self()==client.local.modinstlk.modinst->thread->thread);
 
-	int err=send_message<&iot_device_connection_t::c2d>(data, datasize);
-	if(err) return err;
-	c2d_ready();
-//			if(driver_host==iot_current_hostid && clinst->thread==driver.local.modinstlk.modinst->thread) {
-//				//TODO use more optimal way (hack libuv?)
-//				uv_async_send(&c2d.read_ready);
-//			} else {
-//				uv_async_send(&c2d.read_ready);
-//			}
-	return 0;
-}
+
+
 
 //tries to write a message to clients's in-queue in full
 //returns:
@@ -946,76 +1059,159 @@ int iot_device_connection_t::send_client_message(const void* data, uint32_t data
 	return 0;
 }
 
+//can be called by DRIVER to enable/disable notifications about free write space in clients's buffer
+void iot_device_connection_t::client_write_avail_notify(bool want_write) {
+	assert(driver_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV || (state==IOT_DEVCONN_PENDING && d2c.buf.getsize()>0));
 
-//add request to client input buffer.
-//returns actually written bytes.
-//if returned value is less than sz (it cannot be greater) but > 0, request was not written entirely and additional calls 
-//to write_client_end() must be made to write full request
-//if 0 is returned, write_client_start() must be retried again (with another request if necessary)
-uint32_t iot_device_connection_t::write_client_start(const char *data, uint32_t sz, uint32_t fullsz) {
-	return write_start<&iot_device_connection_t::d2c>(data,sz,fullsz);
-}
-uint32_t iot_device_connection_t::write_driver_start(const char *data, uint32_t sz, uint32_t fullsz) {
-	return write_start<&iot_device_connection_t::c2d>(data,sz,fullsz);
+	assert(uv_thread_self()==driver.local.modinstlk.modinst->thread->thread);
+	if(d2c.want_write==want_write) return;
+	d2c.want_write=want_write;
+	if(!want_write) return;
+	if(state==IOT_DEVCONN_READYDRV) d2c_ready();
 }
 
-//read request FOR client (from driver)
-//status is returned after every call:
-// 0 - continue to call read_client (even if szleft is 0 status may be still unknown)
-// 1 - request fully read and it is good
-// -1 - request corrupted. return value can be any (new read_client call will read next request)
-//return value shows how many bytes were written into buf
-//szleft shows how many bytes of request left, so that necessary buffer could be provided in full. zero indicates that 
-//	either nothing to read, or request tail is still on its way to say if request is OK or corrupted
-uint32_t iot_device_connection_t::read_client(char *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
+//starts writing new request to client. if there is unfinished previous request, is will be marked as bad.
+//fulldatasize (defaults to datasize if zero) must specify full request data size, while datasize shows how many bytes are ready to be written.
+//So fulldatasize cannot be less than datasize, datasize cannot be 0 and fulldatasize cannot exceed or be equal to 1GB.
+//On success returns positive number of actually written bytes. If this number is less than fulldatasize, additional calls to continue_driver_request() must be done
+//On error result is negative error code:
+//	IOT_ERROR_NO_PEER - peer already closed connection
+//	IOT_ERROR_INVALID_ARGS
+//	IOT_ERROR_TRY_AGAIN - no space in buffer available. call can be retried (the same or a new one) after getting CANWRITE notification.
+int32_t iot_device_connection_t::start_client_request(const void* data, uint32_t datasize, uint32_t fulldatasize) { //can be called in driver thread only
+	assert(client_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV || (state==IOT_DEVCONN_PENDING && d2c.buf.getsize()>0));
+	assert(uv_thread_self()==driver.local.modinstlk.modinst->thread->thread);
+
+	if(d2c.reader_closed) return IOT_ERROR_NO_PEER; //driver already closed
+
+	if(!fulldatasize) fulldatasize=datasize;
+	if(!data || !datasize || fulldatasize<datasize || fulldatasize>0x3fffffff) return IOT_ERROR_INVALID_ARGS;
+
+	uint32_t rval=write_client_start(data, datasize, fulldatasize);
+	if(rval==0) return IOT_ERROR_TRY_AGAIN;
+
+	d2c_ready();
+
+	return int32_t(rval);
+}
+
+//continues writing request to client.
+//fulldatasize (defaults to datasize if zero) must specify full request data size, while datasize shows how many bytes are ready to be written.
+//On success returns positive number of actually written bytes (can be < datasize)
+//On error result is negative error code:
+//	IOT_ERROR_NO_PEER - peer already closed connection
+//	IOT_ERROR_INVALID_ARGS - invalid arguments OR there is NO unfinished request to continue OR excess data provided (written datasize + provided datasize exceed fulldatasize)
+//	IOT_ERROR_TRY_AGAIN - no space in buffer available. call must be retried after getting CANWRITE notification.
+int32_t iot_device_connection_t::continue_client_request(const void* data, uint32_t datasize) { //can be called in driver thread only
+	assert(client_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV || (state==IOT_DEVCONN_PENDING && d2c.buf.getsize()>0));
+	assert(uv_thread_self()==driver.local.modinstlk.modinst->thread->thread);
+
+	if(d2c.reader_closed) return IOT_ERROR_NO_PEER; //driver already closed
+
+	if(!data || !datasize) return IOT_ERROR_INVALID_ARGS;
+
+	uint32_t rval=write_client_end(data, datasize);
+	if(rval==0) return IOT_ERROR_TRY_AGAIN;
+	if(rval==0xffffffffu) return IOT_ERROR_INVALID_ARGS;
+
+	d2c_ready();
+
+	return int32_t(rval);
+}
+
+//read (or discard when buf==NULL) request for driver
+//buf can be NULL to discard read bytes of request.
+//bufsize can be 0 if only obtaining szleft is necessary
+//On exit dataread shows many bytes were written into buf (or discarded if buf is NULL), 
+//szleft shows how many bytes of request left (if IOT_ERROR_TRY_AGAIN is returned), so that necessary buffer could be provided in full. zero indicates that 
+//	either nothing to read, or request tail is still on its way to say if request is OK or corrupted.
+//Returns:
+//	0 - dataread bytes of request were read into buf (or discarded), request is complete and good
+//	IOT_ERROR_TRY_AGAIN - dataread bytes of request were read into buf (or discarded), request is incomplete (szleft bytes left to read) or no requests.
+//	IOT_ERROR_BAD_REQUEST - dataread bytes of request were read into buf (or discarded), request is complete but corrupted (writer didn't supplied enough bytes,
+//							so read data will contain zeros from some point and till the end)
+int iot_device_connection_t::read_driver_request(void* buf, uint32_t bufsize, uint32_t &dataread, uint32_t &szleft) { //can be called in driver thread only
+	assert(driver_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV || (state==IOT_DEVCONN_PENDING && d2c.buf.getsize()>0));
+	assert(uv_thread_self()==driver.local.modinstlk.modinst->thread->thread);
+
+	if(state<IOT_DEVCONN_READYDRV) { //client side not attached yet, so cannot have anything to read
+		dataread=0;
+		szleft=0;
+		return IOT_ERROR_TRY_AGAIN;
+	}
+	int status;
+	uint32_t rval=read_driver(buf, bufsize, szleft, status);
+	dataread=rval;
+	if(status==0) return IOT_ERROR_TRY_AGAIN;  //request is not full yet or not confirmed
+	if(status==1) return 0;
+	return IOT_ERROR_BAD_REQUEST;
+}
+
+
+void iot_device_connection_t::d2c_ready(void) { //called by driver after writing data to d2c stream buffer
+	assert(driver_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV);
+	assert(uv_thread_self()==driver.local.modinstlk.modinst->thread->thread);
+
+	iot_threadmsg_t *msg=d2c_ready_msg;
+	if(!msg) return; //message is already in fly
+
+	if(client_host==iot_current_hostid) {
+		int err=iot_prepare_msg(msg, IOT_MSG_CONNECTION_D2C_READY, NULL, 0, &connident, sizeof(connident), IOT_THREADMSG_DATAMEM_TEMP, true);
+		assert(err==0);
+		d2c_ready_msg=NULL;
+
+		client.local.modinstlk.modinst->thread->send_msg(msg);
+	} else if(client_host) {
+		//todo for remote
+		assert(false);
+	}
+}
+
+
+void iot_device_connection_t::on_d2c_ready(void) { //processes IOT_MSG_CONNECTION_D2C_READY msg
+	assert(client_host==iot_current_hostid);
+	assert(state>=IOT_DEVCONN_READYDRV);
+
+	if(d2c.reader_closed) return; //client hasn't yet attached the connection or already closed
+
+	iot_modinstance_item_t *clinst=client.local.modinstlk.modinst;
+	assert(uv_thread_self()==clinst->thread->thread);
+
+	uint32_t sz, rval;
+	int status;
+
+	if(!clinst->is_working()) return;
+
+	if(c2d.want_write && c2d.buf.avail_write()>0) {
+		static_cast<iot_node_base*>(clinst->instance)->device_action(&clientview, IOT_DEVCONN_ACTION_CANWRITE, 0, NULL);
+	}
+
 	uint32_t wasspace=d2c.buf.avail_write();
-	uint32_t res=read<&iot_device_connection_t::d2c>(buf, bufsz, szleft, status);
-	if(d2c.want_write && d2c.buf.avail_write()>wasspace) { //got free space
+	do {
+		peek_msg<&iot_device_connection_t::d2c>(NULL, 0, sz, status);
+		if(!status || status==-2) break; //no full request
+		if(status<0) { //corrupted message, must be cleared
+			uint32_t left;
+			rval=read<&iot_device_connection_t::d2c>(NULL, sz, left, status);
+			assert(rval==sz && left==0 && status==-1);
+		} else {
+			assert(status==1 && sz>0);
+			uint32_t left;
+			alignas(8) char buf[sz];
+			rval=read<&iot_device_connection_t::d2c>(buf, sz, left, status);
+			assert(rval==sz && left==0 && status==1);
+			static_cast<iot_node_base*>(clinst->instance)->device_action(&clientview, IOT_DEVCONN_ACTION_FULLREQUEST, sz, buf);
+		}
+	} while(d2c.requests.load(std::memory_order_relaxed)>0); //have more incoming data
+	if(d2c.buf.avail_write()>wasspace) d2c.got_writespace=true; //got free space
+
+	if(d2c.want_write && d2c.got_writespace) { //driver wants to know about free space for writing and client freed some space
+		d2c.got_writespace=false; //reset to avoid endless ping-pong effect
 		c2d_ready();
 	}
-	return res;
 }
-
-//Try to peek start of request for client. Returns zero and sets zero status if reading of some request has already begun
-//status is returned after every call:
-// 0 - request is not full
-// 1 - request fully read and it is good
-// -1 - request fully read and it is corrupted. return value can be any (new read_client call will read next request)
-//return value shows how many bytes were written into buf
-//szleft shows how many bytes of request left, so that necessary buffer could be provided in full. zero indicates that 
-//	either nothing to read, or request tail is still on its way to say if request is OK or corrupted
-//
-uint32_t iot_device_connection_t::peek_client_msg(char *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
-	return peek_msg<&iot_device_connection_t::d2c>(buf, bufsz, szleft, status);
-}
-
-
-//read request FOR driver
-uint32_t iot_device_connection_t::read_driver(char *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
-	uint32_t wasspace=c2d.buf.avail_write();
-	uint32_t res=read<&iot_device_connection_t::c2d>(buf, bufsz, szleft, status);
-	if(c2d.want_write && c2d.buf.avail_write()>wasspace) { //got free space
-		d2c_ready();
-	}
-	return res;
-}
-
-uint32_t iot_device_connection_t::peek_driver_msg(char *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
-	return peek_msg<&iot_device_connection_t::c2d>(buf, bufsz, szleft, status);
-}
-
-
-//write additional bytes of unfinished request to client input buffer.
-//returns actually written bytes.
-//returns 0xffffffff on error (if provided sz is greater then it should be accorting to write_client_start call params or
-//		just no active half-written request, new request should be started)
-uint32_t iot_device_connection_t::write_client_end(const char *data, uint32_t sz) {
-	return write_end<&iot_device_connection_t::d2c>(data,sz);
-}
-uint32_t iot_device_connection_t::write_driver_end(const char *data, uint32_t sz) {
-	return write_end<&iot_device_connection_t::c2d>(data,sz);
-}
-
-
-
-

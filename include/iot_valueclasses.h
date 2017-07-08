@@ -244,6 +244,13 @@ public:
 	constexpr bool operator!(void) const {
 		return custom_data==0;
 	}
+	constexpr bool value(void) const {
+		return custom_data==1;
+	}
+	static const iot_valueclass_boolean* cast(const iot_valueclass_BASE*val) { //if val is not NULL and has correct class, casts pointer to this class
+		if(val && val->get_classid()==IOT_VALUECLASSID_BOOLEAN) return static_cast<const iot_valueclass_boolean*>(val);
+		return NULL;
+	}
 	virtual const char* type_name(void) const { //must return short abbreviation of type name
 		return "Boolean";
 	}

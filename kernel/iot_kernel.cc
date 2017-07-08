@@ -423,7 +423,7 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						//state must be >= IOT_DEVCONN_READYDRV, so no lock is necessary as main thread cannot just close such connections
 //						conn->lock();
 
-						if(!conn->d2c_ready_msg) {iot_release_msg(msg, true); conn->d2c_ready_msg=msg;}
+						if(!conn->d2c_ready_msg) {iot_release_msg(msg, true); conn->d2c_ready_msg=msg; std::atomic_thread_fence(std::memory_order_release);}
 							else {assert(false);iot_release_msg(msg);}
 						msg=NULL;
 						conn->on_d2c_ready();
@@ -437,7 +437,7 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						//state must be >= IOT_DEVCONN_READYDRV, so no lock is necessary as main thread cannot just close such connections
 //						conn->lock();
 
-						if(!conn->c2d_ready_msg) {iot_release_msg(msg, true); conn->c2d_ready_msg=msg;}
+						if(!conn->c2d_ready_msg) {iot_release_msg(msg, true); conn->c2d_ready_msg=msg; std::atomic_thread_fence(std::memory_order_release);}
 							else {assert(false);iot_release_msg(msg);}
 						msg=NULL;
 						conn->on_c2d_ready();

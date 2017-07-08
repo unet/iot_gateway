@@ -117,6 +117,8 @@ private:
 	struct direction_state {
 		byte_fifo_buf buf; //ring buffer for communication. first side writes (client for c2d), second reads
 		bool want_write; //true if signal about free space in buf must be sent (can be configured by first side)
+		bool got_writespace; //set to true value by second side (reader) after each read which increases space for writes for first side. reset to false by 
+							//second side after notification scheduled because of want_write flag. initially true.
 		volatile bool reader_closed; //true if reading side (driver for c2d) already processed close of connection (connection must be in IOT_DEVCONN_CLOSED state)
 		packet_hdr read_head;
 		packet_tail write_pendingtail, read_pendingtail;
@@ -184,6 +186,21 @@ public:
 	void on_d2c_ready(void);
 //	void on_d2c_write_ready(void) {} //TODO
 
+	//can be called by CLIENT to enable/disable notifications about free write space in driver's buffer
+	void driver_write_avail_notify(bool want_write);
+	//can be called by DRIVER to enable/disable notifications about free write space in clients's buffer
+	void client_write_avail_notify(bool want_write);
+
+
+	int32_t start_driver_request(const void* data, uint32_t datasize, uint32_t fulldatasize);
+	int32_t continue_driver_request(const void* data, uint32_t datasize);
+	int read_client_request(void* buf, uint32_t bufsize, uint32_t &dataread, uint32_t &szleft);
+
+	int32_t start_client_request(const void* data, uint32_t datasize, uint32_t fulldatasize);
+	int32_t continue_client_request(const void* data, uint32_t datasize);
+	int read_driver_request(void* buf, uint32_t bufsize, uint32_t &dataread, uint32_t &szleft);
+
+
 private:
 
 	void d2c_ready(void); //called by driver after writing data to d2c stream buffer
@@ -196,7 +213,7 @@ private:
 	//tries to write a message to corresponding queue in full
 	//returns:
 	//0 - success
-	//IOT_ERROR_INVALID_ARGS - datasize is zero
+	//IOT_ERROR_INVALID_ARGS - datasize is zero or exceeds 0x3fffffff
 	//IOT_ERROR_TRY_AGAIN - not enough space in queue, but it can appear later (buffer size is enough)
 	//IOT_ERROR_NO_BUFSPACE - not enough space in queue, and it cannot appear later (TODO use another type of call)
 	template <direction_state iot_device_connection_t::*dir>
@@ -213,16 +230,16 @@ private:
 		return 0;
 	}
 
-	//add request to client input buffer.
+	//add request to client input buffer. fullsz if non-zero, can be >= sz and show size of full request in cases when provided data is only part of it
 	//returns actually written bytes.
-	//if returned value is less than sz (it cannot be greater) but > 0, request was not written entirely and additional calls 
+	//if returned value is less than fullsz (it cannot be greater) but != 0, request was not written entirely and additional calls 
 	//to write_client_end() must be made to write full request
-	//if 0 is returned, write_client_start() must be retried again (with another request if necessary)
+	//if 0 is returned, then either zero sz provided or write_client_start() must be retried again after getting CANWRITE (with another request if necessary)
 	template <direction_state iot_device_connection_t::*dir>
-	uint32_t write_start(const char *data, uint32_t sz, uint32_t fullsz=0) {
-		if(!fullsz) fullsz=sz;
-		assert(fullsz>1 && fullsz<=0x3fffffff && sz<=fullsz);
+	uint32_t write_start(const void *data, uint32_t sz, uint32_t fullsz=0) {
 		if(sz==0) return 0;
+		if(!fullsz) fullsz=sz;
+		assert(fullsz>0 && fullsz<=0x3fffffff && sz<=fullsz);
 		uint32_t rval;
 
 		if((this->*dir).write_size_left>sizeof(packet_tail)) { //pending request bytes and tail
@@ -258,7 +275,7 @@ private:
 		(this->*dir).write_size_left-=rval;
 		(this->*dir).write_pendingtail.committed_data_size=rval;
 		if((this->*dir).write_size_left==sizeof(packet_tail)) { //full request written, try to write tail
-			assert(rval==fullsz);
+			assert(rval==fullsz && sz==fullsz);
 			rval=(this->*dir).buf.write(&(this->*dir).write_pendingtail, sizeof(packet_tail));
 			(this->*dir).write_size_left-=rval;
 			if((this->*dir).write_size_left==0) {
@@ -268,7 +285,7 @@ private:
 			}
 			//here request written completely but no space for tail
 			assert((this->*dir).write_size_left<=sizeof(packet_tail)); //such condition indicates that only tail with full commit is pending
-			return sz==fullsz ? sz-1 : rval; //force user to call (this->*dir).write_end() when there is no space for tail. actually (this->*dir).write_start will also try to finish writing tail
+			return sz-1; //force user to call (this->*dir).write_end() when there is no space for tail. actually (this->*dir).write_start will also try to finish writing tail
 		}
 		//not full request written. (this->*dir).write_end must be called until it indicates full write
 		assert((this->*dir).write_size_left>sizeof(packet_tail));
@@ -276,13 +293,16 @@ private:
 	}
 
 	template <direction_state iot_device_connection_t::*dir>
-	uint32_t write_end(const char *data, uint32_t sz) {
+	uint32_t write_end(const void *data, uint32_t sz) {
 		if(sz==0) return 0;
 		uint32_t rval;
 		if((this->*dir).write_size_left>sizeof(packet_tail)) { //pending request bytes and tail
 			//here prev request was not written completely, user tries to finish it
-			assert((this->*dir).write_size_left-sizeof(packet_tail) >= sz);
-			if((this->*dir).write_size_left-sizeof(packet_tail) < sz) return 0xffffffff; //for release mode
+			if((this->*dir).write_size_left-sizeof(packet_tail) < sz) {
+				//excess data provided
+				assert(false);
+				return 0xffffffffu; //for release mode
+			}
 
 			rval=(this->*dir).buf.write(data, sz);
 			(this->*dir).write_size_left-=rval;
@@ -304,7 +324,7 @@ private:
 			}
 			//here request written completely but no space for tail
 			assert((this->*dir).write_size_left<=sizeof(packet_tail)); //such condition indicates that only tail with full commit is pending
-			return 0; //force user to call (this->*dir).write_end() again
+			return sz-1; //force user to call (this->*dir).write_end() again with sz==1
 		}
 		if((this->*dir).write_size_left==0) return 0xffffffff;
 		//tail must be retried. arguments ignored
@@ -324,7 +344,7 @@ private:
 //szleft shows how many bytes of request left, so that necessary buffer could be provided in full. zero indicates that 
 //	either nothing to read, or request tail is still on its way to say if request is OK or corrupted
 	template <direction_state iot_device_connection_t::*dir>
-	uint32_t read(char *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
+	uint32_t read(void *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
 		uint32_t rval;
 
 		if((this->*dir).read_size_left==0) {
@@ -390,12 +410,12 @@ private:
 //Returned in args:
 //szleft - show how many bytes left to read to finish reading of current request. can be zero if no requests or packet head is not full
 //status:
-//	0 - there is nothing to read (returned value will be zero) or current request was not read comletely (no data or provided space in buffer is not enough)
+//	0 - there is nothing to read (returned value will be zero) or current request was not read comletely (not full data was written or provided space in buffer is not enough)
 //	1 - request if fully read (or can be fully read with non-NULL buf) and it is good (not corrupted)
 //	-1 - request is fully read (or can be fully read with non-NULL buf) and it is corrupted (so returned data must be discarded)
 //	-2 - there is half-written request. Only szleft is meaningful and shows how many bytes must be read to read the rest (it can be zero if only packet tail is pending).
 	template <direction_state iot_device_connection_t::*dir>
-	uint32_t peek_msg(char *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
+	uint32_t peek_msg(void *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
 		uint32_t rval;
 
 		if((this->*dir).read_size_left>0) {
@@ -439,12 +459,11 @@ private:
 		} else { //skip size of whole packet if possible
 			rval=(this->*dir).buf.peek(NULL, head.data_size, sizeof(packet_hdr));
 			left-=rval;
+			szleft=head.data_size;
 			if(left>sizeof(packet_tail)) { //still not finished. request to retry
-				szleft=0;
 				status=0;
 				return wasread;
 			}
-			szleft=head.data_size;
 		}
 
 		//request finished
@@ -471,24 +490,76 @@ private:
 	//if returned value is less than sz (it cannot be greater) but > 0, request was not written entirely and additional calls 
 	//to write_client_end() must be made to write full request
 	//if 0 is returned, write_client_start() must be retried again (with another request if necessary)
-	uint32_t write_client_start(const char *data, uint32_t sz, uint32_t fullsz=0);
-	//add request to driver input buffer.
-	uint32_t write_driver_start(const char *data, uint32_t sz, uint32_t fullsz=0);
+	uint32_t write_client_start(const void *data, uint32_t sz, uint32_t fullsz=0) {
+		return write_start<&iot_device_connection_t::d2c>(data,sz,fullsz);
+	}
 
 	//write additional bytes of unfinished request to client input buffer.
 	//returns actually written bytes.
 	//returns 0xffffffff on error (if provided sz is greater then it should be accorting to write_client_start call params or
-	//		just no active half-written request, new request should be started)
-	uint32_t write_client_end(const char *data, uint32_t sz);
+	//		just no active half-written request and new request should be started)
+	uint32_t write_client_end(const void *data, uint32_t sz) {
+		return write_end<&iot_device_connection_t::d2c>(data,sz);
+	}
+
+	//read request FOR client (from driver)
+	//status is returned after every call:
+	// 0 - continue to call read_client (even if szleft is 0 status may be still unknown)
+	// 1 - request fully read and it is good
+	// -1 - request corrupted. return value can be any (new read_client call will read next request)
+	//return value shows how many bytes were written into buf
+	//szleft shows how many bytes of request left, so that necessary buffer could be provided in full. zero indicates that 
+	//	either nothing to read, or request tail is still on its way to say if request is OK or corrupted
+	uint32_t read_client(void *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
+		uint32_t wasspace=d2c.buf.avail_write();
+		uint32_t res=read<&iot_device_connection_t::d2c>(buf, bufsz, szleft, status);
+		if(d2c.buf.avail_write()>wasspace) { //got free space
+			d2c.got_writespace=true;
+			if(d2c.want_write) c2d_ready(); //notify driver instance about free space in client's buffer
+		}
+		return res;
+	}
+	//Try to peek start of request for client. Returns zero and sets zero status if reading of some request has already begun
+	//status is returned after every call:
+	// 0 - request is not full
+	// 1 - request fully read and it is good
+	// -1 - request fully read and it is corrupted. return value can be any (new read_client call will read next request)
+	//return value shows how many bytes were written into buf
+	//szleft shows how many bytes of request left, so that necessary buffer could be provided in full. zero indicates that 
+	//	either nothing to read, or request tail is still on its way to say if request is OK or corrupted
+	//
+	uint32_t peek_client_msg(void *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
+		return peek_msg<&iot_device_connection_t::d2c>(buf, bufsz, szleft, status);
+	}
+
+	//add request to driver input buffer.
+	//returns actually written bytes.
+	//if returned value is less than sz (it cannot be greater) but > 0, request was not written entirely and additional calls 
+	//to write_driver_end() must be made to write full request
+	//if 0 is returned, write_driver_start() must be retried again (with another request if necessary)
+	uint32_t write_driver_start(const void *data, uint32_t sz, uint32_t fullsz=0) {
+		return write_start<&iot_device_connection_t::c2d>(data,sz,fullsz);
+	}
+
 	//write additional bytes of unfinished request to driver input buffer.
-	uint32_t write_driver_end(const char *data, uint32_t sz);
+	uint32_t write_driver_end(const void *data, uint32_t sz) {
+		return write_end<&iot_device_connection_t::c2d>(data,sz);
+	}
 
-	uint32_t read_client(char *buf, uint32_t bufsz, uint32_t &szleft, int &status);
-	uint32_t peek_client_msg(char *buf, uint32_t bufsz, uint32_t &szleft, int &status);
+	//read request FOR driver
+	uint32_t read_driver(void *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
+		uint32_t wasspace=c2d.buf.avail_write();
+		uint32_t res=read<&iot_device_connection_t::c2d>(buf, bufsz, szleft, status);
+		if(c2d.buf.avail_write()>wasspace) { //got free space
+			c2d.got_writespace=true;
+			if(c2d.want_write) d2c_ready();
+		}
+		return res;
+	}
 
-	uint32_t read_driver(char *buf, uint32_t bufsz, uint32_t &szleft, int &status);
-	uint32_t peek_driver_msg(char *buf, uint32_t bufsz, uint32_t &szleft, int &status);
-
+	uint32_t peek_driver_msg(void *buf, uint32_t bufsz, uint32_t &szleft, int &status) {
+		return peek_msg<&iot_device_connection_t::c2d>(buf, bufsz, szleft, status);
+	}
 
 };
 
