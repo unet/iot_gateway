@@ -9,26 +9,10 @@
 
 #define IOTCONFIG_PATH "config.json"
 
-#include <iot_module.h>
+#include "iot_module.h"
 #include <mhbtree.h>
-#include <kernel/iot_common.h>
+#include "iot_common.h"
 
-#define IOT_JSONPARSE_UINT(jsonval, typename, varname) { \
-	if(typename ## _MAX == UINT32_MAX) {		\
-		errno=0;	\
-		int64_t i64=json_object_get_int64(jsonval);		\
-		if(!errno && i64>0 && i64<=UINT32_MAX) varname=(typename)i64;	\
-	} else if(typename ## _MAX == UINT64_MAX) {							\
-		uint64_t u64=iot_strtou64(json_object_get_string(jsonval), NULL, 10);	\
-		if(!errno && u64>0 && (u64<INT64_MAX || json_object_is_type(jsonval, json_type_string))) varname=(typename)(u64);	\
-	} else if(typename ## _MAX == UINT16_MAX || typename ## _MAX == UINT8_MAX) {							\
-		errno=0;	\
-		int i=json_object_get_int(jsonval);		\
-		if(!errno && i>0 && (uint32_t)i <= typename ## _MAX) varname=(typename)i;	\
-	} else {	\
-		assert(false);	\
-	}	\
-}
 
 
 struct iot_config_item_node_t;
@@ -51,10 +35,12 @@ extern iot_configregistry_t* config_registry;
 #define IOT_CONFIG_NODE_ERROUT_INDEX 255
 
 
-#include<kernel/iot_deviceregistry.h>
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_kernel.h>
-#include<kernel/iot_configmodel.h>
+#include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_kernel.h"
+#include "iot_configmodel.h"
+
+
 
 //keeps current mode for each group
 struct iot_config_item_group_t {
@@ -66,6 +52,20 @@ struct iot_config_item_group_t {
 	time_t modes_modtime;
 	time_t active_set;
 	iot_id_t modes[IOT_CONFIG_MAX_MODES_PER_GROUP]; //array with list of possible modes not including default mode
+};
+
+
+struct iot_config_item_rule_t {
+	iot_id_t rule_id;
+
+	iot_id_t mode_id; //can be zero for links from group-common rules
+	iot_config_item_group_t *group_item; //must point to structure corresponding to group_id
+
+	bool is_del;
+
+	bool is_active(void) const {
+		return group_item && (!mode_id || group_item->activemode_id==mode_id);
+	}
 };
 
 
@@ -131,7 +131,7 @@ struct iot_config_node_dev_t {
 	iot_config_node_dev_t* next; //next pointer in parent node dev list
 	char label[IOT_CONFIG_DEVLABEL_MAXLEN+1]; //up to 7 chars
 	uint8_t numidents, maxidents; //actual number of items in idents, number of allocated items
-	iot_hwdev_ident_t idents[]; //array of hwdev filters set by user. internal ident[i].dev iot_hwdev_localident_t structure or host can be a template
+	iot_hwdev_ident_buffered idents[]; //array of hwdev filters set by user. internal ident[i].dev iot_hwdev_localident_t structure or host can be a template
 };
 
 //represents user configuration node item
@@ -140,8 +140,10 @@ struct iot_config_item_node_t {
 	iot_config_item_host_t* host=NULL;
 	uint32_t module_id=0;
 
-	iot_id_t mode_id=0; //zero for persistent nodes. can be zero for temporary nodes (which are group-common)
-	iot_config_item_group_t *group_item=NULL; //must point to structure corresponding to group_id for temporary nodes, NULL for persistent
+	iot_config_item_rule_t* rule_item=NULL; //parent rule. can be NULL if node is persistent or temporary but rule-independent (in particular rules can be totally unused)
+
+//	iot_id_t mode_id=0; //zero for persistent nodes. can be zero for temporary nodes (which are group-common)
+//	iot_config_item_group_t *group_item=NULL; //must point to structure corresponding to group_id for temporary nodes, NULL for persistent
 
 	uint32_t cfg_id=0; //node config number when props were updated last time
 
@@ -231,8 +233,10 @@ struct iot_config_item_link_t {
 	iot_config_node_in_t* in;
 	iot_config_node_out_t* out;
 
-	iot_id_t mode_id; //can be zero for links from group-common rules
-	iot_config_item_group_t *group_item; //must point to structure corresponding to group_id
+	iot_config_item_rule_t* rule; //parent rule. can be NULL if link is rule-independent (in particular rules can be totally unused)
+
+//	iot_id_t mode_id; //can be zero for links from group-common rules
+//	iot_config_item_group_t *group_item; //must point to structure corresponding to group_id
 
 	const iot_msgclass_BASE* current_msg;//can be assigned for valid link only
 	const iot_msgclass_BASE* prev_msg; //if new msg comes when current_msg is not NULL, value from current_msg goes here. can be assigned for valid link only
@@ -249,7 +253,7 @@ public:
 	void validate(void) {
 		if(is_valid) return;
 		assert(in && out && in->is_msg()==out->is_msg());
-		assert(group_item && (!mode_id || group_item->activemode_id==mode_id));
+		assert(!rule || rule->is_active());
 		is_valid=true;
 		in->is_connected=out->is_connected=true;
 		if(out!=&out->node->erroutput) out->node->outputs_connected=true;
@@ -278,7 +282,7 @@ public:
 		}
 	}
 	void check_validity(void) {
-		if(!in || !out || in->is_msg()!=out->is_msg() || !group_item || (mode_id && group_item->activemode_id!=mode_id)) {invalidate();return;}
+		if(!in || !out || in->is_msg()!=out->is_msg() || (rule && !rule->is_active())) {invalidate();return;}
 		if(in->real_index>=0 && out->real_index>=0 && out->node->nodemodel && in->node->nodemodel) { //can compare data types
 			if(in->is_value()) {
 				if(!out->node->nodemodel->node_iface->valueoutput[out->real_index].is_compatible(&in->node->nodemodel->node_iface->valueinput[in->real_index])) {invalidate();return;}
@@ -317,6 +321,7 @@ private:
 
 	MemHBTree<iot_config_item_node_t*, iot_id_t, 0, 0, true, 10> nodes_index;
 	MemHBTree<iot_config_item_link_t*, iotlink_id_t, 0, 0, true, 10> links_index;
+	MemHBTree<iot_config_item_rule_t*, iot_id_t, 0, 0, true, 10> rules_index;
 
 	uint32_t nodecfg_id=0, hostcfg_id=0, modecfg_id=0, owncfg_modtime=0; //current numbers of config parts
 
@@ -398,6 +403,27 @@ public:
 		}
 	}
 
+//rule management
+	iot_config_item_rule_t* rule_find(iot_id_t ruleid) {
+		iot_config_item_rule_t** rule=NULL;
+		int res=rules_index.find(ruleid, &rule);
+		assert(res>=0);
+		if(res<=0) return NULL;
+		assert(*rule!=NULL);
+		return *rule;
+	}
+	int rule_update(iot_id_t ruleid, json_object* obj);
+	void rules_markdel(void) { //set is_del mark for all groups
+		iot_config_item_rule_t** rule=NULL;
+		decltype(rules_index)::treepath path;
+		int res=rules_index.get_first(NULL, &rule, path);
+		assert(res>=0);
+		while(res==1) {
+			(*rule)->is_del=true;
+			res=rules_index.get_next(NULL, &rule, path);
+		}
+	}
+
 //link management
 	iot_config_item_link_t* link_find(iotlink_id_t linkid) {
 		iot_config_item_link_t** lnk=NULL;
@@ -418,6 +444,7 @@ public:
 			res=links_index.get_next(NULL, &lnk, path);
 		}
 	}
+
 
 //node management
 	iot_config_item_node_t* node_find(iot_id_t nodeid) {
@@ -449,7 +476,7 @@ public:
 		uint64_t low=((tv.tv_sec-1000000000)*1000000+tv.tv_usec)*1000;
 		if(last_eventid_numerator < low) last_eventid_numerator=low;
 			else last_eventid_numerator++;
-printf("EVENT %lu allocated\n", last_eventid_numerator);
+printf("EVENT %" PRIu64 " allocated\n", last_eventid_numerator);
 		return last_eventid_numerator;
 	}
 	void inject_negative_signal(iot_modelnegsignal* neg) { //notification from sync node about 'no updates'
@@ -1064,9 +1091,6 @@ printf("Node %" IOT_PRIiotid " blocked\n", dnode->node_id);
 		return NULL;
 	}
 };
-
-
-
 
 
 #endif //IOT_CONFIGREGISTRY_H

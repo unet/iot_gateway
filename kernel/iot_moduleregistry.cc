@@ -3,14 +3,14 @@
 //#include<time.h>
 #include <new>
 
-#include<iot_module.h>
-#include<iot_utils.h>
-#include<kernel/iot_daemonlib.h>
-#include<kernel/iot_deviceregistry.h>
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_configregistry.h>
-#include<kernel/iot_peerconnection.h>
-#include<kernel/iot_kernel.h>
+#include "iot_module.h"
+#include "iot_utils.h"
+#include "iot_daemonlib.h"
+#include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_configregistry.h"
+#include "iot_peerconnection.h"
+#include "iot_kernel.h"
 
 
 #define IOT_MODULESDB_BUNDLE_OBJ(vendor, bundle) ECB_CONCAT(iot_moddb_bundle_, ECB_CONCAT(vendor, ECB_CONCAT(__, bundle)))
@@ -18,10 +18,10 @@
 
 #define UV_LIB_INIT {NULL, NULL}
 
-#include "bundles-db.h"	
+#include "iot_bundlesdb.h"
 
 static iot_modulesdb_item_t modules_db[]={
-#include "modules-db.h"	
+#include "iot_modulesdb.h"
 };
 
 #define MODULES_DB_ITEMS (sizeof(modules_db)/sizeof(modules_db[0]))
@@ -62,7 +62,7 @@ static int bundlepath2symname(const char *path, char *buf, size_t bufsz) {
 	return int(cur-buf);
 }
 
-const iot_hwdevident_iface* iot_hwdev_localident_t::find_iface(bool tryload) const { //searches for connection type interface class realization in local registry
+/*const iot_hwdevident_iface* iot_hwdev_localident_t::find_iface(bool tryload) const { //searches for connection type interface class realization in local registry
 	//must run in main thread if tryload is true
 	//returns NULL if interface not found or cannot be loaded
 	if(contype==IOT_DEVCONTYPE_ANY) return NULL;
@@ -70,41 +70,17 @@ const iot_hwdevident_iface* iot_hwdev_localident_t::find_iface(bool tryload) con
 	if(it && it->iface->is_valid(this)) return it->iface;
 	return NULL;
 }
-
-const iot_devifacetype_iface* iot_devifacetype::find_iface(bool tryload) const { //searches for connection type interface class realization in local registry
+*/
+/*const iot_devifacetype_iface* iot_devifacetype::find_iface(bool tryload) const { //searches for connection type interface class realization in local registry
 	//must run in main thread if tryload is true
 	//returns NULL if interface not found or cannot be loaded
-	iot_devifaceclass_item_t* it=modules_registry->find_devifaceclass(classid, tryload);
-	if(it && it->iface->is_valid(this)) return it->iface;
+//	iot_devifaceclass_item_t* it=modules_registry->find_devifaceclass(classid, tryload);
+//	if(it && it->iface->is_valid(this)) return it->iface;
+	iot_devifacetype_iface* it=modules_registry->find_deviface(classid, tryload);
+	if(it && it->is_valid(this)) return it;
 	return NULL;
 }
-
-bool iot_hwdevident_iface::restore_from_json(json_object* obj, iot_hwdev_ident_t &dev_ident) { //returns true if data was correct and dev_ident filled with valid info
-		json_object* val=NULL;
-		iot_hostid_t hostid=IOT_HOSTID_ANY;
-		if(json_object_object_get_ex(obj, "host_id", &val)) { //zero or absent value leaves IOT_HOSTID_ANY
-			uint64_t u64=iot_strtou64(json_object_get_string(val), NULL, 10);
-			if(!errno && u64>0 && (u64<INT64_MAX || json_object_is_type(val, json_type_string))) hostid=iot_hostid_t(u64);
-		}
-		iot_hwdevcontype_t contype=IOT_DEVCONTYPE_ANY;
-		if(json_object_object_get_ex(obj, "conntype_id", &val)) { //zero or absent value leaves IOT_DEVCONTYPE_ANY
-			errno=0;
-			int64_t i64=json_object_get_int64(val);
-			if(!errno && i64>0 && i64<=UINT32_MAX) {
-				contype=iot_hwdevcontype_t(i64);
-				iot_devcontype_item_t* it=modules_registry->find_devcontype(contype, true);
-				if(!it) return false; //connection type unknown
-				val=NULL;
-				json_object_object_get_ex(obj, "ident", &val);
-				if(!it->iface->from_json(val, dev_ident.dev.data)) return false;
-			}
-		}
-		//OK
-		dev_ident.dev.contype=contype;
-		dev_ident.dev.detector_module_id=0;
-		dev_ident.hostid=hostid;
-		return true;
-}
+*/
 
 
 void iot_modules_registry_t::create_detector_modinstance(iot_module_item_t* module) {
@@ -126,7 +102,7 @@ void iot_modules_registry_t::create_detector_modinstance(iot_module_item_t* modu
 		err=iface->check_system();
 		if(err) {
 			if(err!=IOT_ERROR_DEVICE_NOT_SUPPORTED)
-				outlog_error("Detector module '%s::%s' with ID %u got error during check_system: %s", module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+				outlog_error("Detector module '%s::%s' with ID %u got error during check_system: %s", module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 
 			if(err!=IOT_ERROR_TEMPORARY_ERROR || module->errors[type]>10) {
 				module->state[type]=IOT_MODULESTATE_DISABLED;
@@ -146,7 +122,7 @@ void iot_modules_registry_t::create_detector_modinstance(iot_module_item_t* modu
 	err=iface->init_instance(&inst, thread->thread);
 	if(err) {
 		if(err!=IOT_ERROR_DEVICE_NOT_SUPPORTED)
-			outlog_error("Detector instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+			outlog_error("Detector instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 
 		if(err!=IOT_ERROR_TEMPORARY_ERROR || module->errors[type]>10) {
 			module->state[type]=IOT_MODULESTATE_DISABLED;
@@ -156,7 +132,7 @@ void iot_modules_registry_t::create_detector_modinstance(iot_module_item_t* modu
 	}
 	if(!inst) {
 		//no error and no instance. this is a bug
-		outlog_error("Detector instance init for module '%s::%s' with ID %u returned NULL pointer. This is a bug.",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
+		outlog_error("Detector instance init for module '%s::%s' with ID %u returned NULL pointer. This is a bug.",module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id);
 		module->state[type]=IOT_MODULESTATE_DISABLED;
 		goto onerr;
 	}
@@ -180,7 +156,7 @@ onerr:
 	else {
 		if(inst) {
 			if((err=iface->deinit_instance(inst))) { //any error from deinit is critical bug
-				outlog_error("%s instance DEinit for module '%s::%s' with ID %u returned error: %s. Module is blocked.",iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+				outlog_error("%s instance DEinit for module '%s::%s' with ID %u returned error: %s. Module is blocked.",iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 				module->state[type]=IOT_MODULESTATE_DISABLED;
 				iot_process_module_bug(module);
 			}
@@ -203,10 +179,10 @@ int iot_module_item_t::try_driver_create(iot_hwdevregistry_item_t* hwdev) { //ma
 	int err=0;
 
 	if(drv_iface->check_device) { //use this func for precheck if available
-		err=drv_iface->check_device(&hwdev->devdata);
+		err=drv_iface->check_device(&hwdev->dev_ident, hwdev->dev_data);
 		if(err) {
 			if(err==IOT_ERROR_DEVICE_NOT_SUPPORTED) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
-			outlog_error("Driver module '%s::%s' with ID %u got error during check_device: %s", dbitem->bundle->name, dbitem->module_name, config->module_id, kapi_strerror(err));
+			outlog_error("Driver module '%s::%s' with ID %u got error during check_device: %s", dbitem->bundle->name, dbitem->module_name, dbitem->module_id, kapi_strerror(err));
 			if(err==IOT_ERROR_INVALID_DEVICE_DATA) return IOT_ERROR_DEVICE_NOT_SUPPORTED; //such errors should be logged, but irrelevant for caller of this func
 
 			if(err==IOT_ERROR_CRITICAL_BUG || err!=IOT_ERROR_TEMPORARY_ERROR || errors[IOT_MODINSTTYPE_DRIVER]>10) {
@@ -283,18 +259,31 @@ void iot_module_item_t::recheck_job(bool no_jobs) { //reschedules timers and/or 
 }
 
 
-void iot_modules_registry_t::start(const iot_devifacetype_iface** devifaceclscfg, uint32_t num_devifaces,const iot_hwdevident_iface** devcontypescfg, uint32_t num_contypes) {
+void iot_modules_registry_t::start(json_object* typesdb) {
 	assert(uv_thread_self()==main_thread);
 
+	if(typesdb) {
+		if(json_object_object_get_ex(typesdb, "conntypes", &conntypes_table)) {
+			if(!json_object_is_type(conntypes_table,  json_type_object)) {
+				outlog_error("Invalid data in types DB! Top level 'conntypes' item must be a JSON-object");
+				conntypes_table=NULL;
+			} else {
+				json_object_get(conntypes_table);
+			}
+		}
+		if(json_object_object_get_ex(typesdb, "ifacetypes", &ifacetypes_table)) {
+			if(!json_object_is_type(ifacetypes_table,  json_type_object)) {
+				outlog_error("Invalid data in types DB! Top level 'ifacetypes' item must be a JSON-object");
+				ifacetypes_table=NULL;
+			} else {
+				json_object_get(ifacetypes_table);
+			}
+		}
+	}
+
+	register_pending_metaclasses(); //register built-in devifaces and from statically linked bundles
+
 	int err;
-	err=register_devifaceclasses(devifaceclscfg, num_devifaces, 0);
-	if(err) {
-		outlog_error("No memory to register all built-in Device Iface Classes");
-	}
-	err=register_devcontypes(devcontypescfg, num_contypes, 0);
-	if(err) {
-		outlog_error("No memory to register all built-in Device Connection Types");
-	}
 
 	for(unsigned i=0;i<MODULES_DB_ITEMS;i++) {
 		if(!modules_db[i].autoload)	continue;
@@ -314,9 +303,99 @@ void iot_modules_registry_t::start(const iot_devifacetype_iface** devifaceclscfg
 
 void iot_modules_registry_t::stop(void) {
 	//TODO
+	if(conntypes_table) {
+		json_object_put(conntypes_table);
+		conntypes_table=NULL;
+	}
 }
 
-int iot_modules_registry_t::register_devifaceclasses(const iot_devifacetype_iface** iface, uint32_t num, uint32_t module_id) { //main thread
+void iot_modules_registry_t::register_pending_metaclasses(void) {
+	assert(uv_thread_self()==main_thread);
+	iot_devifacetype_metaclass* &ifacetype_head=devifacetype_pendingreg_head(), *ifacetype_next;
+	while(ifacetype_head) {
+		const iot_devifacetype_metaclass* cur=devifacetypes_head;
+		while(cur) {
+			if(cur==ifacetype_head) {
+				char namebuf[256];
+				outlog_error("Double instanciation of Device Iface Type %s!", ifacetype_head->get_fullname(namebuf, sizeof(namebuf)));
+				assert(false);
+				return;
+			}
+			cur=cur->next;
+		}
+
+		ifacetype_next=ifacetype_head->next;
+
+		if(!ifacetype_head->get_ifacetype_id()) {
+			const char* vendor=ifacetype_head->get_vendor();
+			const char* name=ifacetype_head->get_name();
+			if(!vendor) {
+				outlog_error("Built-in device interface type '%s' has zero type ID", name);
+			} else {
+				char key[256];
+				snprintf(key, sizeof(key), "%s:%s", vendor, name);
+				iot_type_id_t type_id=0;
+				if(ifacetypes_table) {
+					json_object* val=NULL;
+					if(json_object_object_get_ex(ifacetypes_table, key, &val)) {
+						IOT_JSONPARSE_UINT(val, iot_type_id_t, type_id);
+					}
+				}
+				if(!type_id) {
+					outlog_error("Cannot find device interface type ID for '%s' in types DB", key);
+				} else {
+					ifacetype_head->set_ifacetype_id(type_id);
+				}
+			}
+		}
+		BILINKLIST_INSERTHEAD(ifacetype_head, devifacetypes_head, next, prev);
+
+		ifacetype_head=ifacetype_next;
+	}
+
+	iot_hwdevcontype_metaclass*& contype_head=devcontype_pendingreg_head(), *contype_next;
+	while(contype_head) {
+		const iot_hwdevcontype_metaclass* cur=devcontypes_head;
+		while(cur) {
+			if(cur==contype_head) {
+				char namebuf[256];
+				outlog_error("Double instanciation of Device Connection Type %s!", contype_head->get_fullname(namebuf, sizeof(namebuf)));
+				assert(false);
+				return;
+			}
+			cur=cur->next;
+		}
+
+		contype_next=contype_head->next;
+		if(!contype_head->get_contype_id()) {
+			const char* vendor=contype_head->get_vendor();
+			const char* name=contype_head->get_name();
+			if(!vendor) {
+				outlog_error("Built-in device connection type '%s' has zero type ID", name);
+			} else {
+				char key[256];
+				snprintf(key, sizeof(key), "%s:%s", vendor, name);
+				iot_type_id_t type_id=0;
+				if(conntypes_table) {
+					json_object* val=NULL;
+					if(json_object_object_get_ex(conntypes_table, key, &val)) {
+						IOT_JSONPARSE_UINT(val, iot_type_id_t, type_id);
+					}
+				}
+				if(!type_id) {
+					outlog_error("Cannot find device connection type ID for '%s' in types DB", key);
+				} else {
+					contype_head->set_contype_id(type_id);
+				}
+			}
+		}
+		BILINKLIST_INSERTHEAD(contype_head, devcontypes_head, next, prev);
+		contype_head=contype_next;
+	}
+
+}
+
+/*int iot_modules_registry_t::register_devifaceclasses(const iot_devifacetype_iface** iface, uint32_t num, uint32_t module_id) { //main thread
 	//zero module_id is used for built-in device iface classes. It can be used to config class IDs from other modules
 	assert(uv_thread_self()==main_thread);
 	assert(iface!=NULL || num==0);
@@ -342,8 +421,8 @@ int iot_modules_registry_t::register_devifaceclasses(const iot_devifacetype_ifac
 	}
 	return 0;
 }
-
-int iot_modules_registry_t::register_devcontypes(const iot_hwdevident_iface** iface, uint32_t num, uint32_t module_id) { //main thread
+*/
+/*int iot_modules_registry_t::register_devcontypes(const iot_hwdevident_iface** iface, uint32_t num, uint32_t module_id) { //main thread
 	//zero module_id is used for built-in conn types. It can be used to config class IDs from other modules
 	assert(uv_thread_self()==main_thread);
 	assert(iface!=NULL || num==0);
@@ -369,7 +448,7 @@ int iot_modules_registry_t::register_devcontypes(const iot_hwdevident_iface** if
 	}
 	return 0;
 }
-
+*/
 
 //returns error code:
 //0 - success
@@ -403,6 +482,7 @@ int iot_modules_registry_t::load_module(int module_index, uint32_t module_id, io
 			strcpy(buf,"SELF");
 		} else { //module is in external library
 			snprintf(buf, sizeof(buf), "%smodules/%s%s", rootpath, modules_db[module_index].bundle->name, IOT_SOEXT);
+
 			modules_db[module_index].bundle->hmodule=dlopen(buf, RTLD_NOW | RTLD_GLOBAL);
 		}
 		if(!modules_db[module_index].bundle->hmodule) {
@@ -410,6 +490,7 @@ int iot_modules_registry_t::load_module(int module_index, uint32_t module_id, io
 			modules_db[module_index].bundle->error=true;
 			return IOT_ERROR_CRITICAL_ERROR;
 		}
+		modules_registry->register_pending_metaclasses(); //register devifaces from just linked bundles
 	}
 	//bundle is loaded
 	//load symbol with module config
@@ -445,10 +526,10 @@ int iot_modules_registry_t::load_module(int module_index, uint32_t module_id, io
 int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem) {
 	assert(uv_thread_self()==main_thread);
 
-	if(dbitem->module_id != cfg->module_id) {
-		outlog_error("Module '%s::%s' ID %u from executable does not match value %u from DB", dbitem->bundle->name, dbitem->module_name, cfg->module_id, dbitem->module_id);
-		return IOT_ERROR_CRITICAL_ERROR;
-	}
+//	if(dbitem->module_id != cfg->module_id) {
+//		outlog_error("Module '%s::%s' ID %u from executable does not match value %u from DB", dbitem->bundle->name, dbitem->module_name, cfg->module_id, dbitem->module_id);
+//		return IOT_ERROR_CRITICAL_ERROR;
+//	}
 	assert(dbitem->item==NULL);
 
 	iot_module_item_t* item=new iot_module_item_t(cfg, dbitem);
@@ -459,7 +540,7 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 	if(cfg->init_module) {
 		err=cfg->init_module();
 		if(err) {
-			outlog_error("Error initializing module '%s::%s' with ID %u: %s", dbitem->bundle->name, dbitem->module_name, cfg->module_id, kapi_strerror(err));
+			outlog_error("Error initializing module '%s::%s' with ID %u: %s", dbitem->bundle->name, dbitem->module_name, dbitem->module_id, kapi_strerror(err));
 			delete item;
 			return IOT_ERROR_NOT_INITED;
 		}
@@ -468,13 +549,13 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 	BILINKLIST_INSERTHEAD(item, all_head, next, prev);
 
 	//register provided custom device connection types
-	if(cfg->devcontype_config && cfg->num_devcontypes>0) {
-		register_devcontypes(cfg->devcontype_config, cfg->num_devcontypes, cfg->module_id);
-	}
+//	if(cfg->devcontype_config && cfg->num_devcontypes>0) {
+//		register_devcontypes(cfg->devcontype_config, cfg->num_devcontypes, dbitem->module_id);
+//	}
 
 	if(cfg->iface_device_detector) {
 		if(!cfg->iface_device_detector->init_instance || !cfg->iface_device_detector->deinit_instance) {
-			outlog_error("Module '%s::%s' with ID %u has incomplete detector interface", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
+			outlog_error("Module '%s::%s' with ID %u has incomplete detector interface", dbitem->bundle->name, dbitem->module_name, dbitem->module_id);
 		} else {
 			item->state[IOT_MODINSTTYPE_DETECTOR]=IOT_MODULESTATE_OK;
 			BILINKLIST_INSERTHEAD(item, detectors_head, next_detector, prev_detector);
@@ -482,7 +563,7 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 	}
 	if(cfg->iface_device_driver) {
 		if(!cfg->iface_device_driver->init_instance || !cfg->iface_device_driver->deinit_instance) {
-			outlog_error("Module '%s::%s' with ID %u has incomplete driver interface", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
+			outlog_error("Module '%s::%s' with ID %u has incomplete driver interface", dbitem->bundle->name, dbitem->module_name, dbitem->module_id);
 		} else {
 			item->state[IOT_MODINSTTYPE_DRIVER]=IOT_MODULESTATE_OK;
 			BILINKLIST_INSERTHEAD(item, drivers_head, next_driver, prev_driver);
@@ -490,10 +571,10 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 	}
 	if(cfg->iface_node) {
 		if(!cfg->iface_node->init_instance || !cfg->iface_node->deinit_instance) {
-			outlog_error("Module '%s::%s' with ID %u has incomplete node interface", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
+			outlog_error("Module '%s::%s' with ID %u has incomplete node interface", dbitem->bundle->name, dbitem->module_name, dbitem->module_id);
 		} else if(cfg->iface_node->num_valueoutputs>IOT_CONFIG_MAX_NODE_VALUEOUTPUTS || cfg->iface_node->num_valueinputs>IOT_CONFIG_MAX_NODE_VALUEINPUTS
 				|| cfg->iface_node->num_msgoutputs>IOT_CONFIG_MAX_NODE_MSGOUTPUTS || cfg->iface_node->num_msginputs>IOT_CONFIG_MAX_NODE_MSGINPUTS) {
-			outlog_error("Module '%s::%s' with ID %u has illegal number of inputs or outputs", dbitem->bundle->name, dbitem->module_name, cfg->module_id);
+			outlog_error("Module '%s::%s' with ID %u has illegal number of inputs or outputs", dbitem->bundle->name, dbitem->module_name, dbitem->module_id);
 		} else {
 			item->state[IOT_MODINSTTYPE_NODE]=IOT_MODULESTATE_OK;
 			BILINKLIST_INSERTHEAD(item, node_head, next_node, prev_node);
@@ -716,7 +797,7 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 		}
 
 		if(err) { //any error from deinit is critical bug
-			outlog_error("%s instance DEinit for module '%s::%s' with ID %u returned error: %s. Module is blocked.",iot_modinsttype_name[modinst->type], module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+			outlog_error("%s instance DEinit for module '%s::%s' with ID %u returned error: %s. Module is blocked.",iot_modinsttype_name[modinst->type], module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 			module->state[modinst->type]=IOT_MODULESTATE_DISABLED;
 			iot_process_module_bug(module);
 		}
@@ -753,10 +834,10 @@ int iot_modules_registry_t::create_driver_modinstance(iot_module_item_t* module,
 
 	iot_devifaces_list deviface_list;
 
-	err=iface->init_instance(&inst, thread->thread, &devitem->devdata, &deviface_list);
+	err=iface->init_instance(&inst, thread->thread, &devitem->dev_ident, devitem->dev_data, &deviface_list);
 	if(err) {
 		if(err==IOT_ERROR_DEVICE_NOT_SUPPORTED) goto onerr;
-		outlog_error("Driver instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+		outlog_error("Driver instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 		if(err==IOT_ERROR_INVALID_DEVICE_DATA) { //such errors should be logged, but irrelevant for caller of this func
 			err=IOT_ERROR_DEVICE_NOT_SUPPORTED;
 			goto onerr;
@@ -775,7 +856,7 @@ int iot_modules_registry_t::create_driver_modinstance(iot_module_item_t* module,
 	}
 	if(!inst) {
 		//no error and no instance. this is a bug
-		outlog_error("Driver instance init for module '%s::%s' with ID %u returned NULL pointer. This is a bug.",module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
+		outlog_error("Driver instance init for module '%s::%s' with ID %u returned NULL pointer. This is a bug.",module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id);
 		module->state[type]=IOT_MODULESTATE_DISABLED;
 		err=IOT_ERROR_MODULE_BLOCKED;
 		goto onerr;
@@ -789,21 +870,19 @@ int iot_modules_registry_t::create_driver_modinstance(iot_module_item_t* module,
 	inst=NULL; //already saved in modinstance structure, so will be deinit when freeing it
 
 	//check returned device iface ids
-	int num_devclasses;
-	int i;
-	for(num_devclasses=0,i=0;i<deviface_list.num;i++) {
-		const iot_devifacetype_iface* iface=deviface_list.items[i].find_iface();
-		if(iface) {
-			memcpy(&modinst->data.driver.devclasses[num_devclasses].type, &deviface_list.items[i], sizeof(deviface_list.items[i]));
-			modinst->data.driver.devclasses[num_devclasses].iface=iface;
-			num_devclasses++;
-		}
+	unsigned num_devifaces, i;
+	for(num_devifaces=0,i=0;i<deviface_list.num;i++) {
+		if(!deviface_list.items[i].is_valid()) continue;
+		modinst->data.driver.devifaces[num_devifaces]=deviface_list.items[i];
+		num_devifaces++;
 	}
-	if(!num_devclasses) {
-		outlog_error("Driver instance init for module %u returned no suitabe device interface. This is configurational or module bug.", module->config->module_id);
+	if(!num_devifaces) {
+		char namebuf[256];
+		outlog_error("Driver instance init for module '%s::%s' with ID %u returned no suitabe device interface for device '%s'. This is configurational or module bug.", module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id,  devitem->dev_ident.sprint(namebuf, sizeof(namebuf)));
 		err=IOT_ERROR_DEVICE_NOT_SUPPORTED;
 		goto onerr;
 	}
+	modinst->data.driver.num_devifaces=num_devifaces;
 
 	//finish driver instanciation
 	modinst->data.driver.hwdev=devitem;
@@ -816,7 +895,7 @@ onerr:
 	else {
 		if(inst) {
 			if((err=iface->deinit_instance(inst))) { //any error from deinit is critical bug
-				outlog_error("%s instance DEinit for module '%s::%s' with ID %u returned error: %s. Module is blocked.",iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+				outlog_error("%s instance DEinit for module '%s::%s' with ID %u returned error: %s. Module is blocked.",iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 				module->state[type]=IOT_MODULESTATE_DISABLED;
 				iot_process_module_bug(module);
 			}
@@ -849,7 +928,7 @@ int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, i
 	err=iface->init_instance(&inst, thread->thread, nodemodel->node_id, nodemodel->cfgitem->json_config);
 	if(err) {
 		outlog_error("Instance INIT for node ID=%" IOT_PRIiotid " (module %s::%s [%u]) returned error: %s",
-			nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+			nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 		if(err!=IOT_ERROR_TEMPORARY_ERROR || module->errors[type]>10) {
 			module->state[type]=IOT_MODULESTATE_DISABLED;
 		} else {
@@ -864,13 +943,13 @@ int iot_modules_registry_t::create_node_modinstance(iot_module_item_t* module, i
 	if(!inst) {
 		//no error and no instance. this is a bug
 		outlog_error("Instance INIT for node ID=%" IOT_PRIiotid " (module %s::%s [%u]) returned NULL pointer. This is a bug.",
-			nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
+			nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id);
 		module->state[type]=IOT_MODULESTATE_DISABLED;
 		err=IOT_ERROR_MODULE_BLOCKED;
 		goto onerr;
 	}
 	outlog_debug("Instance INIT for node ID=%" IOT_PRIiotid " (module %s::%s [%u]) succeeded",
-		nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id);
+		nodemodel->node_id, module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id);
 
 	modinst=register_modinstance(module, type, thread, inst);
 	if(!modinst) {
@@ -890,7 +969,7 @@ onerr:
 	else {
 		if(inst) {
 			if((err=iface->deinit_instance(inst))) { //any error from deinit is critical bug
-				outlog_error("%s instance DEinit for module '%s::%s' with ID %u returned error: %s. Module is blocked.",iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+				outlog_error("%s instance DEinit for module '%s::%s' with ID %u returned error: %s. Module is blocked.",iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 				module->state[type]=IOT_MODULESTATE_DISABLED;
 				iot_process_module_bug(module);
 			}
@@ -991,7 +1070,7 @@ int iot_modules_registry_t::try_connect_consumer_to_driver(iot_modinstance_item_
 	assert(uv_thread_self()==main_thread);
 	if(need_exit) return IOT_ERROR_NOT_FOUND;
 
-	iot_driverclient_conndata_t* conndata;
+	iot_driverclient_conndata_t* conndata=NULL;
 
 	switch(modinst->type) {
 		case IOT_MODINSTTYPE_NODE: {
@@ -1126,7 +1205,7 @@ void iot_modules_registry_t::try_find_driver_for_hwdev(iot_hwdevregistry_item_t*
 		else if(it->state[IOT_MODINSTTYPE_DRIVER]!=IOT_MODULESTATE_OK) continue;
 
 		//check if module is not blocked for this specific hw device
-		if(devitem->is_module_blocked(it->config->module_id, now32)) {
+		if(devitem->is_module_blocked(it->dbitem->module_id, now32)) {
 			have_blocked=true;
 			continue;
 		}
@@ -1135,8 +1214,8 @@ void iot_modules_registry_t::try_find_driver_for_hwdev(iot_hwdevregistry_item_t*
 		if(!err) return; //success
 		if(err==IOT_ERROR_TEMPORARY_ERROR || err==IOT_ERROR_NOT_READY || err==IOT_ERROR_CRITICAL_ERROR) { //for async starts block module too. it will be unblocked after getting success confirmation
 																		//and nothing must be done in case of error
-			if(!devitem->block_module(it->config->module_id, err==IOT_ERROR_CRITICAL_ERROR ? 0xFFFFFFFFu : now32+2*60*1000, now32)) { //delay retries of this module for current hw device
-				outlog_error("HWDev used all module-bloking slots and was blocked: %s", devitem->devdata.ident_iface->sprint(&devitem->devdata.dev_ident.dev, namebuf, sizeof(namebuf)));
+			if(!devitem->block_module(it->dbitem->module_id, err==IOT_ERROR_CRITICAL_ERROR ? 0xFFFFFFFFu : now32+2*60*1000, now32)) { //delay retries of this module for current hw device
+				outlog_error("HWDev used all module-bloking slots and was blocked: %s", devitem->dev_ident.sprint(namebuf, sizeof(namebuf)));
 				devitem->is_blocked=1;
 				return;
 			}
@@ -1147,7 +1226,7 @@ void iot_modules_registry_t::try_find_driver_for_hwdev(iot_hwdevregistry_item_t*
 		//else IOT_ERROR_DEVICE_NOT_SUPPORTED || IOT_ERROR_MODULE_BLOCKED so just continue search
 	}
 	if(have_blocked) hwdev_registry->have_unconnected_devs=true;
-	outlog_info("no driver for new HWDev found: %s", devitem->devdata.ident_iface->sprint(&devitem->devdata.dev_ident.dev, namebuf, sizeof(namebuf)));
+	outlog_info("no driver for new HWDev found: %s", devitem->dev_ident.sprint(namebuf, sizeof(namebuf)));
 }
 
 
@@ -1212,7 +1291,7 @@ int iot_modinstance_item_t::start(bool isasync) { //called in working thread of 
 	instance->miid=miid;
 	err=instance->start();
 	if(err) {
-		outlog_error("Error starting %s instance of module '%s::%s' with ID %u (%d error(s) so far): %s", iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, int(module->errors[type]+1), kapi_strerror(err));
+		outlog_error("Error starting %s instance of module '%s::%s' with ID %u (%d error(s) so far): %s", iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, int(module->errors[type]+1), kapi_strerror(err));
 		if(err!=IOT_ERROR_TEMPORARY_ERROR && err!=IOT_ERROR_CRITICAL_ERROR) err=IOT_ERROR_CRITICAL_BUG;
 		goto onerr;
 	}
@@ -1256,7 +1335,7 @@ int iot_modinstance_item_t::on_start_status(int err, bool isasync) { //processes
 				break;
 			case IOT_MODINSTTYPE_DRIVER:
 				if(isasync) { //during async start module is blocked in specific hw device after getting NOT_READY
-					data.driver.hwdev->clear_module_block(module->config->module_id); //reset block period for this module in hwdev's data
+					data.driver.hwdev->clear_module_block(module->dbitem->module_id); //reset block period for this module in hwdev's data
 				}
 				modules_registry->try_connect_driver_to_consumer(this);
 				break;
@@ -1295,7 +1374,7 @@ int iot_modinstance_item_t::on_start_status(int err, bool isasync) { //processes
 
 				if(err==IOT_ERROR_CRITICAL_ERROR) { //block module permanently for current hw device
 					uint32_t now32=uint32_t((uv_now(main_loop)+500)/1000);
-					devitem->block_module(module->config->module_id, 0xFFFFFFFFu, now32);
+					devitem->block_module(module->dbitem->module_id, 0xFFFFFFFFu, now32);
 				} //else IOT_ERROR_TEMPORARY_ERROR, IOT_ERROR_MODULE_BLOCKED - just resume search of driver, current module already blocked for its hw device
 			}
 			break;
@@ -1387,7 +1466,7 @@ int iot_modinstance_item_t::stop(bool ismsgproc, bool forcemsg) { //called in wo
 	}
 	if(err) {
 		state=IOT_MODINSTSTATE_HUNG;
-		outlog_error("Error stopping %s instance of module '%s::%s' with ID %u: %s. This is a bug. Module hung.", iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->config->module_id, kapi_strerror(err));
+		outlog_error("Error stopping %s instance of module '%s::%s' with ID %u: %s. This is a bug. Module hung.", iot_modinsttype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 		goto onsucc;
 	}
 	//just stopped
@@ -1443,9 +1522,9 @@ int iot_modinstance_item_t::on_stop_status(int err, bool isasync) { //processes 
 			assert(data.driver.hwdev!=NULL);
 			if(err==IOT_ERROR_TEMPORARY_ERROR || err==IOT_ERROR_CRITICAL_ERROR) {
 				uint32_t now32=uint32_t((uv_now(main_loop)+500)/1000);
-				data.driver.hwdev->block_module(module->config->module_id, err==IOT_ERROR_CRITICAL_ERROR ? 0xFFFFFFFFu : now32+2*60*100, now32);
+				data.driver.hwdev->block_module(module->dbitem->module_id, err==IOT_ERROR_CRITICAL_ERROR ? 0xFFFFFFFFu : now32+2*60*100, now32);
 			} else if(err==IOT_ERROR_CRITICAL_BUG) {
-				data.driver.hwdev->clear_module_block(module->config->module_id);
+				data.driver.hwdev->clear_module_block(module->dbitem->module_id);
 			}
 			//close connections
 			for(i=0;i<IOT_MAX_DRIVER_CLIENTS;i++) {

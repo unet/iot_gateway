@@ -5,66 +5,142 @@
 #include<stdint.h>
 //#include<time.h>
 #include<assert.h>
-#include<ecb.h>
+#include "ecb.h"
 
-struct iot_devifacetype_activatable : public iot_devifacetype_iface {
-	struct data_t { //format of interface class data (class attributes)
-		uint32_t format; //version of format or magic code
-		uint32_t is_tmpl:1,
-			num_sublines:10; //number of control sublines (or controled subdevices). value 0 is allowed in template only to mean 'any number'. non-zero values
-							//means "up to" specified value (i.e. 2 means that device with 1 or 2 subdevices suits)
+class iot_deviface_params_activatable : public iot_deviface_params {
+	friend class iot_devifacetype_metaclass_activatable;
+	friend class iot_deviface__activatable_BASE;
+	friend class iot_deviface__activatable_DRV;
+	friend class iot_deviface__activatable_CL;
+	union {
+		struct {
+			uint16_t num_sublines; //number of control sublines (or controled subdevices). value 0 is not allowed
+		} spec;
+		struct {
+			uint16_t min_sublines;
+			uint16_t max_sublines; //zero value means 'no upper limit'
+		} tmpl;
 	};
-	iot_devifacetype_activatable(void) : iot_devifacetype_iface(IOT_DEVIFACETYPEID_ACTIVATABLE, "Activatable") {
-	}
-	static void init_classdata(iot_devifacetype* devclass, bool is_tmpl, uint16_t num_sublines) {
-		if(num_sublines > 32) num_sublines=32;
-		devclass->classid=IOT_DEVIFACETYPEID_ACTIVATABLE;
-		if(!is_tmpl && num_sublines==0) num_sublines=1;
-		*((data_t*)devclass->data)={
-			.format=1,
-			.is_tmpl=is_tmpl,
-			.num_sublines=num_sublines
-		};
-	}
-	const data_t* parse_classdata(const char* cls_data) const {
-		const data_t* d=(const data_t*)cls_data;
-		if(d->format!=1) return NULL;
-		return d;
-	}
+	bool istmpl;
 
-private:
-	virtual bool check_data(const char* cls_data) const override { //actual check that data is good by format
-		data_t* data=(data_t*)cls_data;
-		return data->format==1;
+public:
+	iot_deviface_params_activatable(uint16_t num_sublines);
+	iot_deviface_params_activatable(uint16_t min_sublines, uint16_t max_sublines);
+	
+	static const iot_deviface_params_activatable* cast(const iot_deviface_params* params);
+
+	virtual bool is_tmpl(void) const override { //check if current objects represents template. otherwise it must be exact connection specification
+		return istmpl;
 	}
-	virtual bool check_istmpl(const char* cls_data) const override { //actual check that data corresponds to template (so not all data components are specified)
-		data_t* data=(data_t*)cls_data;
-		return data->is_tmpl==1;
+	virtual size_t get_size(void) const override { //must return 0 if object is statically precreated and thus must not be copied by value, only by reference
+		return sizeof(*this);
 	}
-	virtual size_t print_data(const char* cls_data, char* buf, size_t bufsize) const override { //actual class data printing function. it must return number of written bytes (without NUL)
-		data_t* data=(data_t*)cls_data;
-		int len;
-		if(check_istmpl(cls_data)) {
-			if(!data->num_sublines)
-				len=snprintf(buf, bufsize, "%s (TMPL: sublines=any)",name);
+	virtual uint32_t get_d2c_maxmsgsize(void) const override;
+	virtual uint32_t get_c2d_maxmsgsize(void) const override;
+	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const override {
+		if(!bufsize) return buf;
+
+		int len=0;
+		get_fullname(buf, bufsize, &len);
+		if(int(bufsize)-len>2) {
+			int len1;
+			if(istmpl)
+				len1=snprintf(buf+len, bufsize-len, "{TMPL: sublines from %u to %u}", unsigned(tmpl.min_sublines), unsigned(tmpl.max_sublines));
 			else
-				len=snprintf(buf, bufsize, "%s (TMPL: sublines=up to %u)",name, unsigned(data->num_sublines));
-		} else
-			len=snprintf(buf, bufsize, "%s (sublines=%u)",name,unsigned(data->num_sublines));
-		return len>=int(bufsize) ? bufsize-1 : len;
+				len1=snprintf(buf+len, bufsize-len, "{sublines=%u}",unsigned(spec.num_sublines));
+			if(len1>=int(bufsize)-len) len=bufsize-1;
+				else len+=len1;
+		}
+		if(doff) *doff+=len;
+		return buf;
 	}
-	virtual uint32_t get_d2c_maxmsgsize(const char* cls_data) const override;
-	virtual uint32_t get_c2d_maxmsgsize(const char* cls_data) const override;
-	virtual bool compare(const char* cls_data, const char* tmpl_data) const override { //actual comparison function
-		data_t* data=(data_t*)cls_data;
-		data_t* tmpl=(data_t*)tmpl_data;
-		if(check_istmpl(tmpl_data)) return tmpl->num_sublines==0 || tmpl->num_sublines>=data->num_sublines;
-		return !check_istmpl(cls_data) && tmpl->num_sublines==data->num_sublines;
+private:
+	virtual bool p_matches(const iot_deviface_params* opspec0) const override {
+		const iot_deviface_params_activatable* opspec=cast(opspec0);
+		if(!opspec) return false;
+		if(istmpl) return opspec->spec.num_sublines>=tmpl.min_sublines && (!tmpl.max_sublines || opspec->spec.num_sublines<=tmpl.max_sublines);
+		return spec.num_sublines==opspec->spec.num_sublines;
 	}
 };
 
 
-class iot_devifaceclass__activatable_BASE {
+class iot_devifacetype_metaclass_activatable : public iot_devifacetype_metaclass {
+	iot_devifacetype_metaclass_activatable(void) : iot_devifacetype_metaclass(IOT_DEVIFACETYPEID_ACTIVATABLE, NULL, "Activatable") {}
+
+	PACKED(
+		struct serialize_header_t {
+			uint32_t format;
+			uint8_t istmpl;
+		}
+	);
+	PACKED(
+		struct serialize_spec_t {
+			uint16_t num_sublines;
+		}
+	);
+	PACKED(
+		struct serialize_tmpl_t {
+			uint16_t min_sublines;
+			uint16_t max_sublines;
+		}
+	);
+
+
+public:
+	static const iot_devifacetype_metaclass_activatable object; //the only instance of this class
+
+private:
+	virtual int p_serialized_size(const iot_deviface_params* obj0) const override {
+		const iot_deviface_params_activatable* obj=iot_deviface_params_activatable::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+
+		if(obj->istmpl) return sizeof(serialize_header_t)+sizeof(serialize_tmpl_t);
+		return sizeof(serialize_header_t)+sizeof(serialize_spec_t);
+	}
+	virtual int p_serialize(const iot_deviface_params* obj0, char* buf, size_t bufsize) const override {
+		const iot_deviface_params_activatable* obj=iot_deviface_params_activatable::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+		if(bufsize<sizeof(serialize_header_t)) return IOT_ERROR_NO_BUFSPACE;
+		bufsize-=sizeof(serialize_header_t);
+
+		serialize_header_t *h=(serialize_header_t*)buf;
+		if(obj->istmpl) {
+			h->format=repack_uint32(uint32_t(1));
+			h->istmpl=1;
+			serialize_tmpl_t *t=(serialize_tmpl_t*)(h+1);
+			t->min_sublines=repack_uint16(obj->tmpl.min_sublines);
+			t->max_sublines=repack_uint16(obj->tmpl.max_sublines);
+		} else {
+			h->format=repack_uint32(uint32_t(1));
+			h->istmpl=0;
+			serialize_spec_t *s=(serialize_spec_t*)(h+1);
+			s->num_sublines=repack_uint16(obj->spec.num_sublines);
+		}
+		return 0;
+	}
+	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		return 0;
+	}
+	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		return 0;
+	}
+};
+
+inline iot_deviface_params_activatable::iot_deviface_params_activatable(uint16_t num_sublines) : iot_deviface_params(&iot_devifacetype_metaclass_activatable::object), istmpl(false) {
+	if(num_sublines > 32) num_sublines=32;
+	spec.num_sublines=num_sublines;
+}
+inline iot_deviface_params_activatable::iot_deviface_params_activatable(uint16_t min_sublines, uint16_t max_sublines) : iot_deviface_params(&iot_devifacetype_metaclass_activatable::object), istmpl(true) {
+	tmpl.min_sublines=min_sublines;
+	tmpl.max_sublines=max_sublines;
+}
+inline const iot_deviface_params_activatable* iot_deviface_params_activatable::cast(const iot_deviface_params* params) {
+	if(!params || !params->is_valid()) return NULL;
+	return params->get_metaclass()==&iot_devifacetype_metaclass_activatable::object ? static_cast<const iot_deviface_params_activatable*>(params) : NULL;
+}
+
+
+class iot_deviface__activatable_BASE {
 public:
 	enum req_t : uint8_t { //commands (requests) which driver can execute
 		REQ_GET_STATE, //request to post EVENT_CURRENT_STATE with status of all sublines. no 'data' is used
@@ -75,93 +151,122 @@ public:
 		EVENT_CURRENT_STATE //reply to REQ_GET_STATE request. provides current state of all sublines.
 	};
 
-	struct msg { //use same message format for requests and events (but this is not mandatory. each event type can have own structure)
-		union { //field is determined by usage context
-			struct {
-				req_t req_code;
-				uint32_t activate_mask, deactivate_mask; //used for REQ_SET_STATE to indicate which subline must be activated and deactivated. 
-														//if same bit is set in both masks, nothing is done to corresponding line
-			};
-			struct {
-				event_t event_code;
-				uint32_t state_mask, valid_mask;
-			};
-		};
+	struct reqmsg { //use same message format for requests and events (but this is not mandatory. each event type can have own structure)
+		req_t req_code;
+		uint32_t activate_mask, deactivate_mask; //used for REQ_SET_STATE to indicate which subline must be activated and deactivated. 
+												//if same bit is set in both masks, nothing is done to corresponding line
 	};
-	const msg* parse_event(const void *data, uint32_t data_size) {
-		if(data_size != sizeof(msg)) return NULL;
-		return static_cast<const msg*>(data);
+	struct eventmsg { //use same message format for requests and events (but this is not mandatory. each event type can have own structure)
+		event_t event_code;
+		uint32_t state_mask, valid_mask;
+	};
+	constexpr static uint32_t get_maxmsgsize(void) {
+		return sizeof(reqmsg) > sizeof(eventmsg) ? sizeof(reqmsg) : sizeof(eventmsg);
 	}
-	static uint32_t get_maxmsgsize(void) {
-		return sizeof(msg);
-	}
-protected:
-	const iot_devifacetype_activatable::data_t *attr;
 
-	iot_devifaceclass__activatable_BASE(const iot_devifacetype *devclass) {
-		const iot_devifacetype_iface* iface=devclass->find_iface();
-		if(iface && iface->classid==IOT_DEVIFACETYPEID_ACTIVATABLE) {
-			attr=static_cast<const iot_devifacetype_activatable*>(iface)->parse_classdata(devclass->data);
-			assert(attr!=NULL && attr->num_sublines>0);
-		} else {
-			attr=NULL;
-		}
+protected:
+	const iot_deviface_params_activatable *params;
+
+	iot_deviface__activatable_BASE(void) : params(NULL) {
+	}
+	bool init(const iot_deviface_params *deviface) {
+		params=iot_deviface_params_activatable::cast(deviface);
+		if(!params || params->istmpl) return false; //illegal interface type or is template
+		return true;
 	}
 };
 
 
-class iot_devifaceclass__activatable_DRV : public iot_devifaceclass__DRVBASE, public iot_devifaceclass__activatable_BASE {
+class iot_deviface__activatable_DRV : public iot_deviface__DRVBASE, public iot_deviface__activatable_BASE {
 
 public:
-	iot_devifaceclass__activatable_DRV(const iot_devifacetype *devclass) : iot_devifaceclass__DRVBASE(devclass),
-																				iot_devifaceclass__activatable_BASE(devclass) {
+	iot_deviface__activatable_DRV(const iot_conn_drvview *conn=NULL) {
+		init(conn);
+	}
+	bool init(const iot_conn_drvview *conn=NULL) {
+		if(!conn) { //uninit request
+			//do uninit
+			iot_deviface__DRVBASE::init(NULL); //do uninit for DRVBASE
+			return false;
+		}
+		if(!iot_deviface__activatable_BASE::init(conn->deviface)) {
+			iot_deviface__DRVBASE::init(NULL); //do uninit for DRVBASE
+			return false;
+		}
+		return iot_deviface__DRVBASE::init(conn);
+	}
+//	bool is_inited(void) inherited from iot_deviface__DRVBASE
+
+	const reqmsg* parse_req(const void *data, uint32_t data_size) const {
+		if(!is_inited()) return NULL;
+		if(data_size != sizeof(reqmsg)) return NULL;
+		return static_cast<const reqmsg*>(data);
 	}
 
 	//outgoing events (from driver to client)
-	int send_current_state(const iot_conn_drvview *conn, uint32_t state_mask, uint32_t valid_mask) {
-		if(!attr) return IOT_ERROR_NOT_INITED;
-		uint32_t mask=(0xFFFFFFFFu >> (32 - attr->num_sublines)); //make 1 in lower attr->num_sublines bits
+	int send_current_state(uint32_t state_mask, uint32_t valid_mask) const {
+		if(!is_inited()) return IOT_ERROR_NOT_INITED;
+		uint32_t mask=(0xFFFFFFFFu >> (32 - params->spec.num_sublines)); //make 1 in lower params->spec.num_sublines bits
 		state_mask&=mask; //reset excess higher bits
 		valid_mask&=mask; //always mark as invalid excess higher bits
 
-		msg msg;
+		eventmsg msg;
 		memset(&msg, 0, sizeof(msg));
 		msg.event_code = EVENT_CURRENT_STATE;
 		msg.state_mask=state_mask;
 		msg.valid_mask=valid_mask;
 
-		return send_client_msg(conn, &msg, sizeof(msg));
+		return send_client_msg(&msg, sizeof(msg));
 	}
 };
 
-class iot_devifaceclass__activatable_CL : public iot_devifaceclass__CLBASE, public iot_devifaceclass__activatable_BASE {
+class iot_deviface__activatable_CL : public iot_deviface__CLBASE, public iot_deviface__activatable_BASE {
 
 public:
-	iot_devifaceclass__activatable_CL(const iot_devifacetype *devclass) : iot_devifaceclass__CLBASE(devclass),
-																				iot_devifaceclass__activatable_BASE(devclass) {
+	iot_deviface__activatable_CL(const iot_conn_clientview *conn=NULL) {
+		init(conn);
+	}
+	bool init(const iot_conn_clientview *conn=NULL) {
+		if(!conn) { //uninit request
+			//do uninit
+			iot_deviface__CLBASE::init(NULL); //do uninit for DRVBASE
+			return false;
+		}
+		if(!iot_deviface__activatable_BASE::init(conn->deviface)) {
+			iot_deviface__CLBASE::init(NULL); //do uninit for DRVBASE
+			return false;
+		}
+		return iot_deviface__CLBASE::init(conn);
+	}
+//	bool is_inited(void) inherited from iot_deviface__CLBASE
+
+	const eventmsg* parse_event(const void *data, uint32_t data_size) const {
+		if(!is_inited()) return NULL;
+		if(data_size != sizeof(eventmsg)) return NULL;
+		return static_cast<const eventmsg*>(data);
 	}
 
-	int get_state(const iot_conn_clientview* conn) {
-		return send_request(conn, REQ_GET_STATE, 0, 0);
+	int get_state(void) const {
+		return send_request(REQ_GET_STATE, 0, 0);
 	}
-	int set_state(const iot_conn_clientview* conn, uint32_t activate_mask, uint32_t deactivate_mask) {
-		return send_request(conn, REQ_SET_STATE, activate_mask, deactivate_mask);
+	int set_state(uint32_t activate_mask, uint32_t deactivate_mask) const {
+		return send_request(REQ_SET_STATE, activate_mask, deactivate_mask);
 	}
 
 private:
-	int send_request(const iot_conn_clientview* conn, req_t req_code, uint32_t activate_mask, uint32_t deactivate_mask) {
-		if(!attr) return IOT_ERROR_NOT_INITED;
-		uint32_t mask=(0xFFFFFFFFu >> (32 - attr->num_sublines)); //make 1 in lower attr->num_sublines bits
+	int send_request(req_t req_code, uint32_t activate_mask, uint32_t deactivate_mask) const {
+		if(!is_inited()) return IOT_ERROR_NOT_INITED;
+		uint32_t mask=(0xFFFFFFFFu >> (32 - params->spec.num_sublines)); //make 1 in lower params->spec.num_sublines bits
 		activate_mask&=mask;
 		deactivate_mask&=mask;
 		if(!activate_mask && !deactivate_mask) return 0; //no action
 
-		msg msg;
+		reqmsg msg;
 		memset(&msg, 0, sizeof(msg));
 		msg.req_code = req_code;
 		msg.activate_mask=activate_mask;
 		msg.deactivate_mask=deactivate_mask;
-		return send_driver_msg(conn, &msg, sizeof(msg));
+		return send_driver_msg(&msg, sizeof(msg));
 	}
 
 };

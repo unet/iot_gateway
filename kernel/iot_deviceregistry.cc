@@ -1,15 +1,12 @@
 #include<stdint.h>
 //#include<time.h>
 
-#include<iot_module.h>
-#include<iot_utils.h>
-#include<kernel/iot_daemonlib.h>
-#include<kernel/iot_deviceregistry.h>
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_kernel.h>
-
-
-//#include<ecb.h>
+#include "iot_module.h"
+#include "iot_utils.h"
+#include "iot_daemonlib.h"
+#include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_kernel.h"
 
 
 hwdev_registry_t* hwdev_registry=NULL;
@@ -18,27 +15,27 @@ static hwdev_registry_t _hwdev_registry; //instantiate singleton
 //	IOT_ERROR_INVALID_ARGS - provided ident is template or action unknown
 //	IOT_ERROR_NOT_FOUND - interface to ident's data not found (invalid or module cannot be loaded)
 //	IOT_ERROR_TEMPORARY_ERROR - some temporary error (no memory etc). retry can succeed
-int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data) {
+int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_data* custom_data) {
 		assert(uv_thread_self()==main_thread);
+		if(!ident) return IOT_ERROR_INVALID_ARGS;
 		char buf[256];
-		const iot_hwdevident_iface* ident_iface=ident->find_iface(true);
-		if(!ident_iface) {
-			outlog_error("Cannot find device connection interface for device from DevDetector %u, contype=%u", ident->detector_module_id,unsigned(ident->contype));
+		if(!ident->is_valid()) {
+			outlog_error("Cannot find device connection interface for contype=%s", ident->get_fullname(buf, sizeof(buf)));
 			return IOT_ERROR_NOT_FOUND;
 		}
-		if(ident_iface->is_tmpl(ident)) {
-			outlog_error("Got incomplete device data from DevDetector %u", ident->detector_module_id);
+		if(ident->is_tmpl()) {
+			outlog_error("Got incomplete device data from DevDetector instance %d", unsigned(detmiid.iid));
 			return IOT_ERROR_INVALID_ARGS;
 		}
 
 		iot_hwdevregistry_item_t* it=find_item_byaddr(ident);
 		switch(action) {
 			case IOT_ACTION_REMOVE:
-				if(!it || !it->devdata.ident_iface->matches_hwid(&it->devdata.dev_ident.dev, ident)) return 0; //not found or hwid does not match
+				if(!it || !it->dev_ident.local->matches_hwid(ident)) return 0; //not found or hwid does not match
 				remove_hwdev(it);
 				return 0;
 			case IOT_ACTION_ADD:
-//				if(it) outlog_debug("Replacing duplicate hwdev instead of adding from DevDetector %u: %s", ident->detector_module_id, it->devdata.ident_iface->sprint(&it->devdata.dev_ident.dev,buf, sizeof(buf)));
+				if(it) outlog_debug("Replacing hwdev from DevDetector %u: %s", unsigned(it->detector_miid.iid), it->dev_ident.local->sprint(buf, sizeof(buf)));
 				break;
 			default:
 				//here we had useless search, but no such errors must ever happen
@@ -46,6 +43,7 @@ int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action
 				return IOT_ERROR_INVALID_ARGS;
 		}
 		//do add/replace
+		size_t custom_len=custom_data ? custom_data->get_size() : 0;
 		//remove if exists and buffer cannot be reused
 		if(it && (it->custom_len_alloced < custom_len || it->devdrv_modinstlk)) { //not enough space in prev buffer for update or item is busy (and thus cannot be updated)
 			remove_hwdev(it);
@@ -54,24 +52,28 @@ int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action
 		if(!it) {
 			it=(iot_hwdevregistry_item_t*)malloc(sizeof(iot_hwdevregistry_item_t)+custom_len);
 			if(!it) {
-				outlog_error("No memory for hwdev!!! Action %d dropped for DevDetector %u, %s", int(action), ident->detector_module_id, ident_iface->sprint(ident, buf, sizeof(buf)));
+				outlog_error("No memory for hwdev!!! Action %d dropped for DevDetector instance %u, %s", int(action), unsigned(detmiid.iid), ident->sprint(buf, sizeof(buf)));
 				return IOT_ERROR_TEMPORARY_ERROR;
 			}
 			memset(it, 0, sizeof(*it));
 			it->custom_len_alloced=custom_len;
-			it->devdata.dev_ident.hostid=iot_current_hostid;
-			it->devdata.ident_iface=ident_iface;
-			it->devdata.custom_data=it->custom_data;
 
 			BILINKLIST_INSERTHEAD(it, actual_dev_head, next, prev);
 		} else {
 			it->is_blocked=0; //reset block for chances that device data changed and now some driver can use it
 			it->clear_module_block(0);
 		}
-		it->devdata.dev_ident.dev=*ident; //address part in devdata.dev_ident.dev is the same but hwid can be different
-		it->devdata.custom_len=custom_len;
-		memcpy(it->custom_data, custom_data, custom_len);
+		new(&it->dev_ident) iot_hwdev_ident_buffered(iot_current_hostid, ident);
+		if(custom_len) {
+			memcpy(it->custom_data, custom_data, custom_len);
+			it->dev_data=(iot_hwdev_data*)it->custom_data;
+		} else {
+			it->dev_data=NULL;
+		}
 		it->detector_miid=detmiid;
+
+		outlog_debug("Added new hwdev from DevDetector %u: %s", unsigned(it->detector_miid.iid),ident->sprint(buf, sizeof(buf)));
+
 		modules_registry->try_find_driver_for_hwdev(it);
 		return 0;
 	}
@@ -79,8 +81,8 @@ int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action
 void hwdev_registry_t::remove_hwdev(iot_hwdevregistry_item_t* hwdevitem) {
 	assert(uv_thread_self()==main_thread);
 	char buf[256];
-	auto ident=&hwdevitem->devdata.dev_ident.dev;
-	outlog_debug("Removing hwdev from DevDetector %u: %s", ident->detector_module_id, hwdevitem->devdata.ident_iface->sprint(ident,buf, sizeof(buf)));
+	const iot_hwdev_localident* ident=hwdevitem->dev_ident.local;
+	outlog_debug("Removing hwdev from DevDetector instance %u: %s", unsigned(hwdevitem->detector_miid.iid), ident->sprint(buf, sizeof(buf)));
 
 	BILINKLIST_REMOVE_NOCL(hwdevitem, next, prev);
 	if(hwdevitem->devdrv_modinstlk) { //item is busy, move to list of removed items until released by driver
@@ -122,15 +124,15 @@ void hwdev_registry_t::try_find_hwdev_for_driver(iot_module_item_t* module) {
 		if(it->is_blocked) continue;
 
 		//check if module is not blocked for this specific hw device
-		if(it->is_module_blocked(module->config->module_id, now32)) continue;
+		if(it->is_module_blocked(module->dbitem->module_id, now32)) continue;
 
 		int err=module->try_driver_create(it);
 		if(!err) break; //success
 		if(err==IOT_ERROR_MODULE_BLOCKED) return;
 		if(err==IOT_ERROR_TEMPORARY_ERROR || err==IOT_ERROR_NOT_READY ||  err==IOT_ERROR_CRITICAL_ERROR) { //for async starts block module too. it will be unblocked after getting success confirmation
 																		//and nothing must be done in case of error
-			if(!it->block_module(module->config->module_id,  err==IOT_ERROR_CRITICAL_ERROR ? 0xFFFFFFFFu : now32+2*60*1000, now32)) { //delay retries of this module for current hw device
-				outlog_error("HWDev used all module-bloking slots and was blocked: %s", it->devdata.ident_iface->sprint(&it->devdata.dev_ident.dev,namebuf, sizeof(namebuf)));
+			if(!it->block_module(module->dbitem->module_id,  err==IOT_ERROR_CRITICAL_ERROR ? 0xFFFFFFFFu : now32+2*60*1000, now32)) { //delay retries of this module for current hw device
+				outlog_error("HWDev used all module-bloking slots and was blocked: %s", it->dev_ident.local->sprint(namebuf, sizeof(namebuf)));
 				it->is_blocked=1;
 			}
 			if(err==IOT_ERROR_NOT_READY) return;

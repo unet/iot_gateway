@@ -2,16 +2,14 @@
 #include<stdlib.h>
 #include<assert.h>
 #include<string.h>
-#include<uv.h>
 #include <execinfo.h>
 
-//#include<ecb.h>
-
-#include <iot_module.h>
-#include <iot_utils.h>
-//#include <kernel/iot_common.h>
-#include <kernel/iot_daemonlib.h>
-#include <kernel/iot_kernel.h>
+#include "uv.h"
+#include "iot_module.h"
+#include "iot_utils.h"
+//#include "iot_common.h"
+#include "iot_daemonlib.h"
+#include "iot_kernel.h"
 
 iot_membuf_chain* iot_memallocator::allocate_chain(uint32_t size) { //size is length of useful data to store in chained buffer
 		assert(uv_thread_self()==thread); //only one thread can allocate

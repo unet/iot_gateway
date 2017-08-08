@@ -6,11 +6,9 @@
 #include<assert.h>
 #include <atomic>
 
-#include<ecb.h>
-
-#include<iot_module.h>
-#include <kernel/iot_common.h>
-#include <kernel/iot_daemonlib.h>
+#include "iot_module.h"
+#include "iot_common.h"
+#include "iot_daemonlib.h"
 
 struct iot_module_item_t;
 struct iot_modinstance_item_t;
@@ -59,7 +57,7 @@ struct iot_remote_driverinst_item_t;
 
 #define IOT_MSGSTRUCTS_PER_MODINST 2
 
-#include<kernel/iot_kernel.h>
+#include "iot_kernel.h"
 
 
 struct iot_device_entry_t { //keeps either iot_modinstance_item_t of local driver or iot_remote_driverinst_item_t
@@ -144,7 +142,7 @@ struct iot_modinstance_item_t {
 							*stop, //for stop (from main thread)
 							*stopstatus; //for stop status (from working thread) and delayed free instance (from any thread, protected by acclock)
 		} msgp;
-		iot_threadmsg_t* msg_structs[];
+		iot_threadmsg_t* msg_structs[3];
 	};
 
 	union modinsttype_data_t { //type-dependent additional data about instance. non-main thread can access it for started instance only
@@ -152,18 +150,16 @@ struct iot_modinstance_item_t {
 			iot_hwdevregistry_item_t* hwdev; //ref to hw device item for driver instance
 			iot_device_connection_t* conn[IOT_MAX_DRIVER_CLIENTS]; //connections from clients
 			dbllist_list<iot_device_entry_t, iot_mi_inputid_t, uint32_t, 1> retry_clients; //list of local client instances which can be retried later or blocked forever
-			struct {
-				iot_devifacetype type;
-				const iot_devifacetype_iface* iface; //first NULL value here ends the list
-			} devclasses[IOT_CONFIG_MAX_CLASSES_PER_DEVICE]; //list of available device iface classes (APIs for device communication)
+			iot_deviface_params_buffered devifaces[IOT_CONFIG_MAX_IFACES_PER_DEVICE]; //list of available device iface classes (APIs for device communication)
 			uint32_t retry_clients_timeout; //non-zero value tells that retry for consumer connections search is waiting
 			uint8_t announce_connfree_once:1, //flag that after clearing any conn[] pointer search for other clients must be reattempted ONCE (like after driver start)
 											//before this retry_clients must be cleared from special values 0xFFFFFFFE. other hosts must be notified using some
 											//special event to clear same special values and recheck their clients 
-					announce_connclose:1; //flag that after closing any establixhed connection search for other clients must be reattempted (like after driver start)
+					announce_connclose:1, //flag that after closing any establixhed connection search for other clients must be reattempted (like after driver start)
 											//before this retry_clients must be cleared from special values 0xFFFFFFFD. other hosts must be notified using some
 											//special event to clear same special values and recheck their clients. This flag is NOT
 											//cleared until moment when ALL client connections are closed
+					num_devifaces:4;
 		} driver;
 
 		struct { //node
@@ -320,10 +316,10 @@ struct iot_modinstance_locker {
 	}
 };
 
-#include<kernel/iot_deviceregistry.h>
-#include<kernel/iot_configregistry.h>
-#include<kernel/iot_deviceconn.h>
-#include<kernel/iot_peerconnection.h>
+#include "iot_deviceregistry.h"
+#include "iot_configregistry.h"
+#include "iot_deviceconn.h"
+#include "iot_peerconnection.h"
 
 
 inline void iot_driverclient_conndata_t::block_driver(dbllist_node<iot_device_entry_t, iot_mi_inputid_t, uint32_t>* node, uint32_t till) {
@@ -349,8 +345,10 @@ inline void iot_driverclient_conndata_t::block_driver(dbllist_node<iot_device_en
 struct iot_modulesdb_bundle_t {
 	const char *name; //like "vendor/subdirs/bundlename". extension (.so) must be appended
 	bool linked; //bundle is statically linked
-	bool error; //was error loading, so do not try again
-	void *hmodule; //handle of dynamically loaded file or of main executable when linked is true
+	bool error=false; //was error loading, so do not try again
+	void *hmodule=NULL; //handle of dynamically loaded file or of main executable when linked is true
+
+	iot_modulesdb_bundle_t(const char* name, bool linked) : name(name), linked(linked) {}
 };
 
 
@@ -360,7 +358,17 @@ struct iot_modulesdb_item_t {
 	const char *module_name;
 	bool autoload; //module's config must be auto loaded (after loading appropriate bundle into memory)
 	bool autostart_detector; //if module has detector interface, it must be started automatically after load
-	iot_module_item_t *item; //assigned during module loading
+	iot_module_item_t *item=NULL; //assigned during module loading
+
+	iot_modulesdb_item_t(const char* name, iot_modulesdb_bundle_t* bundle, uint32_t module_id, bool autoload, bool autostart_detector=true)
+		: module_id(module_id), bundle(bundle), autoload(autoload), autostart_detector(autostart_detector)
+	{
+		if(bundle) {
+			const char *n=strrchr(name, ':');
+			if(n) module_name=n+1;
+				else module_name=name;
+		} else module_name=name; //when bundle is NULL, name of module must be full like "vendor/dir/bundle:name"
+	}
 };
 
 
@@ -412,36 +420,40 @@ private:
 
 
 
-struct iot_devifaceclass_item_t {
+/*struct iot_devifaceclass_item_t {
 	iot_devifaceclass_item_t *next, *prev; //for position in iot_modules_registry_t::devifacecls_head
 	const iot_devifacetype_iface* iface;
 	uint32_t module_id; //module which gave this definition. zero for built-in classes
 };
-
-struct iot_devcontype_item_t {
+*/
+/*struct iot_devcontype_item_t {
 	iot_devcontype_item_t *next, *prev; //for position in iot_modules_registry_t::devcontypes_head
 	const iot_hwdevident_iface* iface;
 	uint32_t module_id; //module which gave this definition. zero for built-in classes
-};
+};*/
 
 
 class iot_modules_registry_t {
-	iot_module_item_t *all_head;
-	iot_module_item_t *detectors_head;
-	iot_module_item_t *drivers_head;
-	iot_module_item_t *node_head;
+	iot_module_item_t *all_head=NULL;
+	iot_module_item_t *detectors_head=NULL;
+	iot_module_item_t *drivers_head=NULL;
+	iot_module_item_t *node_head=NULL;
 
-	iot_devifaceclass_item_t *devifacecls_head;
-	iot_devcontype_item_t *devcontypes_head;
+//	iot_devifaceclass_item_t *devifacecls_head=NULL;
+//	iot_devifacetype_iface *devifaces_head=NULL;
+//	iot_devcontype_item_t *devcontypes_head=NULL;
+	iot_devifacetype_metaclass *devifacetypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
+	iot_hwdevcontype_metaclass* devcontypes_head=NULL; //list of registered hwdevcontypes as list of addresses of metaclass instances
 
+	json_object* conntypes_table=NULL;
+	json_object* ifacetypes_table=NULL;
 
 public:
-	bool is_shutdown;
+	bool is_shutdown=false;
 
-	iot_modules_registry_t(void) : all_head(NULL), detectors_head(NULL), drivers_head(NULL), node_head(NULL), devifacecls_head(NULL), devcontypes_head(NULL) {
+	iot_modules_registry_t(void) {
 		assert(modules_registry==NULL);
 		modules_registry=this;
-		is_shutdown=false;
 	}
 	void free_modinstance(const iot_miid_t &miid) { //main thread
 		iot_modinstance_item_t* modinst=find_modinstance_byid(miid);
@@ -450,11 +462,11 @@ public:
 	void free_modinstance(iot_modinstance_item_t* modinst); //main thread
 
 	//inits some object data, loads modules marked for autoload, starts detectors. must be called once during startup
-	void start(const iot_devifacetype_iface** devifaceclscfg, uint32_t num_devifaces,const iot_hwdevident_iface** devcontypescfg, uint32_t num_contypes); //main thread
+	void start(json_object *typesdb); //main thread
 	//stops detectors and driver instances
 	void stop(void); //main thread
 
-	iot_devifaceclass_item_t* find_devifaceclass(iot_devifacetype_id_t clsid, bool tryload) {
+/*	iot_devifaceclass_item_t* find_devifaceclass(iot_devifacetype_id_t clsid, bool tryload) {
 		iot_devifaceclass_item_t* item=devifacecls_head;
 		while(item) {
 			if(item->iface->classid==clsid) return item;
@@ -464,15 +476,41 @@ public:
 			if(!load_module(-1, IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid), NULL)) return find_devifaceclass(clsid, false);
 		}
 		return NULL;
-	}
-	iot_devcontype_item_t* find_devcontype(iot_hwdevcontype_t contp, bool tryload) { //must run in main thread if tryload is true
-		iot_devcontype_item_t* item=devcontypes_head;
+	}*/
+/*	iot_devifacetype_iface* find_deviface(iot_devifacetype_id_t clsid, bool tryload) {
+		iot_devifacetype_iface* item=devifaces_head;
 		while(item) {
-			if(item->iface->contype==contp) return item;
+			if(item->classid==clsid) return item;
 			item=item->next;
 		}
-		if(tryload && IOT_DEVCONTYPE_CUSTOM_MODULEID(contp)>0) {
-			if(!load_module(-1, IOT_DEVCONTYPE_CUSTOM_MODULEID(contp), NULL)) return find_devcontype(contp, false);
+		if(tryload && IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid)>0) {
+			if(!load_module(-1, IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid), NULL)) return find_deviface(clsid, false);
+		}
+		return NULL;
+	}*/
+	const iot_devifacetype_metaclass* find_devifacetype(iot_type_id_t ifacetp, bool tryload) { //must run in main thread if tryload is true
+		if(!ifacetp) return NULL;
+		const iot_devifacetype_metaclass* item=devifacetypes_head;
+		while(item) {
+			if(item->get_ifacetype_id()==ifacetp) return item;
+			item=item->next;
+		}
+		if(tryload) {// && IOT_DEVCONTYPE_CUSTOM_MODULEID(ifacetp)>0) 
+			//TODO search in registry for bundle name
+//			if(!load_module(-1, IOT_DEVCONTYPE_CUSTOM_MODULEID(ifacetp), NULL)) return find_devcontype(ifacetp, false);
+		}
+		return NULL;
+	}
+	const iot_hwdevcontype_metaclass* find_devcontype(iot_type_id_t contp, bool tryload) { //must run in main thread if tryload is true
+		if(!contp) return NULL;
+		const iot_hwdevcontype_metaclass* item=devcontypes_head;
+		while(item) {
+			if(item->get_contype_id()==contp) return item;
+			item=item->next;
+		}
+		if(tryload) {// && IOT_DEVCONTYPE_CUSTOM_MODULEID(contp)>0) 
+			//TODO search in registry for bundle name
+//			if(!load_module(-1, IOT_DEVCONTYPE_CUSTOM_MODULEID(contp), NULL)) return find_devcontype(contp, false);
 		}
 		return NULL;
 	}
@@ -502,14 +540,24 @@ public:
 		uv_stop (main_loop);
 	}
 
+	static iot_devifacetype_metaclass*& devifacetype_pendingreg_head(void) {
+		static iot_devifacetype_metaclass *head=NULL; //use function-scope static to guarantee initialization before first use
+		return head;
+	}
+	static iot_hwdevcontype_metaclass*& devcontype_pendingreg_head(void) {
+		static iot_hwdevcontype_metaclass *head=NULL; //use function-scope static to guarantee initialization before first use
+		return head;
+	}
+	void register_pending_metaclasses(void); //main thread
+
 //METHODS CALLED IN OTHER THREADS
 
 	iot_modinstance_locker get_modinstance(const iot_miid_t &miid); //any thread
 
 
 private:
-	int register_devifaceclasses(const iot_devifacetype_iface** iface, uint32_t num, uint32_t module_id); //main thread
-	int register_devcontypes(const iot_hwdevident_iface** iface, uint32_t num, uint32_t module_id); //main thread
+//	int register_devifaceclasses(const iot_devifacetype_iface** iface, uint32_t num, uint32_t module_id); //main thread
+//	int register_devcontypes(const iot_hwdevident_iface** iface, uint32_t num, uint32_t module_id); //main thread
 
 	int register_module(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem); //main thread
 

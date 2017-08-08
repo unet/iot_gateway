@@ -3,16 +3,14 @@
 #include <time.h>
 
 
-//#include <iot_compat.h>
-//#include "evwrap.h"
-#include <uv.h>
-#include <ecb.h>
-#include <iot_module.h>
-#include <iot_devclass_keyboard.h>
-#include <iot_devclass_activatable.h>
-#include <iot_devclass_toneplayer.h>
-#include <kernel/iot_daemonlib.h>
-#include <kernel/iot_deviceregistry.h>
+//#include "iot_compat.h"
+#include "uv.h"
+#include "iot_module.h"
+#include "iot_devclass_keyboard.h"
+#include "iot_devclass_activatable.h"
+//#include "iot_devclass_toneplayer.h"
+#include "iot_daemonlib.h"
+#include "iot_deviceregistry.h"
 
 
 extern uv_loop_t *main_loop;
@@ -21,14 +19,14 @@ extern uv_loop_t *main_loop;
 //action is one of {IOT_ACTION_ADD, IOT_ACTION_REMOVE}
 //contype must be among those listed in .devcontypes field of detector module interface
 //returns:
-int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data) {
+int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_data* custom_data) {
 	//TODO check that ident->contype is listed in .devcontypes field of detector module interface
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk) return IOT_ERROR_INVALID_ARGS;
 
 	//TODO make inter-thread message, not direct call !!!
 	if(uv_thread_self()==main_thread) {
-		return hwdev_registry->list_action(miid, action, ident, custom_len, custom_data);
+		return hwdev_registry->list_action(miid, action, ident, custom_data);
 	} else {
 		assert(false);
 		//TODO
@@ -93,6 +91,22 @@ int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uin
 	return model->do_update_outputs(reason_eventid, num_values, valueout_indexes, values, num_msgs, msgout_indexes, msgs);
 }
 
+const iot_valueclass_BASE* iot_node_base::kapi_get_outputvalue(uint8_t index) {
+	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk.modinst->instance!=this) {
+		assert(false);
+		return 0;
+	}
+	iot_modinstance_item_t* modinst=modinstlk.modinst;
+	assert(uv_thread_self()==modinst->thread->thread);
+
+	if(!modinst->is_working()) return 0;
+	auto model=modinst->data.node.model;
+
+	return model->get_outputvalue(index);
+}
+
+
 uv_loop_t* kapi_get_event_loop(uv_thread_t thread) {
 	return thread_registry->find_loop(thread);
 }
@@ -116,34 +130,170 @@ const char* kapi_err_name(int err) {
 	return "UNKNOWN";
 }
 
-uint32_t iot_devifacetype_keyboard::get_d2c_maxmsgsize(const char* cls_data) const {
-	data_t* data=(data_t*)cls_data;
-	return iot_devifaceclass__keyboard_BASE::get_maxmsgsize(data->max_keycode);
-}
-uint32_t iot_devifacetype_keyboard::get_c2d_maxmsgsize(const char* cls_data) const {
-	data_t* data=(data_t*)cls_data;
-	return iot_devifaceclass__keyboard_BASE::get_maxmsgsize(data->max_keycode);
+iot_hwdevcontype_metaclass::iot_hwdevcontype_metaclass(iot_type_id_t id, const char* vendor, const char* type) {
+	assert(type!=NULL);
+
+	iot_hwdevcontype_metaclass* &head=iot_modules_registry_t::devcontype_pendingreg_head(), *cur;
+	cur=head;
+	while(cur) {
+		if(cur==this) {
+			outlog_error("Double instanciation of Device Connection Type %s!", type);
+			assert(false);
+			return;
+		}
+		cur=cur->next;
+	}
+	next=head;
+	head=this;
+
+	prev=NULL;
+	contype_id=id;
+	vendor_name=vendor;
+	type_name=type;
 }
 
-uint32_t iot_devifacetype_activatable::get_c2d_maxmsgsize(const char* cls_data) const {
-	return iot_devifaceclass__activatable_BASE::get_maxmsgsize();
-}
-uint32_t iot_devifacetype_activatable::get_d2c_maxmsgsize(const char* cls_data) const {
-	return iot_devifaceclass__activatable_BASE::get_maxmsgsize();
+
+
+int iot_hwdevcontype_metaclass::from_json(json_object* json, char* buf, size_t bufsize, const iot_hwdev_localident*& obj, iot_type_id_t default_contype) {
+	json_object* val=NULL;
+	iot_type_id_t contype=default_contype;
+	if(json_object_object_get_ex(json, "conntype_id", &val)) { //zero or absent value leaves IOT_DEVCONTYPE_ANY
+		IOT_JSONPARSE_UINT(json, iot_type_id_t, contype);
+	}
+	if(!contype) return IOT_ERROR_BAD_DATA;
+
+	const iot_hwdevcontype_metaclass* metaclass=iot_hwdevcontype_metaclass::findby_contype_id(contype);
+	if(!metaclass) return IOT_ERROR_NOT_FOUND;
+
+	val=NULL;
+	json_object_object_get_ex(json, "ident", &val);
+	obj=NULL;
+	return metaclass->p_from_json(val, buf, bufsize, obj);
 }
 
+const iot_hwdevcontype_metaclass* iot_hwdevcontype_metaclass::findby_contype_id(iot_type_id_t contype_id, bool try_load) {
+	return modules_registry->find_devcontype(contype_id, try_load);
+}
+
+
+/*int iot_hwdevcontype_metaclass_any::p_deserialized_size(const char* data, size_t datasize, const iot_hwdev_localident*& obj) const {
+	if(datasize>0) return IOT_ERROR_BAD_DATA;
+	//for static object no additional memory required
+	obj=&iot_hwdev_localident_any::object;
+	return 0; //localident of this metaclass is singleton
+}
+*/
+int iot_hwdevcontype_metaclass_any::p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const {
+	if(datasize>0) return IOT_ERROR_BAD_DATA;
+	//for static object no additional memory required
+	obj=&iot_hwdev_localident_any::object;
+	return 0; //zero means that obj was reassigned to statically allocated object
+}
+
+int iot_hwdevcontype_metaclass_any::p_from_json(json_object* json, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const {
+	if(json && !json_object_is_type(json, json_type_null) && (!json_object_is_type(json, json_type_object) || json_object_object_length(json)>0)) return IOT_ERROR_BAD_DATA; //must be absent or be empty object
+	//for static object no additional memory required
+	obj=&iot_hwdev_localident_any::object;
+	return 0; //zero means that obj was reassigned to statically allocated object
+}
+
+iot_hwdevcontype_metaclass_any iot_hwdevcontype_metaclass_any::object;
+const iot_hwdev_localident_any iot_hwdev_localident_any::object;
+
+int iot_hwdev_ident::from_json(json_object* json, iot_hwdev_ident* obj, char* identbuf, size_t bufsize, iot_hostid_t default_hostid, iot_type_id_t default_contype) { //obj must point to somehow (from stack etc.) allocated iot_hwdev_ident struct
+	//returns negative error code OR number of bytes written to provided  identobj buffer OR required buffer size if obj was NULL
+
+	json_object* val=NULL;
+	iot_hostid_t hostid=default_hostid;
+	if(json_object_object_get_ex(json, "host_id", &val)) { //zero or absent value leaves default_hostid
+		IOT_JSONPARSE_UINT(val, iot_hostid_t, hostid);
+	}
+
+	int rval;
+	const iot_hwdev_localident* localp;
+	if(!obj) { //request to calculate bufsize
+		localp=NULL;
+		rval=iot_hwdevcontype_metaclass::from_json(json, NULL, 0, localp, default_contype);
+		return rval;
+	}
+	localp=(iot_hwdev_localident*)identbuf;
+
+	rval=iot_hwdevcontype_metaclass::from_json(json, identbuf, bufsize, localp, default_contype); //can return 0 and reassign localp to address of static object
+
+	if(rval<0) return rval;
+	//all is good
+	obj->hostid=hostid;
+	obj->local=localp;
+	return rval;
+}
+
+
+
+
+iot_devifacetype_metaclass::iot_devifacetype_metaclass(iot_type_id_t id, const char* vendor, const char* type) {
+	assert(type!=NULL);
+
+printf("!!!%s\n",type);
+	iot_devifacetype_metaclass* &head=iot_modules_registry_t::devifacetype_pendingreg_head(), *cur;
+	cur=head;
+	while(cur) {
+		if(cur==this) {
+			outlog_error("Double instanciation of Device Iface Type %s!", type);
+			assert(false);
+			return;
+		}
+		cur=cur->next;
+	}
+	next=head;
+	head=this;
+
+	prev=NULL;
+	ifacetype_id=id;
+	vendor_name=vendor;
+	type_name=type;
+}
+
+const iot_devifacetype_metaclass_keyboard iot_devifacetype_metaclass_keyboard::object;
+const iot_devifacetype_metaclass_activatable iot_devifacetype_metaclass_activatable::object;
+//iot_devifacetype_toneplayer iot_devifacetype_toneplayer::object;
+
+uint32_t iot_deviface_params_keyboard::get_d2c_maxmsgsize(void) const {
+	assert(!istmpl);
+	return iot_deviface__keyboard_BASE::get_maxmsgsize(spec.max_keycode);
+}
+uint32_t iot_deviface_params_keyboard::get_c2d_maxmsgsize(void) const {
+	assert(!istmpl);
+	return iot_deviface__keyboard_BASE::get_maxmsgsize(spec.max_keycode);
+}
+
+uint32_t iot_deviface_params_activatable::get_c2d_maxmsgsize(void) const {
+	assert(!istmpl);
+	return iot_deviface__activatable_BASE::get_maxmsgsize();
+}
+uint32_t iot_deviface_params_activatable::get_d2c_maxmsgsize(void) const {
+	assert(!istmpl);
+	return iot_deviface__activatable_BASE::get_maxmsgsize();
+}
+/*
 uint32_t iot_devifacetype_toneplayer::get_c2d_maxmsgsize(const char* cls_data) const {
-	return iot_devifaceclass__toneplayer_BASE::get_maxmsgsize();
+	return iot_deviface__toneplayer_BASE::get_maxmsgsize();
 }
 uint32_t iot_devifacetype_toneplayer::get_d2c_maxmsgsize(const char* cls_data) const {
-	return iot_devifaceclass__toneplayer_BASE::get_maxmsgsize();
+	return iot_deviface__toneplayer_BASE::get_maxmsgsize();
 }
-
+*/
 //use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created
 constexpr iot_valueclass_nodeerrorstate iot_valueclass_nodeerrorstate::const_noinst(iot_valueclass_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
 
 constexpr iot_valueclass_boolean iot_valueclass_boolean::const_true(true);
 constexpr iot_valueclass_boolean iot_valueclass_boolean::const_false(false);
+
+constexpr iot_valuenotion_keycode iot_valuenotion_keycode::iface;
+constexpr iot_valuenotion_degcelcius iot_valuenotion_degcelcius::iface;
+constexpr iot_valuenotion_degfahrenheit iot_valuenotion_degfahrenheit::iface;
+
+
+
 
 /*
 //kapi_fd_watcher implementation

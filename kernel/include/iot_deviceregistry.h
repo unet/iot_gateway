@@ -8,19 +8,16 @@
 #include<assert.h>
 //#include<time.h>
 
-#include<ecb.h>
-
-
-#include <iot_kapi.h>
-#include <kernel/iot_common.h>
+#include "iot_kapi.h"
+#include "iot_common.h"
 
 
 class hwdev_registry_t;
 struct iot_hwdevregistry_item_t;
 extern hwdev_registry_t* hwdev_registry;
 
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_kernel.h>
+#include "iot_moduleregistry.h"
+#include "iot_kernel.h"
 
 #define IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV 8
 
@@ -29,7 +26,8 @@ struct iot_hwdevregistry_item_t {
 	iot_hwdevregistry_item_t *next, *prev; //position in actual_dev_head or removed_dev_head (when is_removed true)
 	//TODO add next-prev fields for locations inside search indexes (by detector_module_id or devcontype) if necessary
 
-	iot_hwdev_data_t devdata; //custom_data field will be assigned to custom_data buffer in current struct
+	iot_hwdev_ident_buffered dev_ident;
+	iot_hwdev_data* dev_data; //will be assigned to custom_data buffer in current struct
 	iot_miid_t detector_miid; //miid of detector instance
 
 	iot_modinstance_locker devdrv_modinstlk; //NULL if no driver connected or ref to driver module instance
@@ -40,7 +38,7 @@ struct iot_hwdevregistry_item_t {
 	uint32_t custom_len_alloced:24, //real size of allocated space for custom_data (could be allocated with reserve or have more space from previous use)
 			is_blocked:1,		//flag that hw device is blocked from finding a driver
 			is_removed:1;		//flag that this item is in removed_dev_head list
-	alignas(4) char custom_data[];  //depends on devcontype and actual data
+	alignas(sizeof(void*)) char custom_data[];  //depends on devcontype and actual data
 
 
 	bool is_module_blocked(uint32_t module_id, uint32_t now32) {
@@ -92,7 +90,7 @@ public:
 		assert(hwdev_registry==NULL);
 		hwdev_registry=this;
 	}
-	int list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident_t* ident, size_t custom_len, void* custom_data); //main thread
+	int list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_data* custom_data); //main thread
 	//finish removal or removed device after stopping bound driver
 	void finish_hwdev_removal(iot_hwdevregistry_item_t* it) { //main thread
 		assert(it->is_removed);
@@ -104,18 +102,18 @@ public:
 	void try_find_hwdev_for_driver(iot_module_item_t* module); //main thread
 	int try_connect_local_driver(iot_device_connection_t* conn);
 
-	iot_hwdevregistry_item_t* find_item_byaddr(iot_hwdev_localident_t* ident) { //looks for device item by contype and address
+	iot_hwdevregistry_item_t* find_item_byaddr(iot_hwdev_localident* ident) { //looks for device item by contype and address
 		iot_hwdevregistry_item_t* it=actual_dev_head;
 		while(it) {
-			if(it->devdata.ident_iface->matches_addr(&it->devdata.dev_ident.dev, ident)) return it;
+			if(it->dev_ident.local->matches_addr(ident)) return it;
 			it=it->next;
 		}
 		return NULL;
 	}
-	iot_hwdevregistry_item_t* find_item_bytmpl(iot_hwdev_localident_t* tmpl) { //looks for device item by contype and address
+	iot_hwdevregistry_item_t* find_item_bytmpl(iot_hwdev_localident* tmpl) { //looks for device item by contype and address
 		iot_hwdevregistry_item_t* it=actual_dev_head;
 		while(it) {
-			if(it->devdata.ident_iface->matches(&it->devdata.dev_ident.dev, tmpl)) return it;
+			if(tmpl->matches(it->dev_ident.local)) return it;
 			it=it->next;
 		}
 		return NULL;

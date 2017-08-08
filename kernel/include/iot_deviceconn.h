@@ -5,16 +5,14 @@
 #include<stdint.h>
 #include<assert.h>
 
-#include<ecb.h>
-
-#include <iot_module.h>
-#include <iot_kapi.h>
-#include <kernel/iot_common.h>
+#include "iot_module.h"
+#include "iot_kapi.h"
+#include "iot_common.h"
 
 
-#include<kernel/iot_deviceregistry.h>
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_kernel.h>
+#include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_kernel.h"
 
 //space for IDs of device connections
 #define IOT_MAX_DEVICECONNECTIONS 16384
@@ -38,7 +36,7 @@
 
 
 struct iot_device_connection_t {
-	iot_devifacetype devclass;
+	iot_deviface_params_buffered deviface;
 	iot_hostid_t client_host;
 	union client_data_t {
 		struct { //remote client_host
@@ -58,7 +56,7 @@ struct iot_device_connection_t {
 	} client;
 	const iot_deviceconn_filter_t* client_devifaceclassfilter; //set according to module config
 	int client_numhwdevidents;
-	const iot_hwdev_ident_t* client_hwdevidents; //set according to bound configuration item (so according to user preference). must have client_numhwdevidents valid items
+	const iot_hwdev_ident* client_hwdevidents; //set according to bound configuration item (so according to user preference). must have client_numhwdevidents valid items
 
 	iot_hostid_t driver_host;
 	union driver_data_t {
@@ -149,7 +147,7 @@ public:
 		acclock.clear(std::memory_order_release);
 	}
 
-	int connect_remote(iot_miid_t& driver_inst, const iot_devifacetype_id_t* ifaceclassids, uint8_t num_ifaceclassids);
+	int connect_remote(iot_miid_t& driver_inst);//, const iot_devifacetype_id_t* ifaceclassids, uint8_t num_ifaceclassids);
 	int connect_local(iot_modinstance_item_t* driver_inst);
 	int process_connect_local(bool); //called in working thread of driver instance
 	int on_drvconnect_status(int err, bool isasync); //depending on state can run in different threads

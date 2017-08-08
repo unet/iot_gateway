@@ -5,8 +5,8 @@
 #include<stdint.h>
 #include<assert.h>
 
-#include <iot_module.h>
-#include <kernel/iot_common.h>
+#include "iot_module.h"
+#include "iot_common.h"
 
 //struct iot_config_item_node_t;
 //struct iot_configregistry_t;
@@ -20,9 +20,9 @@ class iot_nodemsglink;
 struct iot_modelsignal;
 struct iot_notify_inputsupdate;
 
-#include<kernel/iot_configregistry.h>
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_kernel.h>
+#include "iot_configregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_kernel.h"
 
 struct iot_modelsignal : public iot_releasable { //represents signal from specific node's output. MUST BE ALLOCATED AS MEMBLOCK
 	iot_modelsignal* next=NULL; //for list of signals in iot_modelevent  OR to form list of signals
@@ -212,6 +212,7 @@ public:
 	bool execute(bool forceasync, iot_threadmsg_t *&msg, iot_modelsignal *&outsignals); //main thread
 	bool do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal *&outsignals); //instance thread
 	int do_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valueclass_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgclass_BASE** msgs);
+	const iot_valueclass_BASE* get_outputvalue(uint8_t index);
 
 private:
 	void try_create_instance(void); //called to recreate node module instance

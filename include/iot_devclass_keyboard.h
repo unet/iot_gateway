@@ -5,72 +5,145 @@
 #include<stdint.h>
 //#include<time.h>
 #include<assert.h>
-#include<ecb.h>
+#include "ecb.h"
 
+class iot_deviface_params_keyboard : public iot_deviface_params {
+	friend class iot_devifacetype_metaclass_keyboard;
+	friend class iot_deviface__keyboard_BASE;
+	friend class iot_deviface__keyboard_DRV;
+	friend class iot_deviface__keyboard_CL;
 
-
-struct iot_devifacetype_keyboard : public iot_devifacetype_iface {
-	struct data_t { //format of interface class data (class attributes)
-		uint32_t format; //version of format or magic code
-		uint32_t
-			is_tmpl:1, //flag that this is template
-			max_keycode:10, //maximum possible key code. must be 0 in templates because not used for filtering device interfaces
-			is_pckbd:2; //flag that keyboard is normal PC keyboard with shift, ctrl, alt (when 1). value 2 is illegal. value 3 is used in template to mean 'any value' of this prop
+	union {
+		struct {
+			uint16_t max_keycode;
+			uint8_t is_pckbd; //only 0 and 1
+		} spec;
+		struct {
+			uint8_t is_pckbd; //0 and 1 mean exact match, 2 means 'any'
+		} tmpl;
 	};
+	bool istmpl;
 
-	iot_devifacetype_keyboard(void) : iot_devifacetype_iface(IOT_DEVIFACETYPEID_KEYBOARD, "Keyboard") {
+public:
+	iot_deviface_params_keyboard(bool is_pckbd, uint16_t max_keycode);
+	iot_deviface_params_keyboard(uint8_t is_pckbd);
+
+	static const iot_deviface_params_keyboard* cast(const iot_deviface_params* params);
+
+	virtual bool is_tmpl(void) const override { //check if current objects represents template. otherwise it must be exact connection specification
+		return istmpl;
 	}
+	virtual size_t get_size(void) const override { //must return 0 if object is statically precreated and thus must not be copied by value, only by reference
+		return sizeof(*this);
+	}
+	virtual uint32_t get_d2c_maxmsgsize(void) const override;
+	virtual uint32_t get_c2d_maxmsgsize(void) const override;
+	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const override {
+		if(!bufsize) return buf;
 
-	static void init_classdata(iot_devifacetype* devclass, bool is_tmpl, uint8_t is_pckbd, uint16_t max_keycode) {
-		devclass->classid=IOT_DEVIFACETYPEID_KEYBOARD;
-		if(is_tmpl) {
-			max_keycode=0;
-			if(is_pckbd==2 || is_pckbd>3) is_pckbd=3; //don't allow illegal value
-		} else {
-			if(max_keycode > IOT_KEYBOARD_MAX_KEYCODE) max_keycode=IOT_KEYBOARD_MAX_KEYCODE;
-			if(is_pckbd>1) is_pckbd=1; //don't allow illegal value
+		int len=0;
+		get_fullname(buf, bufsize, &len);
+		if(int(bufsize)-len>2) {
+			int len1;
+			if(istmpl)
+				len1=snprintf(buf+len, bufsize-len, "{TMPL: is_pc=%s}", !tmpl.is_pckbd ? "no" : tmpl.is_pckbd==1 ? "yes" : "any");
+			else
+				len1=snprintf(buf+len, bufsize-len, "{max_keycode=%u, is_pc=%s}",unsigned(spec.max_keycode),!spec.is_pckbd ? "no" : "yes");
+			if(len1>=int(bufsize)-len) len=bufsize-1;
+				else len+=len1;
 		}
-		*((data_t*)devclass->data)={
-			.format=1,
-			.is_tmpl=is_tmpl,
-			.max_keycode=max_keycode,
-			.is_pckbd=is_pckbd
-		};
-	}
-	const data_t* parse_classdata(const char* cls_data) const {
-		const data_t* d=(const data_t*)cls_data;
-		if(d->format!=1) return NULL;
-		return d;
+		if(doff) *doff+=len;
+		return buf;
 	}
 private:
-	virtual bool check_data(const char* cls_data) const override { //actual check that data is good by format
-		data_t* data=(data_t*)cls_data;
-		return data->format==1;
-	}
-	virtual bool check_istmpl(const char* cls_data) const override { //actual check that data corresponds to template (so not all data components are specified)
-		data_t* data=(data_t*)cls_data;
-		return data->is_tmpl==1;
-	}
-	virtual size_t print_data(const char* cls_data, char* buf, size_t bufsize) const override { //actual class data printing function. it must return number of written bytes (without NUL)
-		data_t* data=(data_t*)cls_data;
-		int len;
-		if(check_istmpl(cls_data))
-			len=snprintf(buf, bufsize, "%s (TMPL: is_pc=%s)",name, !data->is_pckbd ? "no" : data->is_pckbd==1 ? "yes" : data->is_pckbd==3 ? "any" : "illegal");
-		else
-			len=snprintf(buf, bufsize, "%s (maxcode=%u, is_pc=%s)",name,unsigned(data->max_keycode),!data->is_pckbd ? "no" : data->is_pckbd==1 ? "yes" : "illegal");
-		return len>=int(bufsize) ? bufsize-1 : len;
-	}
-	virtual uint32_t get_d2c_maxmsgsize(const char* cls_data) const override;
-	virtual uint32_t get_c2d_maxmsgsize(const char* cls_data) const override;
-	virtual bool compare(const char* cls_data, const char* tmpl_data) const override { //actual comparison function
-		data_t* data=(data_t*)cls_data;
-		data_t* tmpl=(data_t*)tmpl_data;
-		if(check_istmpl(tmpl_data)) return tmpl->is_pckbd==3 || tmpl->is_pckbd==data->is_pckbd;
-		return !check_istmpl(cls_data) && data->max_keycode==tmpl->max_keycode && tmpl->is_pckbd==data->is_pckbd;
+	virtual bool p_matches(const iot_deviface_params* opspec0) const override {
+		const iot_deviface_params_keyboard* opspec=cast(opspec0);
+		if(!opspec) return false;
+		if(istmpl) return tmpl.is_pckbd==2 || tmpl.is_pckbd==opspec->spec.is_pckbd;
+		return spec.max_keycode==opspec->spec.max_keycode && spec.is_pckbd==opspec->spec.is_pckbd;
 	}
 };
 
-class iot_devifaceclass__keyboard_BASE {
+class iot_devifacetype_metaclass_keyboard : public iot_devifacetype_metaclass {
+	iot_devifacetype_metaclass_keyboard(void) : iot_devifacetype_metaclass(IOT_DEVIFACETYPEID_KEYBOARD, NULL, "Keyboard") {}
+
+	PACKED(
+		struct serialize_header_t {
+			uint32_t format;
+			uint8_t istmpl;
+		}
+	);
+	PACKED(
+		struct serialize_spec_t {
+			uint8_t is_pckbd; //only 0 and 1
+			uint16_t max_keycode;
+		}
+	);
+	PACKED(
+		struct serialize_tmpl_t {
+			uint8_t is_pckbd; //0 and 1 mean exact match, 2 means 'any'
+		}
+	);
+
+
+public:
+	static const iot_devifacetype_metaclass_keyboard object; //the only instance of this class
+
+private:
+	virtual int p_serialized_size(const iot_deviface_params* obj0) const override {
+		const iot_deviface_params_keyboard* obj=iot_deviface_params_keyboard::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+
+		if(obj->istmpl) return sizeof(serialize_header_t)+sizeof(serialize_tmpl_t);
+		return sizeof(serialize_header_t)+sizeof(serialize_spec_t);
+	}
+	virtual int p_serialize(const iot_deviface_params* obj0, char* buf, size_t bufsize) const override {
+		const iot_deviface_params_keyboard* obj=iot_deviface_params_keyboard::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+		if(bufsize<sizeof(serialize_header_t)) return IOT_ERROR_NO_BUFSPACE;
+		bufsize-=sizeof(serialize_header_t);
+
+		serialize_header_t *h=(serialize_header_t*)buf;
+		if(obj->istmpl) {
+			h->format=repack_uint32(uint32_t(1));
+			h->istmpl=1;
+			serialize_tmpl_t *t=(serialize_tmpl_t*)(h+1);
+			t->is_pckbd=obj->tmpl.is_pckbd;
+		} else {
+			h->format=repack_uint32(uint32_t(1));
+			h->istmpl=0;
+			serialize_spec_t *s=(serialize_spec_t*)(h+1);
+			s->is_pckbd=obj->spec.is_pckbd;
+			s->max_keycode=repack_uint16(obj->spec.max_keycode);
+		}
+		return 0;
+	}
+	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		return 0;
+	}
+	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		return 0;
+	}
+};
+
+
+inline iot_deviface_params_keyboard::iot_deviface_params_keyboard(bool is_pckbd, uint16_t max_keycode) : iot_deviface_params(&iot_devifacetype_metaclass_keyboard::object), istmpl(false) {
+		spec.is_pckbd=is_pckbd ? 1 : 0;
+
+		uint32_t maxcode=iot_valueclass_bitmap::get_maxkeycode();
+		spec.max_keycode = max_keycode > maxcode ? maxcode : max_keycode;
+}
+inline iot_deviface_params_keyboard::iot_deviface_params_keyboard(uint8_t is_pckbd) : iot_deviface_params(&iot_devifacetype_metaclass_keyboard::object), istmpl(true) {
+		tmpl.is_pckbd=is_pckbd<=2 ? is_pckbd : 2;
+}
+inline const iot_deviface_params_keyboard* iot_deviface_params_keyboard::cast(const iot_deviface_params* params) {
+	if(!params || !params->is_valid()) return NULL;
+	return params->get_metaclass()==&iot_devifacetype_metaclass_keyboard::object ? static_cast<const iot_deviface_params_keyboard*>(params) : NULL;
+}
+
+
+
+class iot_deviface__keyboard_BASE {
 public:
 	enum req_t : uint8_t { //commands (requests) which driver can execute
 		REQ_GET_STATE, //request to post EVENT_INIT_STATE with status of all keys. no 'data' is used
@@ -93,54 +166,70 @@ public:
 			was_drop:1; //flag that some messages were dropped before this one
 		uint32_t state[]; //map of depressed keys for all consumer events. already includes result of current key action
 	};
-	const msg* parse_event(const void *data, uint32_t data_size) {
-		uint32_t statesize=(attr->max_keycode / 32)+1;
-		if(data_size != sizeof(msg)+statesize*sizeof(uint32_t)) return NULL;
-		return static_cast<const msg*>(data);
-	}
-	static uint32_t get_maxmsgsize(uint16_t max_keycode) {
+	constexpr static uint32_t get_maxmsgsize(uint16_t max_keycode) {
 		return sizeof(msg)+((max_keycode / 32)+1)*sizeof(uint32_t);
 	}
 protected:
-	const iot_devifacetype_keyboard::data_t *attr;
+	const iot_deviface_params_keyboard* params;
 
-	iot_devifaceclass__keyboard_BASE(const iot_devifacetype *devclass) {
-		const iot_devifacetype_iface* iface=devclass->find_iface();
-		if(iface && iface->classid==IOT_DEVIFACETYPEID_KEYBOARD) {
-			attr=static_cast<const iot_devifacetype_keyboard*>(iface)->parse_classdata(devclass->data);
-			assert(attr!=NULL);
-		} else {
-			attr=NULL;
-		}
+	iot_deviface__keyboard_BASE(void) : params(NULL) {
+	}
+	bool init(const iot_deviface_params *deviface) {
+		params=iot_deviface_params_keyboard::cast(deviface);
+		if(!params || params->is_tmpl()) return false; //illegal interface type or is template
+		return true;
+	}
+	const msg* parse_event(const void *data, uint32_t data_size) const {
+		uint32_t statesize=(params->spec.max_keycode / 32)+1;
+		if(data_size != sizeof(msg)+statesize*sizeof(uint32_t)) return NULL;
+		return static_cast<const msg*>(data);
 	}
 };
 
 
-class iot_devifaceclass__keyboard_DRV : public iot_devifaceclass__DRVBASE, public iot_devifaceclass__keyboard_BASE {
+class iot_deviface__keyboard_DRV : public iot_deviface__DRVBASE, public iot_deviface__keyboard_BASE {
 
 public:
-	iot_devifaceclass__keyboard_DRV(const iot_devifacetype *devclass) : iot_devifaceclass__DRVBASE(devclass),
-																				iot_devifaceclass__keyboard_BASE(devclass) {
+	iot_deviface__keyboard_DRV(const iot_conn_drvview *conn=NULL) {
+		init(conn);
+	}
+	bool init(const iot_conn_drvview *conn=NULL) {
+		if(!conn) { //uninit request
+			//do uninit
+			iot_deviface__DRVBASE::init(NULL); //do uninit for DRVBASE
+			return false;
+		}
+		if(!iot_deviface__keyboard_BASE::init(conn->deviface)) {
+			iot_deviface__DRVBASE::init(NULL); //do uninit for DRVBASE
+			return false;
+		}
+		return iot_deviface__DRVBASE::init(conn);
+	}
+//	bool is_inited(void) inherited from iot_deviface__DRVBASE
+
+	const msg* parse_req(const void *data, uint32_t data_size) const {
+		if(!is_inited()) return NULL;
+		return iot_deviface__keyboard_BASE::parse_event(data, data_size);
 	}
 
 	//outgoing events (from driver to client)
-	int send_keydown(const iot_conn_drvview *conn, uint16_t keycode, uint32_t *state) {
-		return send_event(conn, EVENT_KEYDOWN, keycode, state);
+	int send_keydown(uint16_t keycode, uint32_t *state) const {
+		return send_event(EVENT_KEYDOWN, keycode, state);
 	}
-	int send_keyup(const iot_conn_drvview *conn, uint16_t keycode, uint32_t *state) {
-		return send_event(conn, EVENT_KEYUP, keycode, state);
+	int send_keyup(uint16_t keycode, uint32_t *state) const {
+		return send_event(EVENT_KEYUP, keycode, state);
 	}
-	int send_keyrepeat(const iot_conn_drvview *conn, uint16_t keycode, uint32_t *state) {
-		return send_event(conn, EVENT_KEYREPEAT, keycode, state);
+	int send_keyrepeat(uint16_t keycode, uint32_t *state) const {
+		return send_event(EVENT_KEYREPEAT, keycode, state);
 	}
-	int send_set_state(const iot_conn_drvview *conn, uint32_t *state) {
-		return send_event(conn, EVENT_SET_STATE, 0, state);
+	int send_set_state(uint32_t *state) const {
+		return send_event(EVENT_SET_STATE, 0, state);
 	}
 
 private:
-	int send_event(const iot_conn_drvview *conn, event_t event_code, uint16_t key_code, uint32_t *state) {
-		if(!attr) return IOT_ERROR_NOT_INITED;
-		uint32_t statesize=(attr->max_keycode / 32)+1;
+	int send_event(event_t event_code, uint16_t key_code, uint32_t *state) const {
+		if(!is_inited()) return IOT_ERROR_NOT_INITED;
+		uint32_t statesize=(params->spec.max_keycode / 32)+1;
 		char buf[sizeof(msg)+statesize*sizeof(uint32_t)];
 		msg* msgp=(msg*)buf;
 		memset(msgp, 0, sizeof(buf));
@@ -149,30 +238,48 @@ private:
 		msgp->key = key_code;
 		if(state) memcpy(msgp->state, state, statesize*sizeof(uint32_t));
 
-		return send_client_msg(conn, buf, sizeof(buf));
+		return send_client_msg(buf, sizeof(buf));
 	}
 };
 
-class iot_devifaceclass__keyboard_CL : public iot_devifaceclass__CLBASE, public iot_devifaceclass__keyboard_BASE {
+class iot_deviface__keyboard_CL : public iot_deviface__CLBASE, public iot_deviface__keyboard_BASE {
 
 public:
-	iot_devifaceclass__keyboard_CL(const iot_devifacetype *devclass) : iot_devifaceclass__CLBASE(devclass),
-																				iot_devifaceclass__keyboard_BASE(devclass) {
+	iot_deviface__keyboard_CL(const iot_conn_clientview *conn=NULL) {
+		init(conn);
+	}
+	bool init(const iot_conn_clientview *conn=NULL) {
+		if(!conn) { //uninit request
+			//do uninit
+			iot_deviface__CLBASE::init(NULL); //do uninit for DRVBASE
+			return false;
+		}
+		if(!iot_deviface__keyboard_BASE::init(conn->deviface)) {
+			iot_deviface__CLBASE::init(NULL); //do uninit for DRVBASE
+			return false;
+		}
+		return iot_deviface__CLBASE::init(conn);
+	}
+//	bool is_inited(void) inherited from iot_deviface__CLBASE
+
+	const msg* parse_event(const void *data, uint32_t data_size) const {
+		if(!is_inited()) return NULL;
+		return iot_deviface__keyboard_BASE::parse_event(data, data_size);
 	}
 
-	int request_state(const iot_conn_clientview* conn) {
-		return send_request(conn, REQ_GET_STATE);
+	int request_state(void) const {
+		return send_request(REQ_GET_STATE);
 	}
 	uint16_t get_max_keycode(void) const {
-		if(!attr) return 0;
-		return attr->max_keycode;
+		if(!is_inited()) return 0;
+		return params->spec.max_keycode;
 	}
 
 private:
-	int send_request(const iot_conn_clientview* conn, req_t req_code) {
-		if(!attr) return IOT_ERROR_NOT_INITED;
+	int send_request(req_t req_code) const {
+		if(!is_inited()) return IOT_ERROR_NOT_INITED;
 
-		uint32_t statesize=(attr->max_keycode / 32)+1;
+		uint32_t statesize=(params->spec.max_keycode / 32)+1;
 		char buf[sizeof(msg)+statesize*sizeof(uint32_t)];
 		msg* msgp=(msg*)buf;
 		memset(msgp, 0, sizeof(buf));
@@ -180,7 +287,7 @@ private:
 		msgp->statesize = uint8_t(statesize);
 		msgp->key = 0;
 
-		return send_driver_msg(conn, buf, sizeof(buf));
+		return send_driver_msg(buf, sizeof(buf));
 	}
 
 };

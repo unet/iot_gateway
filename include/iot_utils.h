@@ -6,13 +6,41 @@
 #include <stdlib.h>
 
 #define ECB_NO_LIBM
-#include <ecb.h>
+#include "ecb.h"
 
 #define expect_false(cond) ecb_expect_false (cond)
 #define expect_true(cond)  ecb_expect_true  (cond)
 
-#include <uv.h>
+#include "uv.h"
 
+//Functions to be used during serialization/deserialization to get fixed (little endian) byte order
+#if ECB_LITTLE_ENDIAN
+#define repack_uint64(v) (v)
+#define repack_int64(v) (v)
+#define repack_uint32(v) (v)
+#define repack_int32(v) (v)
+#define repack_uint16(v) (v)
+#define repack_int16(v) (v)
+#define repack_float(v) (v)
+#define repack_double(v) (v)
+#elif ECB_BIG_ENDIAN
+#define repack_uint64(v) ecb_bswap64(v)
+#define repack_int64(v) ((int64_t)ecb_bswap64(v))
+#define repack_uint32(v) ecb_bswap32(v)
+#define repack_int32(v) ((int32_t)ecb_bswap32(v))
+#define repack_uint16(v) ecb_bswap16(v)
+#define repack_int16(v) ((int16_t)ecb_bswap16(v))
+ecb_inline ecb_const float repack_float(float v) {uint32_t u=ecb_bswap32(*(uint32_t*)((char*)&(v)));return *(float*)((char*)&u);}
+ecb_inline ecb_const double repack_double(double v) {uint64_t u=ecb_bswap64(*(uint64_t*)((char*)&(v)));return *(double*)((char*)&u);}
+#else
+#error Byte order not constantly determined (TODO)
+#endif
+
+#ifdef _MSC_VER
+	#define PACKED( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop) )
+#elif defined(__GNUC__)
+	#define PACKED( __Declaration__ ) __Declaration__ __attribute__((packed))
+#endif
 //Find correct event loop for specified thread
 //Returns 0 on success and fills loop with correct pointer
 //On error returns negative error code:
@@ -31,6 +59,23 @@ inline uint64_t iot_strtou64(const char* str, char **endptr, int base) {
 	return strtoull(str, endptr, base);
 #else
 	return strtoul(str, endptr, base);
+#endif
+}
+
+//on overflow UINT32_MAX is returned and errno is set to ERANGE 
+inline uint32_t iot_strtou32(const char* str, char **endptr, int base) {
+	errno=0;
+#if ULONG_MAX == 0xFFFFFFFFUL
+	//32-bit system
+	return strtoul(str, endptr, base);
+#else
+	//64-bit system
+	uint64_t rval=strtoul(str, endptr, base);
+	if(errno==ERANGE || rval>UINT32_MAX) {
+		errno=ERANGE;
+		rval=UINT32_MAX;
+	}
+	return rval;
 #endif
 }
 

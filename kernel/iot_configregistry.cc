@@ -4,13 +4,13 @@
 #include <inttypes.h>
 //#include<time.h>
 
-#include<iot_module.h>
-#include<iot_utils.h>
-#include<kernel/iot_daemonlib.h>
-#include<kernel/iot_deviceregistry.h>
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_kernel.h>
-#include<kernel/iot_configregistry.h>
+#include "iot_module.h"
+#include "iot_utils.h"
+#include "iot_daemonlib.h"
+#include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_kernel.h"
+#include "iot_configregistry.h"
 
 
 
@@ -171,13 +171,14 @@ int iot_configregistry_t::load_hosts_config(json_object* cfg) { //main thread
 
 	//iterate through hosts
 	json_object_object_foreach(hosts, host_id, host) {
-		uint64_t u64=iot_strtou64(host_id, NULL, 10);
-		if(errno || !u64) {
+		iot_hostid_t id=0;
+		IOT_STRPARSE_UINT(host_id, iot_hostid_t, id);
+		if(!id) {
 			outlog_error("Invalid host id '%s' skipped in 'hostcfg.hosts' JSON-subobject of config", host_id);
 			continue;
 		}
-		if(u64==iot_current_hostid) continue;
-		err=host_update(u64, host);
+		if(id==iot_current_hostid) continue;
+		err=host_update(id, host);
 		if(err) return err;
 	}
 	return 0;
@@ -214,12 +215,31 @@ int iot_configregistry_t::load_config(json_object* cfg, bool skiphosts) { //main
 
 //Process nodes configuration
 	json_object *nodecfg=NULL;
-	json_object *nodes=NULL;
+
+	json_object *rules=NULL;
+	json_object *nodes;
 	json_object *links=NULL;
-	if(json_object_object_get_ex(cfg, "nodecfg", &nodecfg) && json_object_is_type(nodecfg,  json_type_object) && json_object_object_get_ex(nodecfg, "nodes", &nodes)) {
-		if(!json_object_is_type(nodes,  json_type_object)) nodes=NULL;
-		else if(json_object_object_get_ex(nodecfg, "links", &links)) {  //ignore links if there are no nodes
+	if(json_object_object_get_ex(cfg, "nodecfg", &nodecfg) && json_object_is_type(nodecfg,  json_type_object) && 
+					json_object_object_get_ex(nodecfg, "nodes", &nodes) && json_object_is_type(nodes,  json_type_object)) {
+		if(json_object_object_get_ex(nodecfg, "rules", &rules))   //ignore rules if there are no nodes
+			if(!json_object_is_type(rules,  json_type_object)) rules=NULL;
+
+		if(json_object_object_get_ex(nodecfg, "links", &links))  //ignore links if there are no nodes
 			if(!json_object_is_type(links,  json_type_object)) links=NULL;
+	} else nodes=NULL;
+
+	//iterate through rules
+	rules_markdel();
+	if(rules) {
+		json_object_object_foreach(rules, rule_id, rule) {
+			iot_id_t id=0;
+			IOT_STRPARSE_UINT(rule_id, iot_id_t, id);
+			if(!id) {
+				outlog_error("Invalid rule id '%s' skipped in 'nodecfg.rules' JSON-subobject of config", rule_id);
+				continue;
+			}
+			err=rule_update(id, rule);
+			if(err) return err;
 		}
 	}
 
@@ -227,12 +247,13 @@ int iot_configregistry_t::load_config(json_object* cfg, bool skiphosts) { //main
 	links_markdel();
 	if(links) {
 		json_object_object_foreach(links, link_id, lnk) {
-			uint64_t u64=iot_strtou64(link_id, NULL, 10);
-			if(errno || !u64 || u64>0xFFFFFFFFu) {
+			iotlink_id_t id=0;
+			IOT_STRPARSE_UINT(link_id, iotlink_id_t, id);
+			if(!id) {
 				outlog_error("Invalid link id '%s' skipped in 'nodecfg.links' JSON-subobject of config", link_id);
 				continue;
 			}
-			err=link_update(iotlink_id_t(u64), lnk);
+			err=link_update(id, lnk);
 			if(err) return err;
 		}
 	}
@@ -241,24 +262,18 @@ int iot_configregistry_t::load_config(json_object* cfg, bool skiphosts) { //main
 	nodes_markdel();
 	if(nodes) {
 		json_object_object_foreach(nodes, node_id, node) {
-			uint64_t u64=iot_strtou64(node_id, NULL, 10);
-			if(errno || !u64 || u64>0xFFFFFFFFu) {
+			iot_id_t id=0;
+			IOT_STRPARSE_UINT(node_id, iot_id_t, id);
+			if(!id) {
 				outlog_error("Invalid node id '%s' skipped in 'nodecfg.nodes' JSON-subobject of config", node_id);
 				continue;
 			}
-			err=node_update(iot_id_t(u64), node);
+			err=node_update(id, node);
 			if(err) return err;
 		}
 	}
 
-
-
-//		iot_config_item_node_t* iitem=(iot_config_item_node_t*)main_allocator.allocate(sizeof(iot_config_item_node_t));
-//		if(!iitem) return IOT_ERROR_NO_MEMORY;
-//		BILINKLIST_INSERTHEAD(&item1, nodes_head, next, prev);
-//		BILINKLIST_INSERTHEAD(&item2, nodes_head, next, prev);
-
-		return 0;
+	return 0;
 }
 
 int iot_configregistry_t::host_update(iot_hostid_t hostid, json_object* obj) {
@@ -342,14 +357,14 @@ int iot_configregistry_t::group_update(iot_id_t groupid, json_object* obj) {
 //	IOT_ERROR_NOT_FOUND - group_id not found
 //	IOT_ERROR_CRITICAL_BUG - (in release mode only, in debug will assert) some error with tree index
 //	IOT_ERROR_NO_MEMORY
-int iot_configregistry_t::link_update(iotlink_id_t linkid, json_object* obj) {
+int iot_configregistry_t::rule_update(iot_id_t ruleid, json_object* obj) {
 	json_object *val=NULL;
 	iot_id_t group_id=0, mode_id=0;
 	if(json_object_object_get_ex(obj, "group_id", &val)) IOT_JSONPARSE_UINT(val, iot_id_t, group_id)
 	iot_config_item_group_t* group=NULL;
 	if(group_id>0) group=group_find(group_id);
 	if(!group || group->is_del) {
-		outlog_error("Link at config path nodecfg.links.%" IOT_PRIiotlinkid " refers to non-existing group %" IOT_PRIiotid ", skipping it", linkid, group_id);
+		outlog_error("Rule at config path nodecfg.rules.%" IOT_PRIiotid " refers to non-existing group %" IOT_PRIiotid ", skipping it", ruleid, group_id);
 		return IOT_ERROR_NOT_FOUND;
 	}
 
@@ -359,7 +374,58 @@ int iot_configregistry_t::link_update(iotlink_id_t linkid, json_object* obj) {
 		uint8_t i;
 		for(i=0; i<group->num_modes; i++) if(group->modes[i]==mode_id) break;
 		if(i>=group->num_modes) {
-			outlog_error("Link at config path nodecfg.links.%" IOT_PRIiotlinkid " refers to illegal mode %" IOT_PRIiotid ", skipping it", linkid, mode_id);
+			outlog_error("Rule at config path nodecfg.rules.%" IOT_PRIiotid " refers to illegal mode %" IOT_PRIiotid ", skipping it", ruleid, mode_id);
+			return IOT_ERROR_NOT_FOUND;
+		}
+	}
+
+	iot_config_item_rule_t** prule=NULL;
+	iot_config_item_rule_t* rule=NULL;
+	decltype(rules_index)::treepath path;
+	int res=rules_index.find_add(ruleid, &prule, rule, &path);
+	if(res==-4) return IOT_ERROR_NO_MEMORY;
+	if(res<0) {
+		assert(false);
+		return IOT_ERROR_CRITICAL_BUG;
+	}
+	if(res==0) rule=*prule; //was found
+
+	if(!rule) {
+		size_t sz=sizeof(iot_config_item_rule_t); //+additional bytes
+		rule=(iot_config_item_rule_t*)main_allocator.allocate(sz);
+		if(!rule) {
+			res=rules_index.remove(ruleid, NULL, &path);
+			assert(res==1);
+			return IOT_ERROR_NO_MEMORY;
+		}
+		memset(rule, 0, sz);
+		rule->rule_id=ruleid;
+		*prule=rule;
+	} else {
+		assert(rule->rule_id==ruleid);
+		rule->is_del=0;
+	}
+	rule->group_item=group;
+	rule->mode_id=mode_id;
+
+	return 0;
+}
+
+
+//errors:
+//	IOT_ERROR_NOT_FOUND - group_id not found
+//	IOT_ERROR_CRITICAL_BUG - (in release mode only, in debug will assert) some error with tree index
+//	IOT_ERROR_NO_MEMORY
+int iot_configregistry_t::link_update(iotlink_id_t linkid, json_object* obj) {
+	iot_id_t rule_id=0;
+	IOT_JSONPARSE_UINT(obj, iot_id_t, rule_id);
+
+	iot_config_item_rule_t* rule=NULL;
+	if(rule_id>0 || errno) {
+		if(rule_id>0) rule=rule_find(rule_id);
+
+		if(!rule || rule->is_del) {
+			outlog_error("Link at config path nodecfg.links.%" IOT_PRIiotlinkid " refers to non-existing rule '%s', skipping it", linkid, json_object_get_string(obj));
 			return IOT_ERROR_NOT_FOUND;
 		}
 	}
@@ -390,11 +456,11 @@ int iot_configregistry_t::link_update(iotlink_id_t linkid, json_object* obj) {
 		assert(lnk->link_id==linkid);
 		lnk->is_del=0;
 	}
-	lnk->group_item=group;
-	lnk->mode_id=mode_id;
+	lnk->rule=rule;
 
 	return 0;
 }
+
 
 //errors:
 //	IOT_ERROR_NOT_FOUND - group_id or host_id not found
@@ -419,18 +485,22 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 
 	if(node && node->cfg_id>=cfg_id) {node->is_del=false;return 0;} //not updated
 
-	iot_id_t group_id=0;
-	iot_hostid_t host_id=0;
+	iot_id_t rule_id=0;
+	iot_config_item_rule_t* rule=NULL;
 
-	if(json_object_object_get_ex(obj, "group_id", &val)) IOT_JSONPARSE_UINT(val, iot_id_t, group_id)
-	iot_config_item_group_t* group=NULL;
-	if(group_id>0) {
-		group=group_find(group_id);
-		if(!group || group->is_del) {
-			outlog_error("node at config path nodecfg.nodes.%" IOT_PRIiotid " refers to non-existing group %" IOT_PRIiotid ", skipping it", nodeid, group_id);
-			return IOT_ERROR_NOT_FOUND;
+	if(json_object_object_get_ex(obj, "rule_id", &val)) {
+		IOT_JSONPARSE_UINT(val, iot_id_t, rule_id)
+		if(rule_id>0 || errno) {
+			if(rule_id>0) rule=rule_find(rule_id);
+
+			if(!rule || rule->is_del) {
+				outlog_error("node at config path nodecfg.nodes.%" IOT_PRIiotid " refers to non-existing rule '%s', skipping it", nodeid, json_object_get_string(val));
+				return IOT_ERROR_NOT_FOUND;
+			}
 		}
 	}
+
+	iot_hostid_t host_id=0;
 
 	if(json_object_object_get_ex(obj, "host_id", &val)) IOT_JSONPARSE_UINT(val, iot_hostid_t, host_id)
 
@@ -488,7 +558,7 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 				curdev=NULL;
 			}
 			if(!curdev) {
-				size_t sz=sizeof(iot_config_node_dev_t)+len*sizeof(iot_hwdev_ident_t);
+				size_t sz=sizeof(iot_config_node_dev_t)+len*sizeof(iot_config_node_dev_t::idents[0]);
 				curdev=(iot_config_node_dev_t*)main_allocator.allocate(sz, true);
 				if(!curdev) {err=IOT_ERROR_NO_MEMORY; goto on_exit;}
 				memset(curdev, 0, sz);
@@ -500,7 +570,7 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 				json_object* flt=json_object_array_get_idx(dev, i);
 				if(!json_object_is_type(flt, json_type_object)) continue;
 
-				if(iot_hwdevident_iface::restore_from_json(flt, curdev->idents[curdev->numidents])) curdev->numidents++;
+				if(iot_hwdev_ident_buffered::from_json(flt, &curdev->idents[curdev->numidents])) curdev->numidents++;
 			}
 			curdev->next=node->dev;
 			node->dev=curdev;
@@ -541,22 +611,23 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 			}
 			//process list of link ids
 			for(int i=0;i<len;i++) {
-				val=json_object_array_get_idx(links, i);
-				errno=0;
-				int64_t i64=json_object_get_int64(val);
-				if(!errno && i64>0 && i64<=UINT32_MAX) {
-					iotlink_id_t link_id=iotlink_id_t(i64);
+				iotlink_id_t link_id=0;
+				IOT_JSONPARSE_UINT(json_object_array_get_idx(links, i), iotlink_id_t, link_id)
+				iot_config_item_link_t* lnk=NULL;
+				if(link_id>0) lnk=link_find(link_id);
 
-					iot_config_item_link_t* lnk=link_find(link_id);
-					if(!lnk || lnk->is_del) {
-						outlog_error("Node at config path nodecfg.nodes.%" IOT_PRIiotid ".inputs.%s refers to non-existing link %" IOT_PRIiotlinkid ", skipping it", nodeid, label, link_id);
-						continue;
-					}
-					lnk->next_output=cur->outs_head;
-					cur->outs_head=lnk;
-					lnk->in=cur;
-					lnk->invalidate();
+				if(!lnk || lnk->is_del) {
+					outlog_error("Node at config path nodecfg.nodes.%" IOT_PRIiotid ".inputs.%s refers to non-existing or illegal link %" IOT_PRIiotlinkid ", skipping it", nodeid, label, link_id);
+					continue;
 				}
+				if(rule && lnk->rule!=rule) {
+					outlog_error("Rule-bound node at config path nodecfg.nodes.%" IOT_PRIiotid ".inputs.%s refers to link %" IOT_PRIiotlinkid " from another rule, skipping link", nodeid, label, link_id);
+					continue;
+				}
+				lnk->next_output=cur->outs_head;
+				cur->outs_head=lnk;
+				lnk->in=cur;
+				lnk->invalidate();
 			}
 			cur->next=node->inputs;
 			node->inputs=cur;
@@ -624,22 +695,24 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 			}
 			//process list of link ids
 			for(int i=0;i<len;i++) {
-				val=json_object_array_get_idx(links, i);
-				errno=0;
-				int64_t i64=json_object_get_int64(val);
-				if(!errno && i64>0 && i64<=UINT32_MAX) {
-					iotlink_id_t link_id=iotlink_id_t(i64);
+				iotlink_id_t link_id=0;
+				IOT_JSONPARSE_UINT(json_object_array_get_idx(links, i), iotlink_id_t, link_id)
+				iot_config_item_link_t* lnk=NULL;
+				if(link_id>0) lnk=link_find(link_id);
 
-					iot_config_item_link_t* lnk=link_find(link_id);
-					if(!lnk || lnk->is_del) {
-						outlog_error("Node at config path nodecfg.nodes.%" IOT_PRIiotid ".outputs.%s refers to non-existing link %" IOT_PRIiotlinkid ", skipping it", nodeid, label, link_id);
-						continue;
-					}
-					lnk->next_input=cur->ins_head;
-					cur->ins_head=lnk;
-					lnk->out=cur;
-					lnk->invalidate();
+				if(!lnk || lnk->is_del) {
+					outlog_error("Node at config path nodecfg.nodes.%" IOT_PRIiotid ".outputs.%s refers to non-existing or illegal link %" IOT_PRIiotlinkid ", skipping it", nodeid, label, link_id);
+					continue;
 				}
+				if(rule && lnk->rule!=rule) {
+					outlog_error("Rule-bound node at config path nodecfg.nodes.%" IOT_PRIiotid ".outputs.%s refers to link %" IOT_PRIiotlinkid " from another rule, skipping link", nodeid, label, link_id);
+					continue;
+				}
+
+				lnk->next_input=cur->ins_head;
+				cur->ins_head=lnk;
+				lnk->out=cur;
+				lnk->invalidate();
 			}
 			cur->next=node->outputs;
 			node->outputs=cur;
@@ -678,10 +751,7 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 	node->module_id=0;
 	if(json_object_object_get_ex(obj, "module_id", &val)) IOT_JSONPARSE_UINT(val, uint32_t, node->module_id)
 
-	node->mode_id=0;
-	if(json_object_object_get_ex(obj, "mode_id", &val)) IOT_JSONPARSE_UINT(val, iot_id_t, node->mode_id)
-
-	node->group_item=group;
+	node->rule_item=rule;
 
 	node->cfg_id=cfg_id;
 

@@ -9,8 +9,41 @@
 
 //#include<time.h>
 
-//#include<ecb.h>
-#include <iot_utils.h>
+#include "ecb.h"
+#include "iot_utils.h"
+
+
+#define IOT_JSONPARSE_UINT(jsonval, typename, varname) { \
+	if(typename ## _MAX == UINT32_MAX) {		\
+		errno=0;	\
+		int64_t i64=json_object_get_int64(jsonval);		\
+		if(!errno && i64>0 && i64<=UINT32_MAX) varname=(typename)i64;	\
+	} else if(typename ## _MAX == UINT64_MAX) {							\
+		uint64_t u64=iot_strtou64(json_object_get_string(jsonval), NULL, 10);	\
+		if(!errno && u64>0 && (u64<INT64_MAX || json_object_is_type(jsonval, json_type_string))) varname=(typename)(u64);	\
+	} else if(typename ## _MAX == UINT16_MAX || typename ## _MAX == UINT8_MAX) {							\
+		errno=0;	\
+		int i=json_object_get_int(jsonval);		\
+		if(!errno && i>0 && (uint32_t)i <= typename ## _MAX) varname=(typename)i;	\
+	} else {	\
+		assert(false);	\
+	}	\
+}
+
+#define IOT_STRPARSE_UINT(str, typename, varname) { \
+	if(typename ## _MAX == UINT32_MAX) {		\
+		uint32_t u32=iot_strtou32(str, NULL, 10);	\
+		if(!errno && u32>0) varname=(typename)(u32);	\
+	} else if(typename ## _MAX == UINT64_MAX) {							\
+		uint64_t u64=iot_strtou64(str, NULL, 10);	\
+		if(!errno && u64>0) varname=(typename)(u64);	\
+	} else if(typename ## _MAX == UINT16_MAX || typename ## _MAX == UINT8_MAX) {							\
+		uint32_t u32=iot_strtou32(str, NULL, 10);	\
+		if(!errno && u32>0 && u32 <= typename ## _MAX) varname=(typename)(u32);	\
+	} else {	\
+		assert(false);	\
+	}	\
+}
 
 
 

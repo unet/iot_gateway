@@ -7,28 +7,25 @@
 #include<assert.h>
 //#include<time.h>
 
-#include<ecb.h>
-
-
-#include <iot_kapi.h>
-#include <kernel/iot_common.h>
+#include "iot_kapi.h"
+#include "iot_common.h"
 
 class iot_peer_link_t;
 struct iot_remote_driverinst_item_t;
 class iot_peers_registry_t;
 
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_kernel.h>
-#include<kernel/iot_configregistry.h>
+#include "iot_moduleregistry.h"
+#include "iot_kernel.h"
+#include "iot_configregistry.h"
 
 struct iot_remote_driverinst_item_t {
 	iot_remote_driverinst_item_t *next, *prev;
 
-	iot_hwdev_localident_t devident;
-	const iot_hwdevident_iface* ident_iface;
+	iot_hwdev_localident* devident;
+//	const iot_hwdevident_iface* ident_iface;
 	dbllist_list<iot_device_entry_t, iot_mi_inputid_t, uint32_t, 1> retry_clients; //list of local client instances which can be retried later or blocked forever
 
-	iot_devifacetype_id_t dev_classids[IOT_CONFIG_MAX_CLASSES_PER_DEVICE];
+	iot_deviface_params_buffered devifaces[IOT_CONFIG_MAX_IFACES_PER_DEVICE];
 	iot_miid_t miid;
 };
 

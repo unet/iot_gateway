@@ -3,36 +3,41 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/time.h>
-#include <uv.h>
 
 #include <json-c/json.h>
 
-#include <iot_module.h>
-#include <iot_devclass_keyboard.h>
-#include <iot_devclass_activatable.h>
-#include <iot_devclass_toneplayer.h>
+#include "uv.h"
+#include "iot_module.h"
+//#include "iot_devclass_keyboard.h"
+//#include "iot_devclass_activatable.h"
+//#include "iot_devclass_toneplayer.h"
 
-#include <kernel/iot_daemonlib.h>
-#include <kernel/iot_kernel.h>
-#include <kernel/iot_moduleregistry.h>
-#include <kernel/iot_configregistry.h>
+#include "iot_daemonlib.h"
+#include "iot_kernel.h"
+#include "iot_moduleregistry.h"
+#include "iot_configregistry.h"
+
+
+#define PIDFILE_PATH "run/daemon.pid"
+#define TYPESDB_PATH "typesdb.json"
+
 
 uint64_t iot_starttime_ms; //start time of process like returned by uv_now (monotonic in ms since unknown point)
 static timeval _start_timeval;
 
-static iot_devifacetype_keyboard builtin_deviface_keyboard;
-static iot_devifacetype_activatable builtin_deviface_activatable;
-static iot_devifacetype_toneplayer builtin_deviface_toneplayer;
+//static iot_devifacetype_keyboard builtin_deviface_keyboard;
+//static iot_devifacetype_activatable builtin_deviface_activatable;
+//static iot_devifacetype_toneplayer builtin_deviface_toneplayer;
 
 //list of built-in device interface types to register at startup
-static const iot_devifacetype_iface* builtin_deviface_classes[]={
-	&builtin_deviface_keyboard,
-	&builtin_deviface_activatable,
-	&builtin_deviface_toneplayer
-};
+//static const iot_devifacetype_iface* builtin_deviface_classes[]={
+//	&builtin_deviface_keyboard,
+//	&builtin_deviface_activatable,
+//	&builtin_deviface_toneplayer
+//};
 
-//iot_devifaceclass__keyboard_ATTR iot_devifaceclass__keyboard_ATTR::def(IOT_KEYBOARD_MAX_KEYCODE, true);
-//uint32_t iot_devifaceclass__keyboard_BASE::maxmsgsize=sizeof(iot_devifaceclass__keyboard_BASE::msg)+(IOT_KEYBOARD_MAX_KEYCODE/32+1)*32;
+
+
 
 volatile sig_atomic_t need_restart=0;
 void onsignal (uv_signal_t *w, int signum);
@@ -44,7 +49,6 @@ struct daemon_setup_t {
 	uint16_t listen_port=12000;
 } daemon_setup;
 
-#define PIDFILE_PATH "run/daemon.pid"
 
 bool parse_setup(void) {
 	char namebuf[256];
@@ -129,13 +133,11 @@ bool parse_setup(void) {
 
 
 
-
 int main(int argn, char **arg) {
 	int err;
 	bool pidcreated=false;
 
 	assert(sizeof(iot_threadmsg_t)==64);
-	assert(sizeof(iot_hwdev_ident_t)==128);
 
 	if(!parse_args(argn, arg, "run")) {
 		return 1;
@@ -211,8 +213,17 @@ int main(int argn, char **arg) {
 
 	//Assume config was actualized or no server connection and some config got from file or we wait while server connection succeeds
 
+
+
+	cfg=config_registry->read_jsonfile(TYPESDB_PATH, "typesdb");
+
 	//load modules with autoload. autoload could be modified by config (TODO)
-	modules_registry->start(builtin_deviface_classes, sizeof(builtin_deviface_classes)/sizeof(builtin_deviface_classes[0]), NULL, 0);
+	modules_registry->start(cfg);
+	if(cfg) {
+		json_object_put(cfg); //modules_registry->start must increment references to necessary sub-objects
+		cfg=NULL;
+	}
+
 
 //	uv_run(main_loop, UV_RUN_ONCE);
 
@@ -288,6 +299,7 @@ onexit:
 
 	return 0;
 }
+
 
 
 void onsignal (uv_signal_t *w, int signum) {

@@ -13,8 +13,8 @@
 
 #include "config.h"
 
-#include <iot_module.h>
-#include <kernel/iot_daemonlib.h>
+#include "iot_module.h"
+#include "iot_daemonlib.h"
 
 static const char *loglevel_str[]={
 	"Dbg_",

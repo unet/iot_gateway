@@ -1,71 +1,89 @@
-#list of modules to compile
-MODULEDIR = modules
-KERNELDIR = kernel
-INCLUDEDIR = include
-MODULELIST = unet/generic/inputlinux unet/generic/kbd
 
-common_hdr = $(wildcard $(INCLUDEDIR)/*.h)
-kernel_ccsrc = $(wildcard $(KERNELDIR)/*.cc)
-kernel_hdr = $(common_hdr) $(wildcard $(INCLUDEDIR)/$(KERNELDIR)/*.h) bundles-db.h modules-db.h
-kernel_ccobjs = $(patsubst %.cc,%.o,$(kernel_ccsrc))
+.DEFAULT_GOAL := all
 
+auto/cvars.mk: ; #prevent make from attempt to remake this file
+include auto/cvars.mk
 
-GCC=gcc
-CPP=g++
-LD=ld
-
-#COMMONFLAGS = -Wall -Wstrict-overflow=2 -g -O0 -fPIC -rdynamic -fno-strict-aliasing -fdata-sections -ffunction-sections -I. -Iinclude -pthread -Ilibuv
-COMMONFLAGS = -Wall -Wstrict-overflow=2 -g -O0 -I. -Iinclude -pthread -Ilibuv
-#COMMONFLAGS_NDEBUG = -Wall -Wstrict-overflow=2 -O2 -DNDEBUG -I. -Iinclude -pthread -Ilibuv
-CPPFLAGS = $(COMMONFLAGS) -std=c++11
-CFLAGS = $(COMMONFLAGS)
-
-LDFLAGS = -g -Wl,--gc-sections -pthread -Wl,--export-dynamic
-LDDYNFLAGS = -shared
-
-
-LIBS = -lpthread -ljson-c  -ldl -Llibuv/.libs -Wl,-static,-luv,-call_shared
 APPEXT =
-
 ifdef SystemRoot
 	#windows
-	LIBS := $(LIBS) -lws2_32
-	LDFLAGS := $(LDFLAGS) -L/usr/x86_64-w64-mingw32/lib
 	APPEXT := .exe
 endif
 
-APPNAME = iotdaemon$(APPEXT)
+APPNAME := iotdaemon$(APPEXT)
 
-.PHONY: all kernel modules clean
+KERNELDIR := kernel
+KERNELINCLUDEDIR := kernel/include
 
-all: kernel modules $(APPNAME)
+#BUNDLELIST := unet/generic/inputlinux unet/generic/kbd unet/generic/toneplayer
+BUNDLELIST := $(shell sed -n -r 's,^\s*([a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*y\s*$$,\1,p' bundles.cfg | tr '\n' ' ')
+#DYNBUNDLELIST := unet/generic/inputlinux unet/generic/kbd unet/generic/toneplayer
+DYNBUNDLELIST := $(shell sed -n -r 's,^\s*([a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*m\s*$$,\1,p' bundles.cfg | tr '\n' ' ')
 
-
-modules_objs = $(foreach name, $(MODULELIST), $(MODULEDIR)/$(name)/$(notdir $(name)).o)
-
-#which objs among modules_objs are statically linked to app
-builtin_modules_objs = $(modules_objs)
-#$(modules_objs)
-dyn_modules_objs =
-dyn_modules_sos = $(patsubst %.o,%.so,$(dyn_modules_objs))
-
-$(dyn_modules_sos) : %.so : %.o
-	$(LD) $(LDDYNFLAGS) -o $@ $(patsubst %.so,%.o,$@)
-
-modules: $(builtin_modules_objs) $(dyn_modules_sos)
+common_hdr := $(wildcard $(INCLUDEDIR)/*.h)
+kernel_hdr := $(common_hdr) $(wildcard $(KERNELINCLUDEDIR)/*.h)
+kernel_autohdr := 
+kernel_ccsrc := $(wildcard $(KERNELDIR)/*.cc)
+kernel_ccobjs := $(patsubst %.cc,%.o,$(kernel_ccsrc))
 
 
-$(modules_objs): $(patsubst %.o,%.cc,$(modules_objs)) $(common_hdr)
-	$(CPP) $(CPPFLAGS) -fPIC -o $@ -c $(patsubst %.o,%.cc,$@)
+KERNELCFLAGS := -I$(KERNELINCLUDEDIR) -Iauto -DDAEMON_KERNEL
 
-$(APPNAME): $(kernel_ccobjs) $(builtin_modules_objs)
-	$(CPP) $(LDFLAGS) $(kernel_ccobjs) $(builtin_modules_objs) -o $@  $(LIBS)
+LDFLAGS := -g -pthread -Wl,--export-dynamic,--gc-sections -Llibuv/.libs
+
+#LDLIBS = -lpthread -ljson-c -ldl -Wl,-static,-l:libuv/.libs/libuv.a,-call_shared
+LDLIBS = -lpthread -ljson-c -ldl -l:libuv.a
+
+ifdef SystemRoot
+#windows
+LDFLAGS += -L/usr/x86_64-w64-mingw32/lib
+LDLIBS += -lws2_32
+endif
+
+mod-objs =
+
+PHONY := all kernel static_modules modules clean
+
+all: $(APPNAME) modules
+
+clean:
+	$(RM) $(KERNELDIR)/*.o $(APPNAME) auto/iot_bundlesdb.h auto/iot_modulesdb.h auto/bundles.cmd
+	@echo Cleaning modules...
+	@for i in $(BUNDLELIST) $(DYNBUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i clean; done
+
+
+auto/iot_bundlesdb.h: bundles.cfg
+	@echo "Rebuilding auto/iot_bundlesdb.h"
+	@sed -n -r 's~^\s*([a-zA-Z0-9_]*[a-zA-Z0-9])/([a-zA-Z0-9_]*[a-zA-Z0-9])/([a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*y\s*$$~static iot_modulesdb_bundle_t iot_moddb_bundle_\1__\2__\3("\1/\2/\3",true);\n#define IOT_MODULESDB_BUNDLE_\1__\2__\3~p' $< >$@
+	@sed -n -r 's~^\s*([a-zA-Z0-9_]*[a-zA-Z0-9])/([a-zA-Z0-9_]*[a-zA-Z0-9])/([a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*m\s*$$~static iot_modulesdb_bundle_t iot_moddb_bundle_\1__\2__\3("\1/\2/\3",false);\n#define IOT_MODULESDB_BUNDLE_\1__\2__\3~p' $< >>$@
+
+auto/iot_modulesdb.h: modulesdb.cfg
+	@echo "Rebuilding auto/iot_modulesdb.h"
+	@sed -n -r 's~^\s*([a-zA-Z0-9_]*[a-zA-Z0-9])/([a-zA-Z0-9_]*[a-zA-Z0-9])/([a-zA-Z0-9_]*[a-zA-Z0-9]):([a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*(.*)~#ifdef IOT_MODULESDB_BUNDLE_\1__\2__\3\niot_modulesdb_item_t("\4", \&iot_moddb_bundle_\1__\2__\3, \5),\n#else\niot_modulesdb_item_t("\1/\2/\3:\4", NULL, \5),\n#endif~p' $< >$@
+
+
+$(APPNAME): $(kernel_ccobjs) static_modules
+	@# $(foreach mod,$(BUNDLELIST),$(eval $(call readfileval,$(MODULESDIR)/$(mod)/$(KERNELDEPSFILE))))
+	$(CXX) $(LDFLAGS) $(kernel_ccobjs) $(mod-objs) -o $@  $(LDLIBS)
 
 kernel: $(kernel_ccobjs)
 
-$(kernel_ccobjs): %.o : %.cc $(kernel_hdr)
-	$(CPP) $(CPPFLAGS) -DDAEMON_KERNEL -o $@ -c $(patsubst %.o,%.cc,$@)
+$(KERNELDIR)/iot_moduleregistry.o: auto/iot_bundlesdb.h auto/iot_modulesdb.h
 
-clean:
-	rm $(KERNELDIR)/*.o $(APPNAME) $(modules_objs) $(dyn_modules_sos)
+$(kernel_ccobjs): $(kernel_autohdr) $(kernel_hdr)
+
+$(kernel_ccobjs): %.o : %.cc
+	$(CXX) $(CXXFLAGS) $(KERNELCFLAGS) -o $@ -c $<
+
+
+static_modules:
+	@echo Making static modules...
+	@for i in $(BUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i; done
+
+modules:
+	@echo Making dynamic modules...
+	@for i in $(DYNBUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i; done
+
+
+.PHONY : $(PHONY)
 

@@ -21,8 +21,8 @@
 	"hwdevice_drivers": [ //manual override of driver for hardware devices
 		{
 			"conntype_id": 1, //ID of device connection type of hwdevice
-			"data": <custom object>, //conntype-specific data with exact or wildcard specification
-			"driver_modules": [ MODULE_ID1, MODULE_ID2 ] //list of driver modules to try for device in order or presedence. empty list disables driver search
+			"ident": <custom object>, //conntype-specific data with exact or wildcard specification
+			"driver_modules": [ MODULE_ID1, MODULE_ID2 ] //list of driver modules to try for device in order or precedence. empty list disables driver search
 		}
 	]
 }

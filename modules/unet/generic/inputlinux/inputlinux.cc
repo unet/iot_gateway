@@ -6,42 +6,265 @@
 #include<assert.h>
 #include<new>
 
-#include<uv.h>
 
 #include <linux/input.h>
 
-#include<iot_utils.h>
-#include<iot_error.h>
+#include "uv.h"
+#include "iot_utils.h"
+#include "iot_error.h"
 
 
-#define IOT_VENDOR unet
-#define IOT_BUNDLE generic__inputlinux
+#include "iot_module.h"
 
-#include<iot_module.h>
-
-#include<iot_devclass_keyboard.h>
-#include<iot_devclass_activatable.h>
-#include<iot_devclass_toneplayer.h>
+#include "iot_devclass_keyboard.h"
+#include "iot_devclass_activatable.h"
+#include "modules/unet/generic/toneplayer_type/iot_devclass_toneplayer.h"
 
 //#define DRVNAME drv
 
 //list of modules in current bundle, their registered IDs. TODO: put real IDs when they will be allocated through some table in unetcommonsrc
-#define BUNDLE_MODULES_MAP(XX) \
-	XX(detector, 1)  \
-	XX(input_drv, 2)
+//#define BUNDLE_MODULES_MAP(XX) \
+//	XX(inputlinux, 1)
 
 
 //build constants like MODULEID_detector which resolve to registered module id
-enum {
-#define XX(name, id) MODULEID_ ## name = id,
-	BUNDLE_MODULES_MAP(XX)
-#undef XX
-};
+//enum {
+//#define XX(name, id) MODULEID_ ## name = id,
+//	BUNDLE_MODULES_MAP(XX)
+//#undef XX
+//};
 
 
 // "/dev/input/eventX" device on linuxes
-#define DEVCONTYPE_CUSTOM_LINUXINPUT	IOT_DEVCONTYPE_CUSTOM(MODULEID_detector, 1)
+//#define DEVCONTYPE_CUSTOM_LINUXINPUT	IOT_DEVCONTYPE_CUSTOM(MODULEID_inputlinux, 1)
 #define DEVCONTYPESTR_CUSTOM_LINUXINPUT	"LinuxInput"
+
+
+class iot_hwdev_localident_linuxinput : public iot_hwdev_localident {
+	friend class iot_hwdevcontype_metaclass_linuxinput;
+	union {
+		struct {
+//hwid:
+			uint16_t bustype,  //id of physical bus as per BUS_XXX constants in include/linux/input.h (1-0x1f for now)
+				vendor,
+				product,
+				version;
+			uint32_t cap_bitmap;
+			char phys[64]; //physical connection spec
+//address:
+			uint8_t event_index; //X in /dev/input/eventX
+		} spec;
+		struct {
+			uint32_t bustype; //bitmask of allowed bus types or 0 for any bus type
+			struct {
+				uint16_t vendor,
+					product,	 //this field can be 0 meaning "any product" or exact product id
+					version;	 //used to specify exact product version or 0xFFFF meaning "any"
+			} spec[8]; //array with specific product requirements
+			uint32_t cap_bitmap; //bitmap of required caps, so 0 means 'no requirements'
+			uint8_t num_specs; //number of valid items in spec[]. zero means that no specific product requirements
+		} tmpl;
+	};
+	bool istmpl;
+//
+public:
+	
+	iot_hwdev_localident_linuxinput(void);
+
+	static const iot_hwdev_localident_linuxinput* cast(const iot_hwdev_localident* ident);
+
+	int init_spec(uint8_t event_index, uint16_t bustype, uint16_t vendor, uint16_t product, uint16_t version, uint32_t cap_bitmap, const char* phys) {
+		if(!cap_bitmap || !phys) return IOT_ERROR_INVALID_ARGS;
+		istmpl=false;
+		spec.event_index=event_index;
+		spec.bustype=bustype;
+		spec.vendor=vendor;
+		spec.product=product;
+		spec.version=version;
+		spec.cap_bitmap=cap_bitmap;
+		snprintf(spec.phys, sizeof(spec.phys), "%s", phys);
+		return 0;
+	}
+
+	virtual bool is_tmpl(void) const override {
+		return istmpl;
+	}
+	virtual size_t get_size(void) const override {
+		return sizeof(*this);
+	}
+	virtual char* sprint_addr(char* buf, size_t bufsize, int* doff=NULL) const override { //actual address printing function. it must return number of written bytes (without NUL)
+		if(!bufsize) return buf;
+		int len;
+		if(istmpl) { //template
+			len=snprintf(buf, bufsize, "any event index");
+		} else {
+			len=snprintf(buf, bufsize, "event index=%u",unsigned(spec.event_index));
+		}
+		if(doff) *doff += len>=int(bufsize) ? int(bufsize-1) : len;
+		return buf;
+	}
+	virtual char* sprint_hwid(char* buf, size_t bufsize, int* doff=NULL) const override { //actual hw id printing function. it must return number of written bytes (without NUL)
+		if(!bufsize) return buf;
+		int len;
+		if(istmpl) { //template
+			len=snprintf(buf, bufsize, "template"); //TODO
+		} else {
+			const char *bus;
+			switch(spec.bustype) {
+				case 0x01: bus="PCI";break;
+				case 0x03: bus="USB";break;
+				case 0x05: bus="BT";break;
+				case 0x10: bus="ISA";break;
+				case 0x11: bus="PS/2";break;
+				case 0x19: bus="Host";break;
+				default: bus=NULL;
+			}
+			if(bus) {
+				len=snprintf(buf, bufsize, "bus=%s,vendor=%04x,product=%04x,ver=%04x,caps=%x,phys=%s",bus,unsigned(spec.vendor),
+					unsigned(spec.product),unsigned(spec.version),unsigned(spec.cap_bitmap),spec.phys);
+			} else {
+				len=snprintf(buf, bufsize, "bus=%u,vendor=%04x,product=%04x,ver=%04x,caps=%x,phys=%s",unsigned(spec.bustype),unsigned(spec.vendor),
+					unsigned(spec.product),unsigned(spec.version),unsigned(spec.cap_bitmap),spec.phys);
+			}
+		}
+		if(doff) *doff += len>=int(bufsize) ? int(bufsize-1) : len;
+		return buf;
+	}
+private:
+	virtual bool p_matches(const iot_hwdev_localident* opspec) const override {
+		return iot_hwdev_localident_linuxinput::p_matches_hwid(opspec) && iot_hwdev_localident_linuxinput::p_matches_addr(opspec);
+	}
+	virtual bool p_matches_hwid(const iot_hwdev_localident* opspec0) const override {
+		const iot_hwdev_localident_linuxinput* opspec=cast(opspec0);
+		if(!opspec) return false;
+		if(istmpl) {
+			if(tmpl.bustype && (tmpl.bustype & opspec->spec.bustype)==0) return false;
+			if(tmpl.cap_bitmap && (tmpl.cap_bitmap & opspec->spec.cap_bitmap)!=tmpl.cap_bitmap) return false;
+			if(!tmpl.num_specs) return true;
+			for(unsigned i=0;i<tmpl.num_specs;i++) { //check if any exact spec matches
+				if(tmpl.spec[i].vendor==opspec->spec.vendor && (!tmpl.spec[i].product ||
+					(tmpl.spec[i].product==opspec->spec.product && (tmpl.spec[i].version==0xFFFF || tmpl.spec[i].version==opspec->spec.version))))
+						return true;
+			}
+			return false;
+		}
+		return spec.bustype==opspec->spec.bustype && 
+			spec.vendor==opspec->spec.vendor && 
+			spec.product==opspec->spec.product && 
+			spec.version==opspec->spec.version &&
+			spec.cap_bitmap==opspec->spec.cap_bitmap &&
+			strcmp(spec.phys, opspec->spec.phys)==0;
+	}
+	virtual bool p_matches_addr(const iot_hwdev_localident* opspec0) const override {
+		const iot_hwdev_localident_linuxinput* opspec=cast(opspec0);
+		if(!opspec) return false;
+		if(istmpl) return true;
+		return spec.event_index==opspec->spec.event_index;
+	}
+};
+
+class iot_hwdevcontype_metaclass_linuxinput : public iot_hwdevcontype_metaclass {
+	iot_hwdevcontype_metaclass_linuxinput(void) : iot_hwdevcontype_metaclass(0, "unet", "LinuxInput") {}
+
+	PACKED(
+		struct serialize_header_t {
+			uint32_t format; //format/version of pack
+			uint8_t istmpl;
+		}
+	);
+	PACKED(
+		struct serialize_spec_t {
+			uint8_t event_index; //X in /dev/input/eventX
+			uint32_t cap_bitmap;
+			uint16_t bustype;  //id of physical bus as per BUS_XXX constants in include/linux/input.h (1-0x1f for now)
+			uint16_t vendor;
+			uint16_t product;
+			uint16_t version;
+			uint8_t phys_len; //number of chars in phys excluding NUL-terminator
+			char phys[]; //physical connection spec
+		}
+	);
+	PACKED(
+		struct serialize_tmpl_t {
+			uint8_t num_specs; //number of valid items in spec[]. zero means that no specific product requirements
+			uint32_t cap_bitmap; //bitmap of required caps, so 0 means 'no requirements'
+			uint32_t bustype; //bitmask of allowed bus types or 0 for any bus type
+			struct {
+				uint16_t vendor;
+				uint16_t product;	 //this field can be 0 meaning "any product" or exact product id
+				uint16_t version;	 //used to specify exact product version or 0xFFFF meaning "any"
+			} spec[]; //array with specific product requirements
+		}
+	);
+
+public:
+	static const iot_hwdevcontype_metaclass_linuxinput object; //the only instance of this class
+
+private:
+	virtual int p_serialized_size(const iot_hwdev_localident* obj0) const override {
+		const iot_hwdev_localident_linuxinput* obj=iot_hwdev_localident_linuxinput::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+		if(obj->istmpl) return sizeof(serialize_header_t)+sizeof(serialize_tmpl_t)+obj->tmpl.num_specs*sizeof(serialize_tmpl_t::spec[0]);
+		return sizeof(serialize_header_t)+sizeof(serialize_spec_t)+strlen(obj->spec.phys);
+	}
+	virtual int p_serialize(const iot_hwdev_localident* obj0, char* buf, size_t bufsize) const override {
+		const iot_hwdev_localident_linuxinput* obj=iot_hwdev_localident_linuxinput::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+		if(bufsize<sizeof(serialize_header_t)) return IOT_ERROR_NO_BUFSPACE;
+		bufsize-=sizeof(serialize_header_t);
+
+		serialize_header_t *h=(serialize_header_t*)buf;
+		if(obj->istmpl) {
+			if(bufsize < sizeof(serialize_tmpl_t)+obj->tmpl.num_specs*sizeof(serialize_tmpl_t::spec[0])) return IOT_ERROR_NO_BUFSPACE;
+			h->format=repack_uint32(uint32_t(1));
+			h->istmpl=1;
+			serialize_tmpl_t *t=(serialize_tmpl_t*)(h+1);
+			t->num_specs=obj->tmpl.num_specs;
+			t->cap_bitmap=repack_uint32(obj->tmpl.cap_bitmap);
+			t->bustype=repack_uint32(obj->tmpl.bustype);
+			for(uint8_t i=0;i<obj->tmpl.num_specs;i++) {
+				t->spec[i].vendor=repack_uint16(obj->tmpl.spec[i].vendor);
+				t->spec[i].product=repack_uint16(obj->tmpl.spec[i].product);
+				t->spec[i].version=repack_uint16(obj->tmpl.spec[i].version);
+			}
+		} else {
+			size_t len=strlen(obj->spec.phys);
+			if(bufsize < sizeof(serialize_spec_t)+len) return IOT_ERROR_NO_BUFSPACE;
+			h->format=repack_uint32(uint32_t(1));
+			h->istmpl=0;
+			serialize_spec_t *s=(serialize_spec_t*)(h+1);
+			s->event_index=obj->spec.event_index;
+			s->cap_bitmap=repack_uint32(obj->spec.cap_bitmap);
+			s->bustype=repack_uint16(obj->spec.bustype);
+			s->vendor=repack_uint16(obj->spec.vendor);
+			s->product=repack_uint16(obj->spec.product);
+			s->version=repack_uint16(obj->spec.version);
+			s->phys_len=uint8_t(len);
+			if(len>0) memcpy(s->phys, obj->spec.phys, len);
+		}
+		return 0;
+	}
+	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const override {
+		return 0;
+	}
+	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const override {
+		return 0;
+	}
+};
+
+const iot_hwdevcontype_metaclass_linuxinput iot_hwdevcontype_metaclass_linuxinput::object; //the only instance of this class
+
+
+iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(void) : iot_hwdev_localident(&iot_hwdevcontype_metaclass_linuxinput::object)
+{
+}
+const iot_hwdev_localident_linuxinput* iot_hwdev_localident_linuxinput::cast(const iot_hwdev_localident* ident) {
+	if(!ident || !ident->is_valid()) return NULL;
+	return ident->get_metaclass()==&iot_hwdevcontype_metaclass_linuxinput::object ? static_cast<const iot_hwdev_localident_linuxinput*>(ident) : NULL;
+}
+
+
+/*
 
 
 //interface for DEVCONTYPE_CUSTOM_LINUXINPUT contype
@@ -59,13 +282,14 @@ static struct linuxinput_iface : public iot_hwdevident_iface {
 		addr_t addr;
 	};
 
-	linuxinput_iface(void) : iot_hwdevident_iface(DEVCONTYPE_CUSTOM_LINUXINPUT, DEVCONTYPESTR_CUSTOM_LINUXINPUT) {
+	linuxinput_iface(void) : iot_hwdevident_iface(DEVCONTYPE_CUSTOM_LINUXINPUT) {
 	}
 
 	void init_localident(iot_hwdev_localident_t* dev_ident, uint32_t detector_module_id) { //must be called first to init iot_hwdev_localident_t structure
 		dev_ident->contype=contype;
 		dev_ident->detector_module_id=detector_module_id;
-		*((data_t*)dev_ident->data)={ //init as template
+		data_t *data=(data_t*)dev_ident->data;
+		*data={ //init as template
 			.format = 1,
 			.hwid = {
 				.input = {0, 0, 0, 0},
@@ -87,6 +311,10 @@ static struct linuxinput_iface : public iot_hwdevident_iface {
 		assert(check_data(dev_ident->data));
 		data_t* data=(data_t*)dev_ident->data;
 		data->addr=*addr;
+	}
+
+	virtual const char* get_name(void) const override {
+		return DEVCONTYPESTR_CUSTOM_LINUXINPUT;
 	}
 
 private:
@@ -111,45 +339,9 @@ private:
 		data_t* tmpl=(data_t*)tmpl_data;
 		return tmpl->addr.event_index==data->addr.event_index || tmpl->addr.event_index==0xFF;
 	}
-	virtual size_t print_addr(const char* dev_data, char* buf, size_t bufsize) const override { //actual address printing function. it must return number of written bytes (without NUL)
-		data_t* data=(data_t*)dev_data;
-		int len;
-		if(data->addr.event_index==0xFF) { //template
-			len=snprintf(buf, bufsize, "LinuxInput:any input");
-		} else {
-			len=snprintf(buf, bufsize, "LinuxInput:input=%u",unsigned(data->addr.event_index));
-		}
-		return len>=int(bufsize) ? bufsize-1 : len;
-	}
-	virtual size_t print_hwid(const char* dev_data, char* buf, size_t bufsize) const override { //actual hw id printing function. it must return number of written bytes (without NUL)
-		data_t* data=(data_t*)dev_data;
-		int len;
-		if(data->hwid.cap_bitmap==0xFFFFFFFFu) { //template
-			len=snprintf(buf, bufsize, "any hwid");
-		} else {
-			const char *bus;
-			switch(data->hwid.input.bustype) {
-				case 0x01: bus="PCI";break;
-				case 0x03: bus="USB";break;
-				case 0x05: bus="BT";break;
-				case 0x10: bus="ISA";break;
-				case 0x11: bus="PS/2";break;
-				case 0x19: bus="Host";break;
-				default: bus=NULL;
-			}
-			if(bus) {
-				len=snprintf(buf, bufsize, "bus=%s,vendor=%04x,product=%04x,ver=%04x,caps=%x",bus,unsigned(data->hwid.input.vendor),
-					unsigned(data->hwid.input.product),unsigned(data->hwid.input.version),unsigned(data->hwid.cap_bitmap));
-			} else {
-				len=snprintf(buf, bufsize, "bus=%u,vendor=%04x,product=%04x,ver=%04x,caps=%x",unsigned(data->hwid.input.bustype),unsigned(data->hwid.input.vendor),
-					unsigned(data->hwid.input.product),unsigned(data->hwid.input.version),unsigned(data->hwid.cap_bitmap));
-			}
-		}
-		return len>=int(bufsize) ? bufsize-1 : len;
-	}
 	virtual size_t to_json(const char* dev_data, char* buf, size_t bufsize) const override { //actual encoder to json
 //		data_t* data=(data_t*)dev_data;
-/*
+
 {
 	tmpl: absent (meaning 0) or 1 to show if this data refers to template. 
 	addr: {
@@ -162,7 +354,7 @@ private:
 		ver: model version code from 0 to 65534 or "*" in template
 		caps: subhash from {'key':1,'led':1,'snd':1,'sw':1,'rel':1} or for templates can be "*" of list with all required caps like ['key','led'].
 	}
-*/
+
 		return 0;
 	}
 	virtual const char* get_vistmpl(void) const override { //actual visualization template generator
@@ -185,8 +377,87 @@ private:
 })!!!";
 	}
 } linuxinput_iface_obj;
+*/
+
+class iot_hwdev_data_linuxinput : public iot_hwdev_data {
+public:
+	char name[256];
+	char phys[64];
+	input_id input; //__u16 bustype;__u16 vendor;__u16 product;__u16 version;
+
+	uint32_t cap_bitmap; //bitmap of available capabilities. we process: EV_KEY, EV_LED, EV_SW, EV_SND
+	uint32_t keys_bitmap[(KEY_CNT+31)/32]; //when EV_KEY capability present, bitmap of available keys as reported by driver (this is NOT physically present buttons but they can be present)
+	uint16_t leds_bitmap; //when EV_LED capability present, bitmap of available leds as reported by driver (this is NOT physically present leds but they can be present)
+	uint16_t sw_bitmap; //when EV_SW capability present, bitmap of available switch events
+	uint8_t snd_bitmap; //when EV_SND capability present, bitmap of available sound capabilities
+	uint8_t event_index; //X in /dev/input/eventX
+	bool data_valid=false;
 
 
+	iot_hwdev_data_linuxinput(void) : iot_hwdev_data(&iot_hwdevcontype_metaclass_linuxinput::object) {}
+
+	static const iot_hwdev_data_linuxinput* cast(const iot_hwdev_data* data) {
+		if(!data || !data->is_valid()) return NULL;
+		return data->get_metaclass()==&iot_hwdevcontype_metaclass_linuxinput::object ? static_cast<const iot_hwdev_data_linuxinput*>(data) : NULL;
+	}
+
+	virtual size_t get_size(void) const override {
+		return sizeof(*this);
+	}
+
+	bool operator==(const iot_hwdev_data_linuxinput &op) {
+		if(&op==this) return true;
+		if(data_valid!=op.data_valid) return false;
+		if(!data_valid) return true; //both invalid
+
+		if(strcmp(name, op.name)!=0) return false;
+		if(strcmp(phys, op.phys)!=0) return false;
+		if(memcmp(&input, &op.input, sizeof(input))) return false;
+		if(cap_bitmap!=op.cap_bitmap || leds_bitmap!=op.leds_bitmap || sw_bitmap!=op.sw_bitmap || snd_bitmap!=op.snd_bitmap || 
+			memcmp(keys_bitmap, op.keys_bitmap, sizeof(keys_bitmap))) return false;
+		return true;
+	}
+	bool operator!=(const iot_hwdev_data_linuxinput &op) {
+		return !((*this)==op);
+	}
+
+	const char* read_inputdev_caps(int fd, uint8_t index) {
+		data_valid=false;
+		event_index=index;
+
+		const char* errstr=NULL;
+		do { //create block for common error processing
+			if(ioctl(fd, EVIOCGID, &input)==-1) {errstr="ioctl for id";break;} //get bus, vendor, product, version
+
+			if(ioctl(fd, EVIOCGNAME(sizeof(name)), name)==-1) {errstr="ioctl for name";break;} //get name
+			if(!name[0]) {
+				strcpy(name,"N/A"); //ensure name is not empty
+			} else {
+				name[sizeof(name)-1]='\0'; //ensure NUL-terminated
+			}
+			if(ioctl(fd, EVIOCGPHYS(sizeof(phys)), phys)==-1) {errstr="ioctl for phys";break;} //get phys
+			phys[sizeof(phys)-1]='\0'; //ensure NUL-terminated
+
+			if(ioctl(fd, EVIOCGBIT(0,sizeof(cap_bitmap)), &cap_bitmap)==-1) {errstr="ioctl for cap bitmap";break;} //get capability bitmap
+			if(bitmap32_test_bit(&cap_bitmap, EV_KEY)) { //has EV_KEY cap
+				if(ioctl(fd, EVIOCGBIT(EV_KEY,sizeof(keys_bitmap)), keys_bitmap)==-1) {errstr="ioctl for keys bitmap";break;} //get available keys bitmap
+			} else memset(keys_bitmap, 0, sizeof(keys_bitmap));
+			if(bitmap32_test_bit(&cap_bitmap, EV_LED)) { //has EV_LED cap
+				if(ioctl(fd, EVIOCGBIT(EV_LED,sizeof(leds_bitmap)), &leds_bitmap)==-1) {errstr="ioctl for leds bitmap";break;} //get available leds bitmap
+			} else leds_bitmap=0;
+			if(bitmap32_test_bit(&cap_bitmap, EV_SW)) { //has EV_SW cap
+				if(ioctl(fd, EVIOCGBIT(EV_SW,sizeof(sw_bitmap)), &sw_bitmap)==-1) {errstr="ioctl for sw bitmap";break;} //get available switch events bitmap
+			} else sw_bitmap=0;
+			if(bitmap32_test_bit(&cap_bitmap, EV_SND)) { //has EV_SND cap
+				if(ioctl(fd, EVIOCGBIT(EV_SND,sizeof(snd_bitmap)), &snd_bitmap)==-1) {errstr="ioctl for snd bitmap";break;} //get available sound caps bitmap
+			} else snd_bitmap=0;
+			data_valid=true;
+		} while(0);
+		return errstr;
+	}
+
+};
+/*
 struct devcontype_linuxinput_t { //represents custom data for devices with DEVCONTYPE_CUSTOM_LINUXINPUT connection type
 	char name[256];
 	input_id input; //__u16 bustype;__u16 vendor;__u16 product;__u16 version;
@@ -199,42 +470,10 @@ struct devcontype_linuxinput_t { //represents custom data for devices with DEVCO
 	uint8_t event_index; //X in /dev/input/eventX
 };
 
-
+*/
 //common functions
 //fills devcontype_linuxinput_t struct with input device capabilities
 //returns NULL on success or error descr on error (with errno properly set to OS error)
-static const char* read_inputdev_caps(int fd, uint8_t index, devcontype_linuxinput_t* cur_dev) {
-	memset(cur_dev, 0, sizeof(*cur_dev));
-	cur_dev->event_index=index;
-
-	const char* errstr=NULL;
-	do { //create block for common error processing
-		if(ioctl(fd, EVIOCGID, &cur_dev->input)==-1) {errstr="ioctl for id";break;} //get bus, vendor, product, version
-
-		if(ioctl(fd, EVIOCGNAME(sizeof(cur_dev->name)), cur_dev->name)==-1) {errstr="ioctl for name";break;} //get name
-		if(!cur_dev->name[0]) {
-			strcpy(cur_dev->name,"N/A"); //ensure name is not empty
-		} else {
-			cur_dev->name[sizeof(cur_dev->name)-1]='\0'; //ensure NUL-terminated
-		}
-
-		if(ioctl(fd, EVIOCGBIT(0,sizeof(cur_dev->cap_bitmap)), &cur_dev->cap_bitmap)==-1) {errstr="ioctl for cap bitmap";break;} //get capability bitmap
-		if(bitmap32_test_bit(&cur_dev->cap_bitmap, EV_KEY)) { //has EV_KEY cap
-			if(ioctl(fd, EVIOCGBIT(EV_KEY,sizeof(cur_dev->keys_bitmap)), cur_dev->keys_bitmap)==-1) {errstr="ioctl for keys bitmap";break;} //get available keys bitmap
-		}
-		if(bitmap32_test_bit(&cur_dev->cap_bitmap, EV_LED)) { //has EV_LED cap
-			if(ioctl(fd, EVIOCGBIT(EV_LED,sizeof(cur_dev->leds_bitmap)), &cur_dev->leds_bitmap)==-1) {errstr="ioctl for leds bitmap";break;} //get available leds bitmap
-		}
-		if(bitmap32_test_bit(&cur_dev->cap_bitmap, EV_SW)) { //has EV_SW cap
-			if(ioctl(fd, EVIOCGBIT(EV_SW,sizeof(cur_dev->sw_bitmap)), &cur_dev->sw_bitmap)==-1) {errstr="ioctl for sw bitmap";break;} //get available switch events bitmap
-		}
-		if(bitmap32_test_bit(&cur_dev->cap_bitmap, EV_SND)) { //has EV_SND cap
-			if(ioctl(fd, EVIOCGBIT(EV_SND,sizeof(cur_dev->snd_bitmap)), &cur_dev->snd_bitmap)==-1) {errstr="ioctl for snd bitmap";break;} //get available sound caps bitmap
-		}
-	} while(0);
-
-	return errstr;
-}
 
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -255,70 +494,67 @@ class detector : public iot_device_detector_base {
 	uv_timer_t timer_watcher={};
 	int devinfo_len=0; //number of filled items in devinfo array
 	struct devinfo_t { //short device info indexed by event_index field. minimal info necessary to determine change of device
-		input_id input;
-		uint32_t cap_bitmap;
+		iot_hwdev_localident_linuxinput ident;
 		bool present;
+		bool error; //there was constant error adding this device, so no futher attempts should be done
 	} devinfo[DETECTOR_MAX_DEVS]={};
 
 	void on_timer(void) {
-		devcontype_linuxinput_t fulldevinfo[DETECTOR_MAX_DEVS];
+		iot_hwdev_data_linuxinput fulldevinfo[DETECTOR_MAX_DEVS];
 		int n=get_event_devices(fulldevinfo, DETECTOR_MAX_DEVS);
 		if(n==0 && devinfo_len==0) return; //nothing to do
 
-		iot_hwdev_localident_t ident;
-		linuxinput_iface_obj.init_localident(&ident, MODULEID_detector);
-		linuxinput_iface::addr_t addr;
-		linuxinput_iface::hwid_t hwid;
+		iot_hwdev_localident_linuxinput ident;
 
 		int i, err;
 		int max_n = n>=devinfo_len ? n : devinfo_len;
 
 		for(i=0;i<max_n;i++) { //compare if actual devices changed for common indexes
-			addr.event_index=i;
-			linuxinput_iface_obj.set_addr(&ident, &addr);
 			if(i<devinfo_len && devinfo[i].present) {
-				if(i>=n || !fulldevinfo[i].name[0]) { //new state is absent, so device was removed
+				if(i>=n || !fulldevinfo[i].data_valid) { //new state is absent, so device was removed
 					kapi_outlog_info("Hwdevice was removed: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d",i);
-					hwid={devinfo[i].input, devinfo[i].cap_bitmap};
-					linuxinput_iface_obj.set_hwid(&ident, &hwid);
-					err=kapi_hwdev_registry_action(IOT_ACTION_REMOVE, &ident, 0, NULL);
-					if(err>=0) {
+					if(!devinfo[i].error) { //device was added to registry, so must be removed
+						err=kapi_hwdev_registry_action(IOT_ACTION_REMOVE, &devinfo[i].ident, NULL);
+						if(err) kapi_outlog_error("Cannot remove device from registry: %s", kapi_strerror(err));
+						if(err==IOT_ERROR_TEMPORARY_ERROR) continue; //retry
+						//success or critical error
 						devinfo[i].present=false;
-					} else {
-						kapi_outlog_error("Cannot remove device from registry: %s", kapi_strerror(err));
 					}
 					continue;
 				}
-				//check if device looks the same
-				if(devinfo[i].cap_bitmap==fulldevinfo[i].cap_bitmap && !memcmp(&devinfo[i].input, &fulldevinfo[i].input, sizeof(devinfo[i].input))) continue; //same
-
-				kapi_outlog_debug("bitmap %08x != %08x OR vendor:model %04x:%04x != %04x:%04x", devinfo[i].cap_bitmap, fulldevinfo[i].cap_bitmap, unsigned(devinfo[i].input.vendor),unsigned(devinfo[i].input.product), unsigned(fulldevinfo[i].input.vendor),unsigned(fulldevinfo[i].input.product));
-
-				kapi_outlog_info("Hwdevice was replaced: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, new name='%s'",i, fulldevinfo[i].name);
-				
-				hwid={fulldevinfo[i].input, fulldevinfo[i].cap_bitmap};
-				linuxinput_iface_obj.set_hwid(&ident, &hwid);
-				err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, sizeof(fulldevinfo[i]), &fulldevinfo[i]);
-				if(err>=0) {
-					devinfo[i].input=fulldevinfo[i].input;
-					devinfo[i].cap_bitmap=fulldevinfo[i].cap_bitmap;
+				err=ident.init_spec(uint8_t(i), fulldevinfo[i].input.bustype, fulldevinfo[i].input.vendor, fulldevinfo[i].input.product, fulldevinfo[i].input.version, fulldevinfo[i].cap_bitmap, fulldevinfo[i].phys);
+				if(err) {
+					kapi_outlog_error("Cannot fill device local identity: %s", kapi_strerror(err));
 				} else {
-					kapi_outlog_error("Cannot update device in registry: %s", kapi_strerror(err));
+					//check if device looks the same
+					if(devinfo[i].ident.matches(&ident)) continue; //same
+
+					kapi_outlog_info("Hwdevice was replaced: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, new name='%s'",i, fulldevinfo[i].name);
+
+					err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, &fulldevinfo[i]);
+					if(err) kapi_outlog_error("Cannot update device in registry: %s", kapi_strerror(err));
 				}
+				if(err==IOT_ERROR_TEMPORARY_ERROR) continue; //retry
+				//success or critical error
+				devinfo[i].error = !!err;
+				devinfo[i].ident=ident;
 			} else  //previous state was absent
-				if(i<n && fulldevinfo[i].name[0]) { //new state is present, so NEW DEVICE ADDED
+				if(i<n && fulldevinfo[i].data_valid) { //new state is present, so NEW DEVICE ADDED
 					kapi_outlog_info("Detected new hwdevice with type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, name='%s'",i, fulldevinfo[i].name);
-					hwid={fulldevinfo[i].input, fulldevinfo[i].cap_bitmap};
-					linuxinput_iface_obj.set_hwid(&ident, &hwid);
-					err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, sizeof(fulldevinfo[i]), &fulldevinfo[i]);
-					if(err>=0) {
-						devinfo[i].present=true;
-						devinfo[i].input=fulldevinfo[i].input;
-						devinfo[i].cap_bitmap=fulldevinfo[i].cap_bitmap;
-						if(devinfo_len<i+1) devinfo_len=i+1;
+					err=ident.init_spec(uint8_t(i), fulldevinfo[i].input.bustype, fulldevinfo[i].input.vendor, fulldevinfo[i].input.product, fulldevinfo[i].input.version, fulldevinfo[i].cap_bitmap, fulldevinfo[i].phys);
+					if(err) {
+						kapi_outlog_error("Cannot fill device local identity: %s", kapi_strerror(err));
 					} else {
-						kapi_outlog_error("Cannot add new device to registry: %s", kapi_strerror(err));
+						err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, &fulldevinfo[i]);
+						if(err) kapi_outlog_error("Cannot add new device to registry: %s", kapi_strerror(err));
 					}
+					if(err==IOT_ERROR_TEMPORARY_ERROR) continue; //retry
+					//success or critical error
+					devinfo[i].present=true;
+					devinfo[i].error = !!err;
+
+					devinfo[i].ident=ident;
+					if(devinfo_len<i+1) devinfo_len=i+1;
 					continue;
 				} //else do nothing
 		}
@@ -417,10 +653,10 @@ public:
 
 	//traverses all /dev/input/eventX devices and reads necessary props
 	//returns number of found devices
-	static int get_event_devices(devcontype_linuxinput_t* devbuf, int max_devs, int start_index=0) {//takes address for array of devcontype_linuxinput_t structs and size of such array
+	static int get_event_devices(iot_hwdev_data_linuxinput* devbuf, int max_devs, int start_index=0) {//takes address for array of devcontype_linuxinput_t structs and size of such array
 		char filepath[32];
 		int fd, idx, n=0;
-		devcontype_linuxinput_t *cur_dev;
+		iot_hwdev_data_linuxinput *cur_dev;
 
 		for(idx=0;idx<max_devs;idx++) {
 			cur_dev=devbuf+idx;
@@ -434,11 +670,10 @@ public:
 				continue;
 			}
 
-			const char* errstr=read_inputdev_caps(fd, idx+start_index, cur_dev);
+			const char* errstr=cur_dev->read_inputdev_caps(fd, idx+start_index);
 
 			if(errstr) { //was ioctl error
 				kapi_outlog_debug("Cannot %s on %s: %s", errstr, filepath, uv_strerror(uv_translate_sys_error(errno)));
-				cur_dev->name[0]='\0'; //indicator of skipped device
 			}
 			n=idx+1; //must return maximum successful index + 1
 			close(fd);
@@ -447,39 +682,24 @@ public:
 	}
 };
 
-static iot_hwdevcontype_t detector_devcontypes[]={DEVCONTYPE_CUSTOM_LINUXINPUT};
+//static iot_hwdevcontype_t detector_devcontypes[]={DEVCONTYPE_CUSTOM_LINUXINPUT};
 
-static const iot_hwdevident_iface* detector_devcontype_config[]={&linuxinput_iface_obj};
 
 static iot_iface_device_detector_t detector_iface = {
 	.descr = NULL,
 	.params_tmpl = NULL,
-	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
+//	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
 	.cpu_loading = 0,
 
 	.init_instance = &detector::init_instance,
 	.deinit_instance = &detector::deinit_instance,
-	.check_system = &detector::check_system,
+	.check_system = &detector::check_system
 
-	.hwdevcontypes = detector_devcontypes
+//	.hwdevcontypes = detector_devcontypes
 };
 
-iot_moduleconfig_t IOT_MODULE_CONF(detector)={
-	.title = "Detector of Linux Input devices",
-	.descr = "Detects Linux input devices provided by evdev kernel module",
-	.module_id = MODULEID_detector, //Registered ID of this module. Must correspond to its full name in registry
-	.version = 0x000100001,
-	.config_version = 0,
-	.num_devifaces = 0,
-	.num_devcontypes = 1,
-	.init_module = [](void) -> int {return 0;},
-	.deinit_module = [](void) -> int {return 0;},
-	.deviface_config = NULL,
-	.devcontype_config = detector_devcontype_config,
-	.iface_node = NULL,
-	.iface_device_driver = NULL,
-	.iface_device_detector = &detector_iface
-};
+//static const iot_hwdevident_iface* detector_devcontype_config[]={&linuxinput_iface_obj};
+
 
 
 
@@ -492,8 +712,8 @@ iot_moduleconfig_t IOT_MODULE_CONF(detector)={
 struct input_drv_instance;
 
 struct input_drv_instance : public iot_device_driver_base {
-	iot_hwdev_ident_t dev_ident; //identification of connected hw device
-	devcontype_linuxinput_t dev_info; //hw device capabilities reported by detector
+//	iot_hwdev_ident_buffered dev_ident; //identification of connected hw device
+	iot_hwdev_data_linuxinput dev_info; //hw device capabilities reported by detector
 
 	uint32_t keys_state[(KEY_CNT+31)/32]={}; //when EV_KEY capability present, bitmap of current keys state reported by device
 	uint16_t leds_state=0; //when EV_LED capability present, bitmap of latest leds state reported by device
@@ -537,6 +757,7 @@ struct input_drv_instance : public iot_device_driver_base {
 	input_event write_buf[32];
 	uv_buf_t write_buf_data[1];
 	bool write_inprogress=false; //if true, then write_req and write_buf are busy
+	bool write_repeat=false; //if true, write_todevice() will be repeated just after finishing current write in progress
 	bool resync_state=false;
 	uv_write_t write_req;
 
@@ -547,13 +768,13 @@ struct input_drv_instance : public iot_device_driver_base {
 
 
 /////////////static fields/methods for driver instances management
-	static int init_instance(iot_device_driver_base**instance, uv_thread_t thread, iot_hwdev_data_t* dev_data, iot_devifaces_list* devifaces) {
+	static int init_instance(iot_device_driver_base**instance, uv_thread_t thread, const iot_hwdev_ident* dev_ident, const iot_hwdev_data* dev_data, iot_devifaces_list* devifaces) {
 		assert(uv_thread_self()==main_thread);
 
 		//FILTER HW DEVICE CAPABILITIES
-		int err=check_device(dev_data);
+		int err=check_device(dev_ident, dev_data);
 		if(err) return err;
-		devcontype_linuxinput_t *devinfo=(devcontype_linuxinput_t*)(dev_data->custom_data);
+		const iot_hwdev_data_linuxinput *devinfo=iot_hwdev_data_linuxinput::cast(dev_data);
 		//END OF FILTER
 
 		//determine interfaces which this instance can provide for provided hwdevice
@@ -561,8 +782,6 @@ struct input_drv_instance : public iot_device_driver_base {
 			have_leds=false, //iface IOT_DEVIFACETYPEID_ACTIVATABLE was reported
 			have_tone=false, //iface IOT_DEVCLASSID_BASIC_SPEAKER was reported
 			have_sw=false; //iface IOT_DEVCLASSID_HW_SWITCHES was reported
-
-		iot_devifacetype classdata;
 
 		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_KEY)) {
 			//find max key code in bitmap
@@ -574,8 +793,8 @@ struct input_drv_instance : public iot_device_driver_base {
 				}
 			if(code>=0) {
 				bool is_pckbd=bitmap32_test_bit(devinfo->keys_bitmap,KEY_LEFTSHIFT) && bitmap32_test_bit(devinfo->keys_bitmap,KEY_LEFTCTRL);
-				iot_devifacetype_keyboard::init_classdata(&classdata, false, is_pckbd, code);
-				if(devifaces->add(&classdata)==0) have_kbd=true;
+				iot_deviface_params_keyboard params(is_pckbd, code);
+				if(devifaces->add(&params)==0) have_kbd=true;
 			}
 		}
 		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_LED)) {
@@ -585,19 +804,18 @@ struct input_drv_instance : public iot_device_driver_base {
 				for(int j=15;j>=0;j--) if(devinfo->leds_bitmap & (1<<j)) {code=j;break;}
 			}
 			if(code>=0) {
-				iot_devifacetype_activatable::init_classdata(&classdata, false, uint16_t(code+1));
-				if(devifaces->add(&classdata)==0) have_leds=true;
+				iot_deviface_params_activatable params(uint16_t(code+1));
+				if(devifaces->add(&params)==0) have_leds=true;
 			}
 		}
 		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SND) && (devinfo->snd_bitmap & (1<<SND_TONE))) {
-			iot_devifacetype_toneplayer::init_classdata(&classdata);
-			if(devifaces->add(&classdata)==0) have_tone=true;
+			if(devifaces->add(&iot_deviface_params_toneplayer::object)==0) have_tone=true;
 		}
 //		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SW)) {if(devifaces->add(IOT_DEVIFACETYPEID_HW_SWITCHES, NULL)==0) have_sw=true;}
 
 		if(!devifaces->num) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
 
-		input_drv_instance *inst=new input_drv_instance(thread, dev_data, have_kbd, have_leds, have_tone, have_sw);
+		input_drv_instance *inst=new input_drv_instance(thread, dev_ident, dev_data, have_kbd, have_leds, have_tone, have_sw);
 		if(!inst) return IOT_ERROR_TEMPORARY_ERROR;
 
 		*instance=inst;
@@ -605,13 +823,13 @@ struct input_drv_instance : public iot_device_driver_base {
 		char descr[256]="";
 		char buf[128];
 		int off=0;
-		for(int i=0;i<devifaces->num;i++) {
-			const iot_devifacetype_iface *iface=devifaces->items[i].find_iface();
-			if(!iface) {
-				assert(false);
+		for(unsigned i=0;i<devifaces->num;i++) {
+			const iot_deviface_params *iface=devifaces->items[i].data;
+			if(!iface || !iface->is_valid()) {
+//				assert(false);
 				continue;
 			}
-			off+=snprintf(descr+off, sizeof(descr)-off, "%s%s", i==0 ? "" : ", ", iface->sprint(&devifaces->items[i],buf,sizeof(buf)));
+			off+=snprintf(descr+off, sizeof(descr)-off, "%s%s", i==0 ? "" : ", ", iface->sprint(buf,sizeof(buf)));
 			if(off>=int(sizeof(descr))) break;
 		}
 		kapi_outlog_info("Driver inited for device with type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, name='%s', caps='%s'", int(devinfo->event_index), devinfo->name, descr);
@@ -629,9 +847,9 @@ struct input_drv_instance : public iot_device_driver_base {
 
 		return 0;
 	}
-	static int check_device(const iot_hwdev_data_t* dev_data) {
-		if(dev_data->dev_ident.dev.contype!=DEVCONTYPE_CUSTOM_LINUXINPUT || dev_data->dev_ident.dev.detector_module_id!=MODULEID_detector) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
-		if(dev_data->custom_len!=sizeof(devcontype_linuxinput_t)) return IOT_ERROR_INVALID_DEVICE_DATA; //devcontype_linuxinput_t has fixed size
+	static int check_device(const iot_hwdev_ident* dev_ident, const iot_hwdev_data* dev_data) {
+		if(!iot_hwdev_localident_linuxinput::cast(dev_ident->local)) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+		if(!dev_data || !iot_hwdev_data_linuxinput::cast(dev_data)) return IOT_ERROR_INVALID_DEVICE_DATA; //devcontype_linuxinput_t has fixed size
 //		devcontype_linuxinput_t *devinfo=(devcontype_linuxinput_t*)(dev_data->custom_data);
 //		if(!(devinfo->cap_bitmap & (EV_KEY | EV_LED))) return IOT_ERROR_DEVICE_NOT_SUPPORTED; NOW SUPPORT ALL DEVICES DETECTED BY OUR DETECTOR
 		return 0;
@@ -640,13 +858,15 @@ struct input_drv_instance : public iot_device_driver_base {
 
 
 private:
-	input_drv_instance(uv_thread_t thread, iot_hwdev_data_t* dev_data, bool have_kbd, bool have_leds, bool have_tone, bool have_sw): 
+	input_drv_instance(uv_thread_t thread, const iot_hwdev_ident* dev_ident, const iot_hwdev_data* dev_data, bool have_kbd, bool have_leds, bool have_tone, bool have_sw): 
 			iot_device_driver_base(thread), have_kbd(have_kbd), have_leds(have_leds), have_tone(have_tone), have_sw(have_sw)
 	{
-		memcpy(&dev_ident, &dev_data->dev_ident, sizeof(dev_ident));
+//		memcpy(&dev_ident, &dev_data->dev_ident, sizeof(dev_ident));
 
-		assert(dev_data->dev_ident.dev.contype==DEVCONTYPE_CUSTOM_LINUXINPUT);
-		memcpy(&dev_info, dev_data->custom_data, sizeof(dev_info));
+//		assert(dev_data->dev_ident.dev.contype==DEVCONTYPE_CUSTOM_LINUXINPUT);
+		const iot_hwdev_data_linuxinput* data=iot_hwdev_data_linuxinput::cast(dev_data);
+		assert(data!=NULL);
+		dev_info=*data;
 	}
 	virtual ~input_drv_instance(void) {
 	}
@@ -699,83 +919,71 @@ private:
 	virtual int device_open(const iot_conn_drvview* conn) {
 		assert(uv_thread_self()==thread);
 		kapi_notify_write_avail(conn, true);
-		switch(conn->devclass.classid) {
-			case IOT_DEVIFACETYPEID_KEYBOARD: {
-				if(!have_kbd) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
-				if(conn_kbd) return IOT_ERROR_LIMIT_REACHED;
-				conn_kbd=conn;
+		const iot_devifacetype_metaclass* ifacetype=conn->deviface->get_metaclass();
+		if(ifacetype==&iot_devifacetype_metaclass_keyboard::object) {
+			if(!have_kbd) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			if(conn_kbd) return IOT_ERROR_LIMIT_REACHED;
+			conn_kbd=conn;
 
-				iot_devifaceclass__keyboard_DRV iface(&conn->devclass);
-				int err=iface.send_set_state(conn, keys_state);
-				assert(err==0);
+			iot_deviface__keyboard_DRV iface(conn);
+			int err=iface.send_set_state(keys_state);
+			assert(err==0);
+		} else if(ifacetype==&iot_devifacetype_metaclass_activatable::object) {
+			if(!have_leds) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			if(conn_leds) return IOT_ERROR_LIMIT_REACHED;
+			conn_leds=conn;
+			want_leds_bitmap=want_leds_state=0;
 
-				break;
-			}
-			case IOT_DEVIFACETYPEID_ACTIVATABLE: {
-				if(!have_leds) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
-				if(conn_leds) return IOT_ERROR_LIMIT_REACHED;
-				conn_leds=conn;
-				want_leds_bitmap=want_leds_state=0;
+			iot_deviface__activatable_DRV iface(conn);
+			int err=iface.send_current_state(leds_state, dev_info.leds_bitmap);
+			assert(err==0);
+		} else if(ifacetype==&iot_devifacetype_metaclass_toneplayer::object) {
+			if(!have_tone) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			if(conn_tone) return IOT_ERROR_LIMIT_REACHED;
 
-				iot_devifaceclass__activatable_DRV iface(&conn->devclass);
-				int err=iface.send_current_state(conn, leds_state, dev_info.leds_bitmap);
-				assert(err==0);
-
-				break;
-			}
-			case IOT_DEVIFACETYPEID_TONEPLAYER: {
-				if(!have_tone) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
-				if(conn_tone) return IOT_ERROR_LIMIT_REACHED;
-
-				//check current state of device
-				if(eventfd>=0) { //device handle opened
-					if(ioctl(eventfd, EVIOCGSND(sizeof(snd_state)), &snd_state)==-1) { //get current snd state
-						kapi_outlog_error("Cannot ioctl '%s' for EVIOCGSND: %s", device_path, uv_strerror(uv_translate_sys_error(errno)));
-						close(eventfd);
-						eventfd=-1;
-						kapi_self_abort(IOT_ERROR_CRITICAL_ERROR);
-						return IOT_ERROR_TEMPORARY_ERROR;
-					}
-					if(snd_state & ((1<<SND_TONE)|(1<<SND_BELL))) { //set request to stop playing
-						current_tone={};
-						tone_pending=true;
-					}
-				}
-
-				toneplayer=new iot_toneplayer_state;
-				if(!toneplayer) {
-					kapi_outlog_notice("Cannot allocate memory for toneplayer state");
+			//check current state of device
+			if(eventfd>=0) { //device handle opened
+				if(ioctl(eventfd, EVIOCGSND(sizeof(snd_state)), &snd_state)==-1) { //get current snd state
+					kapi_outlog_error("Cannot ioctl '%s' for EVIOCGSND: %s", device_path, uv_strerror(uv_translate_sys_error(errno)));
+					close(eventfd);
+					eventfd=-1;
+					kapi_self_abort(IOT_ERROR_CRITICAL_ERROR);
 					return IOT_ERROR_TEMPORARY_ERROR;
 				}
-				conn_tone=conn;
-
-				break;
+				if(snd_state & ((1<<SND_TONE)|(1<<SND_BELL))) { //set request to stop playing
+					current_tone={};
+					tone_pending=true;
+				}
 			}
-			default:
-				return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+
+			toneplayer=new iot_toneplayer_state;
+			if(!toneplayer) {
+				kapi_outlog_notice("Cannot allocate memory for toneplayer state");
+				return IOT_ERROR_TEMPORARY_ERROR;
+			}
+			conn_tone=conn;
+
+		} else {
+			return IOT_ERROR_DEVICE_NOT_SUPPORTED;
 		}
 		return 0;
 	}
 	virtual int device_close(const iot_conn_drvview* conn) {
 		assert(uv_thread_self()==thread);
-		switch(conn->devclass.classid) {
-			case IOT_DEVIFACETYPEID_KEYBOARD:
-				if(conn==conn_kbd) conn_kbd=NULL;
-				break;
-			case IOT_DEVIFACETYPEID_ACTIVATABLE:
-				if(conn==conn_leds) {
-					conn_leds=NULL;
-					want_leds_bitmap=want_leds_state=0;
-				}
-				break;
-			case IOT_DEVIFACETYPEID_TONEPLAYER:
-				if(conn==conn_tone) {
-					conn_tone=NULL;
-					delete toneplayer;
-					toneplayer=NULL;
-				}
-			default:
-				break;
+		const iot_devifacetype_metaclass* ifacetype=conn->deviface->get_metaclass();
+		if(ifacetype==&iot_devifacetype_metaclass_keyboard::object) {
+			if(conn==conn_kbd) conn_kbd=NULL;
+		} else if(ifacetype==&iot_devifacetype_metaclass_activatable::object) {
+			if(conn==conn_leds) {
+				conn_leds=NULL;
+				want_leds_bitmap=want_leds_state=0;
+			}
+		} else if(ifacetype==&iot_devifacetype_metaclass_toneplayer::object) {
+			if(conn==conn_tone) {
+				conn_tone=NULL;
+				delete toneplayer;
+				toneplayer=NULL;
+			}
 		}
 		return 0;
 	}
@@ -786,30 +994,30 @@ private:
 //		} else 
 		if(action_code==IOT_DEVCONN_ACTION_FULLREQUEST) {
 			if(conn==conn_kbd) {
-				iot_devifaceclass__keyboard_DRV iface(&conn->devclass);
-				const iot_devifaceclass__keyboard_DRV::msg* msg=iface.parse_event(data, data_size);
+				iot_deviface__keyboard_DRV iface(conn);
+				const iot_deviface__keyboard_DRV::msg* msg=iface.parse_req(data, data_size);
 				if(!msg) return IOT_ERROR_MESSAGE_IGNORED;
 
 				if(msg->req_code==iface.REQ_GET_STATE) {
-					err=iface.send_set_state(conn, keys_state);
+					err=iface.send_set_state(keys_state);
 					assert(err==0);
 					return 0;
 				}
 				return IOT_ERROR_MESSAGE_IGNORED;
 			} else if(conn==conn_leds) {
-				iot_devifaceclass__activatable_DRV iface(&conn->devclass);
-				const iot_devifaceclass__activatable_DRV::msg* msg=iface.parse_event(data, data_size);
+				iot_deviface__activatable_DRV iface(conn);
+				const iot_deviface__activatable_DRV::reqmsg* msg=iface.parse_req(data, data_size);
 				if(!msg) return IOT_ERROR_MESSAGE_IGNORED;
 
 				if(msg->req_code==iface.REQ_GET_STATE) {
 					kapi_outlog_info("Driver GOT leds GET STATE");
-					err=iface.send_current_state(conn, leds_state, dev_info.leds_bitmap);
+					err=iface.send_current_state(leds_state, dev_info.leds_bitmap);
 					assert(err==0);
 					return 0;
 				}
 				else if(msg->req_code==iface.REQ_SET_STATE) {
 					kapi_outlog_info("Driver GOT leds SET STATE activate=%04x, deactivate=%04x", msg->activate_mask, msg->deactivate_mask);
-					uint16_t activate_mask=msg->activate_mask, deactivate_mask=msg->deactivate_mask;
+					uint16_t activate_mask=msg->activate_mask & dev_info.leds_bitmap, deactivate_mask=msg->deactivate_mask & dev_info.leds_bitmap;
 
 					want_leds_bitmap = activate_mask | deactivate_mask;
 					uint16_t clr=activate_mask & deactivate_mask; //find bits set in both masks
@@ -817,9 +1025,9 @@ private:
 						activate_mask&=~clr;
 						deactivate_mask&=~clr;
 					}
-					want_leds_state=uint16_t(((want_leds_state | activate_mask) & ~deactivate_mask) & dev_info.leds_bitmap); //set activated bits, reset deactivated, reset invalid
+					want_leds_state=uint16_t((want_leds_state | activate_mask) & ~deactivate_mask); //set activated bits, reset deactivated, reset invalid
 
-					if(eventfd>=0) { //device handle opened
+/*					if(eventfd>=0) { //device handle opened
 						if(ioctl(eventfd, EVIOCGLED(sizeof(leds_state)), &leds_state)==-1) { //get current led state
 							kapi_outlog_error("Cannot ioctl '%s' for EVIOCGLED: %s", device_path, uv_strerror(uv_translate_sys_error(errno)));
 							stop_device_polling(true);
@@ -827,19 +1035,19 @@ private:
 						}
 						want_leds_state=(want_leds_state & want_leds_bitmap) | (leds_state & ~want_leds_bitmap);
 					}
-
+*/
 					write_todevice();
 					return 0;
 				}
 				return IOT_ERROR_MESSAGE_IGNORED;
 			} else if(conn==conn_tone) {
-				iot_devifaceclass__toneplayer_DRV iface(&conn->devclass);
-				iot_devifaceclass__toneplayer_DRV::req_t req;
+				iot_deviface__toneplayer_DRV iface(conn);
+				iot_deviface__toneplayer_DRV::req_t req;
 				const void* obj=iface.parse_req(data, data_size, req);
 				if(!obj) return IOT_ERROR_MESSAGE_IGNORED;
 				switch(req) {
 					case iface.REQ_SET_SONG: {
-						auto song=(iot_devifaceclass__toneplayer_DRV::req_set_song*)obj;
+						auto song=(iot_deviface__toneplayer_DRV::req_set_song*)obj;
 						err=toneplayer->set_song(song->index, song->title, song->num_tones, song->tones);
 						if(err<0) {
 							kapi_outlog_notice("Got error: %s", kapi_strerror(err));
@@ -848,12 +1056,12 @@ private:
 						break;
 					}
 					case iface.REQ_UNSET_SONG: {
-						auto song=(iot_devifaceclass__toneplayer_DRV::req_unset_song*)obj;
+						auto song=(iot_deviface__toneplayer_DRV::req_unset_song*)obj;
 						toneplayer->unset_song(song->index);
 						break;
 					}
 					case iface.REQ_PLAY: {
-						auto play=(iot_devifaceclass__toneplayer_DRV::req_play*)obj;
+						auto play=(iot_deviface__toneplayer_DRV::req_play*)obj;
 						toneplayer->set_playmode(play->mode);
 						toneplayer->rewind(play->song_index, play->tone_index);
 						if(play->stop_after) tone_stop_after=uv_now(loop)+play->stop_after*1000;
@@ -868,7 +1076,7 @@ private:
 						iot_toneplayer_status_t st;
 						toneplayer->get_status(&st);
 						st.is_playing=tone_playing;
-						err=iface.send_status(conn, &st);
+						err=iface.send_status(&st);
 						assert(err==0);
 						break;
 					}
@@ -877,7 +1085,7 @@ private:
 			}
 		}// else if(action_code==IOT_DEVCONN_ACTION_READY) {
 //			if(conn->id==connid_kbd) {
-//				iot_devifaceclass__keyboard_DRV iface(attr_kbd);
+//				iot_deviface__keyboard_DRV iface(attr_kbd);
 //				err=iface.send_set_state(connid_kbd, this, keys_state);
 //				assert(err==0);
 //			}
@@ -888,6 +1096,7 @@ private:
 
 	void toneplay_continue(void) {
 		assert(toneplayer!=NULL);
+		if(tone_stop_after>0 && uv_now(loop)>=tone_stop_after) {toneplay_stop(); return;}
 		const iot_toneplayer_tone_t *tone=toneplayer->get_nexttone();
 		if(!tone) {toneplay_stop(); return;}
 		current_tone=*tone;
@@ -938,14 +1147,14 @@ private:
 				}
 
 				//recheck caps of opened device
-				devcontype_linuxinput_t dev_info2;
-				const char* errstr=read_inputdev_caps(eventfd, dev_info.event_index, &dev_info2);
+				iot_hwdev_data_linuxinput dev_info2;
+				const char* errstr=dev_info2.read_inputdev_caps(eventfd, dev_info.event_index);
 				if(errstr) {
 					kapi_outlog_error("Cannot %s on '%s': %s", errstr, device_path, uv_strerror(uv_translate_sys_error(errno)));
 					criterror=true;
 					break;
 				}
-				if(memcmp(&dev_info, &dev_info2, sizeof(dev_info))!=0) { //another device was connected?
+				if(dev_info!=dev_info2) { //another device was connected?
 					kapi_outlog_info("Another device '%s' on '%s'", dev_info2.name, device_path);
 					criterror=true;
 					break;
@@ -965,7 +1174,7 @@ private:
 						criterror=true;
 						break;
 					}
-					if(conn_leds) want_leds_state=(want_leds_state & want_leds_bitmap) | (leds_state & ~want_leds_bitmap);
+//					if(conn_leds) want_leds_state=(want_leds_state & want_leds_bitmap) | (leds_state & ~want_leds_bitmap);
 				}
 				if(bitmap32_test_bit(&dev_info.cap_bitmap, EV_SW)) { //has EV_SW cap
 					if(ioctl(eventfd, EVIOCGSW(sizeof(sw_state)), &sw_state)==-1) { //get current switches state
@@ -1054,9 +1263,10 @@ private:
 						return;
 					}
 					if(conn_kbd) {
-						iot_devifaceclass__keyboard_DRV iface(&conn_kbd->devclass);
-						err=iface.send_set_state(conn_kbd, keys_state);
+						iot_deviface__keyboard_DRV iface(conn_kbd);
+						err=iface.send_set_state(keys_state);
 						assert(err==0);
+						kapi_outlog_debug("Resyncing key state from device '%s'", device_path);
 					}
 				}
 				if(bitmap32_test_bit(&dev_info.cap_bitmap, EV_LED)) { //has EV_LED cap
@@ -1065,9 +1275,9 @@ private:
 						stop_device_polling(true);
 						return;
 					}
-					if(conn_leds) {
-						want_leds_state=(want_leds_state & want_leds_bitmap) | (leds_state & ~want_leds_bitmap);
-					}
+//					if(conn_leds) {
+//						want_leds_state=(want_leds_state & want_leds_bitmap) | (leds_state & ~want_leds_bitmap);
+//					}
 				}
 			}
 			write_todevice();
@@ -1078,13 +1288,25 @@ private:
 
 
 	void write_todevice(void) {
-		if(!uv_is_active((uv_handle_t*)&io_watcher) || write_inprogress) return; //currently no connection to device or write request already pending
-		int idx=0;
-		if(conn_leds && leds_state!=want_leds_state) { //leds state must be updated
-			uint16_t dif=leds_state ^ want_leds_state;
-			for(int j=0;j<=15;j++) {
-				if(dif & (1<<j)) {
-					write_buf[idx++]={time:{}, type: EV_LED, code: uint16_t(j), value: (want_leds_state & (1<<j)) ? 1 : 0};
+		if(!uv_is_active((uv_handle_t*)&io_watcher)) return; //currently no connection to device
+		if(write_inprogress) { //write request already pending. it can be already made but not notified, so schedule recheck
+			write_repeat=true;
+			return;
+		}
+		unsigned idx=0;
+		if(conn_leds) {
+			//refresh leds state
+			if(ioctl(eventfd, EVIOCGLED(sizeof(leds_state)), &leds_state)==-1) {
+				kapi_outlog_error("Cannot ioctl '%s' for EVIOCGLED: %s", device_path, uv_strerror(uv_translate_sys_error(errno)));
+				stop_device_polling(true);
+				return;
+			}
+			if((leds_state & want_leds_bitmap) != (want_leds_state & want_leds_bitmap)) { //leds state must be updated
+				uint16_t dif=(leds_state ^ want_leds_state) & want_leds_bitmap;
+				for(int j=0;j<=15;j++) {
+					if(dif & (1<<j)) {
+						write_buf[idx++]={time:{}, type: EV_LED, code: uint16_t(j), value: (want_leds_state & (1<<j)) ? 1 : 0};
+					}
 				}
 			}
 		}
@@ -1110,6 +1332,7 @@ private:
 				tone_pending=false;
 			}
 			write_inprogress=true;
+			write_repeat=false;
 			return;
 		}
 		//error
@@ -1129,11 +1352,16 @@ private:
 	void dev_onwrite(int status) {
 		assert(write_inprogress);
 		write_inprogress=false;
+		if(stopping) {
+			kapi_self_abort(0);
+			return;
+		}
 		if(status<0) {
 			kapi_outlog_error("Error writing request: %s", uv_strerror(status));
 			stop_device_polling(false, ERR_EVENT_MGR, 0);
+			return;
 		}
-		if(stopping) kapi_self_abort(0);
+		if(write_repeat) write_todevice();
 	}
 
 	void dev_onread(ssize_t nread) {
@@ -1178,16 +1406,16 @@ private:
 					bitmap32_clear_bit(keys_state, ev->code);
 				}
 				if(conn_kbd) {
-					iot_devifaceclass__keyboard_DRV iface(&conn_kbd->devclass);
+					iot_deviface__keyboard_DRV iface(conn_kbd);
 					switch(ev->value) {
 						case 0:
-							err=iface.send_keyup(conn_kbd, ev->code, keys_state);
+							err=iface.send_keyup(ev->code, keys_state);
 							break;
 						case 1:
-							err=iface.send_keydown(conn_kbd, ev->code, keys_state);
+							err=iface.send_keydown(ev->code, keys_state);
 							break;
 						case 2:
-//							err=iface.send_keyrepeat(conn_kbd, ev->code, keys_state);
+//							err=iface.send_keyrepeat(ev->code, keys_state);
 							break;
 						default:
 							err=0;
@@ -1199,7 +1427,7 @@ private:
 						//TODO remember dropped message state
 					}
 				}
-//				kapi_outlog_info("Key with code %d is %s", ev->code, ev->value == 1 ? "down" : ev->value==0 ? "up" : "repeated");
+				kapi_outlog_debug("Key with code %d is %s", ev->code, ev->value == 1 ? "down" : ev->value==0 ? "up" : "repeated");
 				break;
 			case EV_LED: //led event
 				assert(ev->code<16);
@@ -1230,33 +1458,37 @@ private:
 
 };
 
-static iot_iface_device_driver_t input_drv_iface_device_driver = {
+static iot_iface_device_driver_t driver_iface = {
 	.descr = NULL,
 //	.num_devclassids = 0,
+	.num_hwdevcontypes = 0,
 	.cpu_loading = 3,
 
+	.hwdevcontypes = NULL,
 	.init_instance = &input_drv_instance::init_instance,
 	.deinit_instance = &input_drv_instance::deinit_instance,
 	.check_device = &input_drv_instance::check_device
 };
 
-iot_moduleconfig_t IOT_MODULE_CONF(input_drv)={
-	.title = "Driver for Linux Input devices",
-	.descr = "Supports keyboards, speaker, hardware switches",
-	.module_id = MODULEID_input_drv, //Registered ID of this module. Must correspond to its full name in registry
+
+iot_moduleconfig_t IOT_MODULE_CONF(inputlinux)={
+	.title = "Linux Input devices support",
+	.descr = "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module.",
+//	.module_id = MODULEID_inputlinux, //Registered ID of this module. Must correspond to its full name in registry
 	.version = 0x000100001,
 	.config_version = 0,
-	.num_devifaces = 0,
-	.num_devcontypes = 0,
-//	.flags = IOT_MODULEFLAG_IFACE_DEVDRIVER,
+//	.num_devifaces = 0,
+//	.num_devcontypes = 1,
 	.init_module = NULL,
 	.deinit_module = NULL,
-	.deviface_config = NULL,
-	.devcontype_config = NULL,
+//	.deviface_config = NULL,
+//	.devcontype_config = detector_devcontype_config,
 	.iface_node = NULL,
-	.iface_device_driver = &input_drv_iface_device_driver,
-	.iface_device_detector = NULL
+	.iface_device_driver = &driver_iface,
+	.iface_device_detector = &detector_iface
 };
+
+
 
 //end of kbdlinux:input_drv driver module
 

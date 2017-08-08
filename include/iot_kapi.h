@@ -4,11 +4,11 @@
 #include<stdint.h>
 #include<stddef.h>
 
-#include<uv.h>
-#include<ecb.h>
+#include "uv.h"
+#include "ecb.h"
 
-#include<iot_compat.h>
-#include<iot_error.h>
+#include "iot_compat.h"
+#include "iot_error.h"
 
 
 //Event subscription

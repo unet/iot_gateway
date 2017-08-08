@@ -2,13 +2,12 @@
 #include <pthread.h>
 #include <assert.h>
 
-//#include <iot_compat.h>
+//#include "iot_compat.h"
 //#include "evwrap.h"
-#include <uv.h>
-#include <ecb.h>
-#include <iot_module.h>
-#include <kernel/iot_daemonlib.h>
-#include <kernel/iot_kernel.h>
+#include "uv.h"
+#include "iot_module.h"
+#include "iot_daemonlib.h"
+#include "iot_kernel.h"
 
 //correspondence between cpu_loading indexes and points which every modinstance adds to thread total loading estimation
 static const uint16_t iot_thread_loading[4] = {
@@ -200,7 +199,7 @@ iot_thread_item_t* iot_thread_registry_t::assign_thread(uint8_t cpu_loadtp){
 			if(!minthread || it->cpu_loading<minload) {minload=it->cpu_loading;minthread=it;}
 			it=it->next;
 		}
-		assert(minthread!=NULL); //at leasy main thread must be here
+		assert(minthread!=NULL); //at least main thread must be here
 
 		if(cpu_loadtp<3) {
 			if(minload+iot_thread_loading[cpu_loadtp]<=IOT_THREAD_LOADING_MAX) return minthread;
@@ -286,7 +285,7 @@ void iot_thread_registry_t::on_thread_shutdown(iot_thread_item_t* thread) {
 		main_thread_item->is_shutdown=true;
 		on_thread_msg(&main_thread_item->msgq_watcher);
 
-		thread->deinit();
+		main_thread_item->deinit();
 		modules_registry->graceful_shutdown();
 	}
 }

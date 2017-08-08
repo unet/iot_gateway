@@ -6,20 +6,19 @@
 #include <sys/time.h>
 //#include<assert.h>
 //#include<string.h>
-#include<uv.h>
+#include "uv.h"
 
-//#include<ecb.h>
 #include<new>
 
-#include <iot_utils.h>
-#include <iot_kapi.h>
+#include "iot_utils.h"
+#include "iot_kapi.h"
 
 
 struct iot_memobject;
 class iot_memallocator;
 extern iot_memallocator main_allocator;
 
-#include <kernel/iot_common.h>
+#include "iot_common.h"
 
 
 //mask for iot_memobject::parent field to get index of freelist inside allocator

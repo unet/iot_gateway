@@ -22,21 +22,16 @@ typedef iot_dataclass_id_t iot_valueclass_id_t;	//type for class ID of value for
 
 
 
+
+
 //Build-in value classes
 #define IOT_VALUECLASSID_NODEERRORSTATE	(1 << 1)			//bitmap of error states of node
 
 #define IOT_VALUECLASSID_BOOLEAN		(2 << 1)			//
 #define IOT_VALUECLASSID_NUMBER			(3 << 1)			//fractional number
 
-#define IOT_VALUECLASSID_KBDSTATE		(10 << 1)			//bitmap of keys which are currently down
+#define IOT_VALUECLASSID_BITMAP		(10 << 1)			//bitmap of keys which are currently down
 
-
-#ifdef __linux__
-	#include <linux/input-event-codes.h>
-	#define IOT_KEYBOARD_MAX_KEYCODE KEY_MAX
-#else
-	#define IOT_KEYBOARD_MAX_KEYCODE 255
-#endif
 
 class iot_dataclass_base {
 protected:
@@ -267,24 +262,26 @@ private:
 };
 
 
+#ifdef __linux__
+	#include <linux/input-event-codes.h>
+#endif
 
-
-class iot_valueclass_kbdstate: public iot_valueclass_BASE { //DYNAMICALL SIZED OBJECT!!! MEMORY FOR THIS OBJECT MUST BE ALLOCATED EXPLICITELY after 
-															//call to iot_valueclass_kbdstate::calc_datasize. Constructor  on allocated memory called
-															//like 'new(memptr) iot_valueclass_kbdstate(arguments)'
-	uint32_t statesize; //number of items in state
+class iot_valueclass_bitmap: public iot_valueclass_BASE { //DYNAMICALL SIZED OBJECT!!! MEMORY FOR THIS OBJECT MUST BE ALLOCATED EXPLICITELY after 
+															//call to iot_valueclass_bitmap::calc_datasize. Constructor  on allocated memory called
+															//like 'new(memptr) iot_valueclass_bitmap(arguments)'
+	uint16_t statesize; //number of items in state
 	uint32_t state[]; //bitmap of currently depressed keys
 
 public:
-	iot_valueclass_kbdstate(uint16_t max_keycode=IOT_KEYBOARD_MAX_KEYCODE, bool memblock=true) : iot_valueclass_BASE(IOT_VALUECLASSID_KBDSTATE, memblock, false, false) {
-		if(max_keycode>IOT_KEYBOARD_MAX_KEYCODE) max_keycode=IOT_KEYBOARD_MAX_KEYCODE;
-		statesize=(max_keycode / 32)+1;
+	iot_valueclass_bitmap(uint32_t max_code, bool memblock=true) : iot_valueclass_BASE(IOT_VALUECLASSID_BITMAP, memblock, false, false) {
+		if(max_code>=65535*32) max_code=65535*32-1;
+		statesize=(max_code / 32)+1;
 		memset(state, 0, statesize*sizeof(uint32_t));
 		datasize=sizeof(*this)+sizeof(uint32_t)*statesize;
 	}
-	iot_valueclass_kbdstate(uint16_t max_keycode, const uint32_t* statemap, uint8_t statemapsize, bool memblock=true) : iot_valueclass_BASE(IOT_VALUECLASSID_KBDSTATE, memblock, false, false) {
-		if(max_keycode>IOT_KEYBOARD_MAX_KEYCODE) max_keycode=IOT_KEYBOARD_MAX_KEYCODE;
-		statesize=(max_keycode / 32)+1;
+	iot_valueclass_bitmap(uint32_t max_code, const uint32_t* statemap, uint8_t statemapsize, bool memblock=true) : iot_valueclass_BASE(IOT_VALUECLASSID_BITMAP, memblock, false, false) {
+		if(max_code>=65535*32) max_code=65535*32-1;
+		statesize=(max_code / 32)+1;
 		if(statemapsize<statesize) { //provided statemap must be of correct size or larger
 			assert(false);
 			if(statemapsize>0) memcpy(state, statemap, statemapsize*sizeof(uint32_t));
@@ -296,37 +293,43 @@ public:
 		datasize=sizeof(*this)+sizeof(uint32_t)*statesize;
 	}
 
-	static size_t calc_datasize(uint16_t max_keycode) { //allows to determine necessary memory for object to hold state map with specific max key code
+	static size_t calc_datasize(uint32_t max_code) { //allows to determine necessary memory for object to hold state map with specific max key code
 		//returns 0 on unallowed value
-		if(max_keycode>IOT_KEYBOARD_MAX_KEYCODE) max_keycode=IOT_KEYBOARD_MAX_KEYCODE;
-		if(!max_keycode) return 0;
-		return sizeof(iot_valueclass_kbdstate)+sizeof(uint32_t)*((max_keycode / 32)+1);
+		if(max_code>=65535*32) max_code=65535*32-1;
+		return sizeof(iot_valueclass_bitmap)+sizeof(uint32_t)*((max_code / 32)+1);
 	}
-	static const iot_valueclass_kbdstate* cast(const iot_valueclass_BASE*val) { //if val is not NULL and has correct class, casts pointer to this class
-		if(val && val->get_classid()==IOT_VALUECLASSID_KBDSTATE) return static_cast<const iot_valueclass_kbdstate*>(val);
+	static const iot_valueclass_bitmap* cast(const iot_valueclass_BASE*val) { //if val is not NULL and has correct class, casts pointer to this class
+		if(val && val->get_classid()==IOT_VALUECLASSID_BITMAP) return static_cast<const iot_valueclass_bitmap*>(val);
 		return NULL;
 	}
-
-	uint32_t test_key(uint16_t keycode) const {
-		if(keycode>=statesize*32) return 0;
-		return bitmap32_test_bit(state, keycode);
+	constexpr static uint32_t get_maxkeycode(void) { //in cases when bitmap represents key states, this method can be used to obtain maximum possible key code to calculate maximum bitmap size
+#ifdef __linux__
+		return KEY_MAX;
+#else
+		return 255;  //TODO for other OSes
+#endif
 	}
 
-	void set_key(uint16_t keycode) {
-		if(keycode>=statesize*32) {
+	uint32_t test_code(uint32_t code) const {
+		if(code>=statesize*32) return 0;
+		return bitmap32_test_bit(state, code);
+	}
+
+	void set_code(uint32_t code) {
+		if(code>=statesize*32) {
 			assert(false);
 			return;
 		}
-		bitmap32_set_bit(state, keycode);
+		bitmap32_set_bit(state, code);
 	}
-	void clear_key(uint16_t keycode) {
-		if(keycode>=statesize*32) {
+	void clear_code(uint32_t code) {
+		if(code>=statesize*32) {
 			assert(false);
 			return;
 		}
-		bitmap32_clear_bit(state, keycode);
+		bitmap32_clear_bit(state, code);
 	}
-	iot_valueclass_kbdstate& operator= (const iot_valueclass_kbdstate& op) {
+	iot_valueclass_bitmap& operator= (const iot_valueclass_bitmap& op) {
 		if(&op==this) return *this;
 		if(statesize<=op.statesize) {
 			memcpy(state, op.state, statesize*sizeof(uint32_t));
@@ -336,25 +339,25 @@ public:
 		}
 		return *this;
 	}
-	iot_valueclass_kbdstate& operator|= (const iot_valueclass_kbdstate& op) {
+	iot_valueclass_bitmap& operator|= (const iot_valueclass_bitmap& op) {
 		if(&op==this) return *this;
 		if(statesize<=op.statesize) {
-			for(uint8_t i=0;i<statesize;i++) state[i]|=op.state[i];
+			for(uint32_t i=0;i<statesize;i++) state[i]|=op.state[i];
 		} else {
-			for(uint8_t i=0;i<op.statesize;i++) state[i]|=op.state[i];
+			for(uint32_t i=0;i<op.statesize;i++) state[i]|=op.state[i];
 		}
 		return *this;
 	}
 	explicit operator bool(void) const {
-		for(uint8_t i=0;i<statesize;i++) if(state[i]) return true;
+		for(uint32_t i=0;i<statesize;i++) if(state[i]) return true;
 		return false;
 	}
 	virtual const char* type_name(void) const { //must return short abbreviation of type name
-		return "KeyboardState";
+		return "Bitmap";
 	}
 private:
 	virtual bool check_eq(const iot_dataclass_base *op) const override {
-		const iot_valueclass_kbdstate* opc=static_cast<const iot_valueclass_kbdstate*>(op);
+		const iot_valueclass_bitmap* opc=static_cast<const iot_valueclass_bitmap*>(op);
 		return statesize==opc->statesize && memcmp(state, opc->state, statesize*sizeof(state[0]))==0;
 	}
 };

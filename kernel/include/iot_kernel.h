@@ -4,14 +4,12 @@
 
 //#include <stdint.h>
 #include <atomic>
-#include <uv.h>
+#include "uv.h"
 
 //#include<time.h>
 
-//#include<ecb.h>
-
-#include <iot_module.h>
-#include <kernel/iot_common.h>
+#include "iot_module.h"
+#include "iot_common.h"
 
 
 struct iot_threadmsg_t;
@@ -121,7 +119,7 @@ struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 
 
 
-#include <kernel/iot_memalloc.h>
+#include "iot_memalloc.h"
 
 //fills thread message struct
 //'msg' arg can be NULL to request struct allocation from provided allocator (which can be NULL to request its auto selection).
@@ -143,8 +141,8 @@ inline int iot_prepare_msg_releasable(iot_threadmsg_t *&msg,iot_msg_code_t code,
 void iot_release_msg(iot_threadmsg_t *&msg, bool = false);
 
 
-//#include <kernel/iot_deviceregistry.h>
-#include <kernel/iot_moduleregistry.h>
+//#include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
 
 struct iot_thread_item_t {
 	iot_threadmsg_t termmsg={}; //preallocated msg structire to send

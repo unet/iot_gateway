@@ -1,14 +1,14 @@
 #include<stdint.h>
 //#include<time.h>
 
-#include<iot_module.h>
-#include<iot_utils.h>
-#include<kernel/iot_daemonlib.h>
-#include<kernel/iot_deviceregistry.h>
-#include<kernel/iot_moduleregistry.h>
-#include<kernel/iot_kernel.h>
-#include<kernel/iot_configregistry.h>
-#include<kernel/iot_configmodel.h>
+#include "iot_module.h"
+#include "iot_utils.h"
+#include "iot_daemonlib.h"
+#include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_kernel.h"
+#include "iot_configregistry.h"
+#include "iot_configmodel.h"
 
 
 iot_nodemodel* iot_nodemodel::create(iot_config_item_node_t* cfgitem) {
@@ -238,7 +238,7 @@ void iot_nodemodel::try_create_instance(void) {
 	}
 	err=modules_registry->create_node_modinstance(module, this);
 	if(err && err!=IOT_ERROR_NOT_READY) {
-		outlog_error("Node module with ID %u got error during init: %s", module->config->module_id, kapi_strerror(err));
+		outlog_error("Node module with ID %u got error during init: %s", module->dbitem->module_id, kapi_strerror(err));
 //		if(err==IOT_ERROR_CRITICAL_BUG) module->node_blocked=1;
 		//TODO set error state for this iot_id to be able to report to server
 		//TODO setup retry if some recoverable error happened
@@ -626,6 +626,14 @@ nomem:
 	if(outsignals) iot_modelsignal::release(outsignals);
 	return IOT_ERROR_NO_MEMORY;
 }
+
+const iot_valueclass_BASE* iot_nodemodel::get_outputvalue(uint8_t index) {
+	assert(modinstlk.modinst!=NULL);
+	assert(uv_thread_self()==modinstlk.modinst->thread->thread);
+	if(index>=node_iface->num_valueoutputs) return NULL;
+	return curvalueoutput[index].instance_value;
+}
+
 
 iot_modelsignal::iot_modelsignal(iot_nodemodel *model, const char* out_labeln, uint64_t reltime, const iot_dataclass_base* msgval, /*bool is_sync,*/ const iot_event_id_t* reason) : 
 	reltime(reltime), data(msgval)/*, is_sync(is_sync)*/ {
