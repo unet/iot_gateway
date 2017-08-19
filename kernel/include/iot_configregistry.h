@@ -75,9 +75,9 @@ struct iot_config_node_in_t {
 	iot_config_item_link_t *outs_head=NULL; //array of outputs connected to current input, next_output field is used as next reference
 
 	union {
-		const iot_valueclass_BASE* current_value=NULL; //last value, set by event processing. i.e. it is current value of input from modelling point of view. Normally equal to
+		const iot_valuetype_BASE* current_value=NULL; //last value, set by event processing. i.e. it is current value of input from modelling point of view. Normally equal to
 											//current single corresponding output's value. UPDATED FROM MAIN thread!!!
-		const iot_msgclass_BASE* inject_msg; //can be used by customer to inject message even to unconnected msg input (which has no links) or without binding to specific source link
+		const iot_msgtype_BASE* inject_msg; //can be used by customer to inject message even to unconnected msg input (which has no links) or without binding to specific source link
 	};
 
 	int16_t real_index=-1; //real index of node input (according to module config) or -1 if not found (MUST BE INITED TO -1)
@@ -105,7 +105,7 @@ struct iot_config_node_out_t {
 	iot_config_item_node_t *node; //parent node
 	iot_config_item_link_t *ins_head=NULL; //array of inputs connected to current output, next_input field is used as next reference
 
-	const iot_valueclass_BASE* current_value=NULL; //last value, set by event processing. i.e. it is current value of output from modelling point of view. UPDATED FROM MAIN thread!!!
+	const iot_valuetype_BASE* current_value=NULL; //last value, set by event processing. i.e. it is current value of output from modelling point of view. UPDATED FROM MAIN thread!!!
 	iot_modelsignal* prealloc_signal=NULL;
 
 	int16_t real_index=-1; //real index of node output (according to module config) or -1 if not found (MUST BE INITED TO -1)
@@ -113,7 +113,7 @@ struct iot_config_node_out_t {
 
 	char label[IOT_CONFIG_LINKLABEL_MAXLEN+1+1]={}; //label with type prefix
 
-	iot_config_node_out_t(iot_config_item_node_t* node, const char* label_=NULL, const iot_valueclass_BASE* current_value=NULL) : node(node), current_value(current_value) {
+	iot_config_node_out_t(iot_config_item_node_t* node, const char* label_=NULL, const iot_valuetype_BASE* current_value=NULL) : node(node), current_value(current_value) {
 		if(label) strcpy(label, label_);
 	}
 
@@ -182,7 +182,7 @@ struct iot_config_item_node_t {
 
 	iot_config_item_node_t* waitexec_next=NULL, *waitexec_prev=NULL; //for sync node being executed in complex mode helds position in blockedby->waitexec_head list
 
-	iot_config_item_node_t(iot_id_t node_id) : node_id(node_id), erroutput (this, "v" IOT_CONFIG_NODE_ERROUT_LABEL, &iot_valueclass_nodeerrorstate::const_noinst) {
+	iot_config_item_node_t(iot_id_t node_id) : node_id(node_id), erroutput (this, "v" IOT_CONFIG_NODE_ERROUT_LABEL, &iot_valuetype_nodeerrorstate::const_noinst) {
 	}
 
 	bool needs_exec(void) {return needexec_prev!=NULL;}
@@ -238,8 +238,8 @@ struct iot_config_item_link_t {
 //	iot_id_t mode_id; //can be zero for links from group-common rules
 //	iot_config_item_group_t *group_item; //must point to structure corresponding to group_id
 
-	const iot_msgclass_BASE* current_msg;//can be assigned for valid link only
-	const iot_msgclass_BASE* prev_msg; //if new msg comes when current_msg is not NULL, value from current_msg goes here. can be assigned for valid link only
+	const iot_msgtype_BASE* current_msg;//can be assigned for valid link only
+	const iot_msgtype_BASE* prev_msg; //if new msg comes when current_msg is not NULL, value from current_msg goes here. can be assigned for valid link only
 
 	uint16_t pathlen=0; //used during potential signal path modelling FOR MSG LINKS ONLY
 
@@ -778,7 +778,7 @@ printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numer
 					if(sig->node_out->current_value) sig->node_out->current_value->release();
 					if(sig->data) {
 						sig->data->incref();
-						sig->node_out->current_value=static_cast<const iot_valueclass_BASE*>(sig->data);
+						sig->node_out->current_value=static_cast<const iot_valuetype_BASE*>(sig->data);
 					} else {
 						sig->node_out->current_value=NULL;
 					}
@@ -817,7 +817,7 @@ printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numer
 						if(link->in->current_value) link->in->current_value->release();
 						if(sig->data) {
 							sig->data->incref();
-							link->in->current_value=static_cast<const iot_valueclass_BASE*>(sig->data);
+							link->in->current_value=static_cast<const iot_valuetype_BASE*>(sig->data);
 						} else {
 							link->in->current_value=NULL;
 						}
@@ -838,7 +838,7 @@ printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numer
 							link->current_msg->release();
 						}
 						sig->data->incref();
-						link->current_msg=static_cast<const iot_msgclass_BASE*>(sig->data);
+						link->current_msg=static_cast<const iot_msgtype_BASE*>(sig->data);
 					}
 
 					link->in->is_undelivered=true;

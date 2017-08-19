@@ -82,7 +82,8 @@ DEPBUNDLES :=
 all: $(BUILDTYPEFILE) checkdeps rmkerneldeps $(bundle-name).$(SOSUFFIX)
 
 $(bundle-name).$(SOSUFFIX): $(objs)
-	$(CXX) $(DYNLDFLAGS) -o $@ $^
+	$(CXX) $(DYNLDFLAGS) -Wl,-soname=$(MODULESDIR)/$(bundle-vendor)/$(bundle-dir)/$(bundle-name).$(SOSUFFIX) $(foreach dep,$(DEPBUNDLES),../../../$(dep).$(SOSUFFIX)) -o $@ $^
+	@if [ ! -e ../$(bundle-name).$(SOSUFFIX) ] ; then ln -s $(bundle-name)/$(bundle-name).$(SOSUFFIX) ../$(bundle-name).$(SOSUFFIX) ; fi
 
 ##Check that build type for current bundle wasn't changed
 #ifneq ($(BUILDTYPE),$(call readfileval,$(BUILDTYPEFILE)))

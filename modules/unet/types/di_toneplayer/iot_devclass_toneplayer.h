@@ -139,8 +139,9 @@ class iot_deviface_params_toneplayer : public iot_deviface_params {
 	friend class iot_devifacetype_metaclass_toneplayer;
 	friend class iot_deviface__toneplayer_BASE;
 	//no actual params for this iface
-public:
+
 	iot_deviface_params_toneplayer(void);
+public:
 
 	static const iot_deviface_params_toneplayer object; //statically created object to return from deserialization
 	
@@ -172,7 +173,7 @@ private:
 };
 
 class iot_devifacetype_metaclass_toneplayer : public iot_devifacetype_metaclass {
-	iot_devifacetype_metaclass_toneplayer(void) : iot_devifacetype_metaclass(IOT_DEVIFACETYPEID_TONEPLAYER, NULL, "Toneplayer") {}
+	iot_devifacetype_metaclass_toneplayer(void) : iot_devifacetype_metaclass(0, "unet", "Toneplayer") {}
 
 	PACKED(
 		struct serialize_header_t {
@@ -211,7 +212,7 @@ private:
 inline iot_deviface_params_toneplayer::iot_deviface_params_toneplayer(void) : iot_deviface_params(&iot_devifacetype_metaclass_toneplayer::object) {
 }
 inline const iot_deviface_params_toneplayer* iot_deviface_params_toneplayer::cast(const iot_deviface_params* params) {
-	if(!params || !params->is_valid()) return NULL;
+	if(!params) return NULL;
 	return params->get_metaclass()==&iot_devifacetype_metaclass_toneplayer::object ? static_cast<const iot_deviface_params_toneplayer*>(params) : NULL;
 }
 

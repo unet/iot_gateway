@@ -1,0 +1,14 @@
+{
+	"ifacetypes": {
+		"Toneplayer" : {
+			"title": "Music tone player",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		}
+	}
+}

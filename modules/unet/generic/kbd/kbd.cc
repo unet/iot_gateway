@@ -21,24 +21,6 @@
 
 #include "iot_devclass_keyboard.h"
 #include "iot_devclass_activatable.h"
-//#include "iot_devclass_toneplayer.h"
-
-
-//#define DRVNAME drv
-
-//list of modules in current bundle, their registered IDs. TODO: put real IDs when they will be allocated through some table in unetcommonsrc
-//#define BUNDLE_MODULES_MAP(XX) \
-//	XX(eventsrc, 2) \
-//	XX(oper_keystate, 3) \
-//	XX(leds, 4)
-
-
-////build constants like MODULEID_detector which resolve to registered module id
-//enum {
-//#define XX(name, id) MODULEID_ ## name = id,
-//	BUNDLE_MODULES_MAP(XX)
-//#undef XX
-//};
 
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -52,7 +34,7 @@ struct eventsrc_instance : public iot_node_base {
 	struct {
 		const iot_conn_clientview *conn;
 		uint16_t maxkeycode;
-		uint32_t keystate[iot_valueclass_bitmap::get_maxkeycode()/32+1]; //current state of keys of device
+		uint32_t keystate[iot_valuetype_bitmap::get_maxkeycode()/32+1]; //current state of keys of device
 	} device[EVENTSRC_MAX_DEVICES]={}; //per device connection state
 
 
@@ -165,7 +147,7 @@ private:
 //own methods
 	int update_outputs(void) { //set current common key state on output
 		uint16_t maxkeycode=0;
-		uint32_t keystate[iot_valueclass_bitmap::get_maxkeycode()/32+1]; //current state of keys of device
+		uint32_t keystate[iot_valuetype_bitmap::get_maxkeycode()/32+1]; //current state of keys of device
 		memset(keystate, 0, sizeof(keystate));
 
 		for(int i=0; i<EVENTSRC_MAX_DEVICES; i++) {
@@ -175,9 +157,9 @@ private:
 			for (unsigned j=0; j<n; j++) keystate[j]|=device[i].keystate[j];
 		}
 
-		char valbuf[iot_valueclass_bitmap::calc_datasize(maxkeycode)];
+		char valbuf[iot_valuetype_bitmap::calc_datasize(maxkeycode)];
 		uint8_t outn=0;
-		const iot_valueclass_BASE* outv=new(valbuf) iot_valueclass_bitmap(maxkeycode, keystate, maxkeycode/32+1, false);
+		const iot_valuetype_BASE* outv=new(valbuf) iot_valuetype_bitmap(maxkeycode, keystate, maxkeycode/32+1, false);
 		int err=kapi_update_outputs(NULL, 1, &outn, &outv);
 		if(err) {
 			kapi_outlog_error("Cannot update output value for node_id=%" IOT_PRIiotid ": %s, event lost", node_id, kapi_strerror(err));
@@ -195,7 +177,7 @@ private:
 //	.module=ECB_STRINGIFY(DRVNAME),
 //};
 
-static iot_deviface_params_keyboard kbd_filter_pconly(1);
+static const iot_deviface_params_keyboard kbd_filter_pconly(1);
 
 static const iot_deviface_params* eventsrc_devifaces[]={
 	&kbd_filter_pconly
@@ -363,8 +345,8 @@ private:
 	virtual int process_input_signals(iot_event_id_t eventid, uint8_t num_valueinputs, const iot_value_signal *valueinputs, uint8_t num_msginputs, const iot_msg_signal *msginputs) override {
 		assert(num_valueinputs==1);
 		uint8_t outn=0;
-		const iot_valueclass_BASE* outv;
-		const iot_valueclass_bitmap *state=iot_valueclass_bitmap::cast(valueinputs[0].new_value);
+		const iot_valuetype_BASE* outv;
+		const iot_valuetype_bitmap *state=iot_valuetype_bitmap::cast(valueinputs[0].new_value);
 		if(!state) outv=NULL;
 		else if(!key) { //no correct key configured, check only shifts
 			unsigned i=0;
@@ -388,13 +370,13 @@ private:
 				}
 				break;
 			}
-			if(i>=NUM_KEYSTATE_SHIFTS) outv=&iot_valueclass_boolean::const_true;
-				else outv=&iot_valueclass_boolean::const_false;
+			if(i>=NUM_KEYSTATE_SHIFTS) outv=&iot_valuetype_boolean::const_true;
+				else outv=&iot_valuetype_boolean::const_false;
 		} else {
-			const iot_valueclass_BASE* cur_output=kapi_get_outputvalue(outn);
+			const iot_valuetype_BASE* cur_output=kapi_get_outputvalue(outn);
 
-			if(!cur_output || cur_output==&iot_valueclass_boolean::const_false) {
-				outv=&iot_valueclass_boolean::const_false;
+			if(!cur_output || cur_output==&iot_valuetype_boolean::const_false) {
+				outv=&iot_valuetype_boolean::const_false;
 				//condition for enabling output
 				if(state->test_code(key)) {
 					unsigned i=0;
@@ -418,11 +400,11 @@ private:
 						}
 						break;
 					}
-					if(i>=NUM_KEYSTATE_SHIFTS) outv=&iot_valueclass_boolean::const_true;
+					if(i>=NUM_KEYSTATE_SHIFTS) outv=&iot_valuetype_boolean::const_true;
 				}
 			} else {
 				//condition for disabling. look just as the state of 'key'
-				outv=state->test_code(key) ? &iot_valueclass_boolean::const_true : &iot_valueclass_boolean::const_false;
+				outv=state->test_code(key) ? &iot_valuetype_boolean::const_true : &iot_valuetype_boolean::const_false;
 			}
 		}
 		int err=kapi_update_outputs(&eventid, 1, &outn, &outv);
@@ -648,7 +630,7 @@ private:
 		activate_bitmap=deactivate_bitmap=0;
 		for(int i=0;i<num_valueinputs;i++) {
 			if(!valueinputs[i].new_value) continue;
-			const iot_valueclass_boolean* v=iot_valueclass_boolean::cast(valueinputs[i].new_value);
+			const iot_valuetype_boolean* v=iot_valuetype_boolean::cast(valueinputs[i].new_value);
 			if(!v) continue;
 			if(*v) activate_bitmap|=1<<i;
 				else deactivate_bitmap|=1<<i;

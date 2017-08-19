@@ -31,7 +31,7 @@ typedef uint32_t iot_type_id_t;		//type for HardWare DEVice CONection TYPE id
 
 
 class iot_hwdev_localident;
-class iot_hwdev_data;
+class iot_hwdev_details;
 
 class iot_hwdevcontype_metaclass { //base abstract class for specifc device contype metaclass singleton objects 
 	iot_type_id_t contype_id;
@@ -106,7 +106,7 @@ public:
 	//returns negative error code OR number of bytes written to provided buffer OR required buffer size when buf is NULL
 	//returned value can be zero (regardless buf was NULL or not) to indicate that buffer was not used (or is not necessary) and that obj was assigned to
 	//correct precreated object (may be statically allocated)
-	//default_contype is used when no "conntype_id" property in provided json or it is incorrect. Thus if it is 0, then required.
+	//default_contype is used when no "contype_id" property in provided json or it is incorrect. Thus if it is 0, then required.
 	static int from_json(json_object* json, char* buf, size_t bufsize, const iot_hwdev_localident*& obj, iot_type_id_t default_contype=0);
 
 
@@ -117,13 +117,13 @@ private:
 	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const = 0;
 };
 
-class iot_hwdev_data { //base abstract class for extended device data
+class iot_hwdev_details { //base abstract class for extended device data
 	const iot_hwdevcontype_metaclass* meta; //keep reference to metaclass here to optimize (exclude virtual function call) requests which are redirected to metaclass
 
 //?	iot_hwdev_localident(const iot_hwdev_localident&) = delete;
-	iot_hwdev_data(void) = delete;
+	iot_hwdev_details(void) = delete;
 protected:
-	constexpr iot_hwdev_data(const iot_hwdevcontype_metaclass* meta): meta(meta) { //only derived classes can create instances
+	constexpr iot_hwdev_details(const iot_hwdevcontype_metaclass* meta): meta(meta) { //only derived classes can create instances
 	}
 public:
 	const iot_hwdevcontype_metaclass* get_metaclass(void) const {
@@ -173,10 +173,6 @@ public:
 	virtual size_t get_size(void) const = 0; //must return 0 if object is statically precreated and thus must not be copied by value, only by reference
 
 	bool matches(const iot_hwdev_localident* spec) const {
-		if(!spec->is_valid()) {
-			assert(false);
-			return false;
-		}
 		if(spec->is_tmpl()) { //right operand must be exact spec
 			assert(false);
 			return false;
@@ -185,10 +181,6 @@ public:
 		return p_matches(spec);
 	}
 	bool matches_hwid(const iot_hwdev_localident* spec) const {
-		if(!spec->is_valid()) {
-			assert(false);
-			return false;
-		}
 		if(spec->is_tmpl()) { //right operand must be exact spec
 			assert(false);
 			return false;
@@ -197,10 +189,6 @@ public:
 		return p_matches_hwid(spec);
 	}
 	bool matches_addr(const iot_hwdev_localident* spec) const {
-		if(!spec->is_valid()) {
-			assert(false);
-			return false;
-		}
 		if(spec->is_tmpl()) { //right operand must be exact spec
 			assert(false);
 			return false;
@@ -471,7 +459,7 @@ struct iot_hwdevident_iface;
 
 struct iot_hwdev_localident_t {
 	iot_hwdevcontype_t contype;			//type of connection identification among predefined IOT_DEVCONTYPE_ constants or DeviceDetector
-										//module-specific built by IOT_DEVCONTYPE_CUSTOM macro. Value IOT_DEVCONTYPE_ANY means any conntype. data is useless in such case
+										//module-specific built by IOT_DEVCONTYPE_CUSTOM macro. Value IOT_DEVCONTYPE_ANY means any contype. data is useless in such case
 	uint32_t detector_module_id;		//id of Device Detector module which added this device
 	char data[IOT_HWDEV_DATA_MAXSIZE];	//raw buffer for storing contype-dependent information about device address and hardware id. should be aligned by 4 to allow overwriting with any struct
 
@@ -712,7 +700,7 @@ public:
 	//returns negative error code OR number of bytes written to provided buffer OR required buffer size when buf is NULL
 	//returned value can be zero (regardless buf was NULL or not) to indicate that buffer was not used (or is not necessary) and that obj was assigned to
 	//correct precreated object (may be statically allocated)
-	//default_ifacetype is used when no "conntype_id" property in provided json or it is incorrect. Thus if it is 0, then required.
+	//default_ifacetype is used when no "ifacetype_id" property in provided json or it is incorrect. Thus if it is 0, then required.
 	static int from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj, iot_type_id_t default_ifacetype=0);
 
 
@@ -978,8 +966,6 @@ private:
 #define IOT_DEVIFACETYPE_IDMAP(XX) \
 	XX(KEYBOARD, 1) 	/*of keys or standard keyboard (with SHIFT, CTRL and ALT keys)*/	\
 	XX(ACTIVATABLE, 2)	/*simplest interface of set of devices which can be activated or deactivated without current status information */	\
-	XX(TONEPLAYER, 3)	/*basic sound source which can play list of tone specifications (lengh + frequency) */						\
-	XX(HW_SWITCHES, 4)	/*set of hardware switchers like notebook lid opening sensor*/												
 
 
 enum iot_deviface_basic_ids : uint8_t {

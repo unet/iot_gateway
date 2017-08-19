@@ -263,12 +263,12 @@ void iot_modules_registry_t::start(json_object* typesdb) {
 	assert(uv_thread_self()==main_thread);
 
 	if(typesdb) {
-		if(json_object_object_get_ex(typesdb, "conntypes", &conntypes_table)) {
-			if(!json_object_is_type(conntypes_table,  json_type_object)) {
-				outlog_error("Invalid data in types DB! Top level 'conntypes' item must be a JSON-object");
-				conntypes_table=NULL;
+		if(json_object_object_get_ex(typesdb, "contypes", &contypes_table)) {
+			if(!json_object_is_type(contypes_table,  json_type_object)) {
+				outlog_error("Invalid data in types DB! Top level 'contypes' item must be a JSON-object");
+				contypes_table=NULL;
 			} else {
-				json_object_get(conntypes_table);
+				json_object_get(contypes_table);
 			}
 		}
 		if(json_object_object_get_ex(typesdb, "ifacetypes", &ifacetypes_table)) {
@@ -303,9 +303,13 @@ void iot_modules_registry_t::start(json_object* typesdb) {
 
 void iot_modules_registry_t::stop(void) {
 	//TODO
-	if(conntypes_table) {
-		json_object_put(conntypes_table);
-		conntypes_table=NULL;
+	if(contypes_table) {
+		json_object_put(contypes_table);
+		contypes_table=NULL;
+	}
+	if(ifacetypes_table) {
+		json_object_put(ifacetypes_table);
+		ifacetypes_table=NULL;
 	}
 }
 
@@ -330,7 +334,7 @@ void iot_modules_registry_t::register_pending_metaclasses(void) {
 			const char* vendor=ifacetype_head->get_vendor();
 			const char* name=ifacetype_head->get_name();
 			if(!vendor) {
-				outlog_error("Built-in device interface type '%s' has zero type ID", name);
+				outlog_error("Built-in device interface type '%s' has zero type ID and cannot be used", name);
 			} else {
 				char key[256];
 				snprintf(key, sizeof(key), "%s:%s", vendor, name);
@@ -376,9 +380,9 @@ void iot_modules_registry_t::register_pending_metaclasses(void) {
 				char key[256];
 				snprintf(key, sizeof(key), "%s:%s", vendor, name);
 				iot_type_id_t type_id=0;
-				if(conntypes_table) {
+				if(contypes_table) {
 					json_object* val=NULL;
-					if(json_object_object_get_ex(conntypes_table, key, &val)) {
+					if(json_object_object_get_ex(contypes_table, key, &val)) {
 						IOT_JSONPARSE_UINT(val, iot_type_id_t, type_id);
 					}
 				}

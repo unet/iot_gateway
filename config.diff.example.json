@@ -16,8 +16,8 @@
 					DEVCONN_LABEL: [ //several filters can be specified for each device connection (in order of preference)
 						{
 							"host_id" : "1", //0 or absent key means 'any host' here
-							"conntype_id" : 1, //ID of device connection type (iot_hwdevcontype_t). 0 or absent key (and thus 'ident' is not checked) means 'any'
-							"ident": <custom data>, //custom conntype specific identification data, which must be interpreted by corresponding iot_hwdevident_iface-derived class
+							"contype_id" : 1, //ID of device connection type (iot_hwdevcontype_t). 0 or absent key (and thus 'ident' is not checked) means 'any'
+							"ident": <custom data>, //custom contype specific identification data, which must be interpreted by corresponding iot_hwdevident_iface-derived class
 						}
 					]
 				},

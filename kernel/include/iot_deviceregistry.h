@@ -27,7 +27,7 @@ struct iot_hwdevregistry_item_t {
 	//TODO add next-prev fields for locations inside search indexes (by detector_module_id or devcontype) if necessary
 
 	iot_hwdev_ident_buffered dev_ident;
-	iot_hwdev_data* dev_data; //will be assigned to custom_data buffer in current struct
+	iot_hwdev_details* dev_data; //will be assigned to custom_data buffer in current struct
 	iot_miid_t detector_miid; //miid of detector instance
 
 	iot_modinstance_locker devdrv_modinstlk; //NULL if no driver connected or ref to driver module instance
@@ -90,7 +90,7 @@ public:
 		assert(hwdev_registry==NULL);
 		hwdev_registry=this;
 	}
-	int list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_data* custom_data); //main thread
+	int list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data); //main thread
 	//finish removal or removed device after stopping bound driver
 	void finish_hwdev_removal(iot_hwdevregistry_item_t* it) { //main thread
 		assert(it->is_removed);

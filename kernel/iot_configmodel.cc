@@ -400,7 +400,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 			}
 			//check value type is compatible
 			if(!node_iface->valueinput[j].is_compatible(item->data)) {
-				outlog_debug("New value for input %u of node %" IOT_PRIiotid " is not compatible with config (is type %u, must be type %u)", unsigned(j), node_id, item->data ? static_cast<const iot_valueclass_BASE*>(item->data)->get_classid() : 0, node_iface->valueinput[j].vclass_id);
+				outlog_debug("New value for input %u of node %" IOT_PRIiotid " is not compatible with config (is type %u, must be type %u)", unsigned(j), node_id, item->data ? static_cast<const iot_valuetype_BASE*>(item->data)->get_classid() : 0, node_iface->valueinput[j].vclass_id);
 				continue;
 			}
 			if(item->data==valuesignals[j].prev_value || (item->data && valuesignals[j].prev_value && *(item->data)==*(valuesignals[j].prev_value))) continue; //value unchanged
@@ -410,7 +410,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 			} else {
 				valueset[j]=true;
 			}
-			curvalueinput[j].instance_value = valuesignals[j].new_value = static_cast<const iot_valueclass_BASE*>(item->data);
+			curvalueinput[j].instance_value = valuesignals[j].new_value = static_cast<const iot_valuetype_BASE*>(item->data);
 			item->data=NULL; //value moved from notifyupdate to instance_value, so no refcount change (valuesignals structure is temporary and not accounted)
 		}
 	}
@@ -418,7 +418,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 	//now msgs
 	iot_node_base::iot_msg_signal msgsignals[node_iface->num_msginputs>0 ? node_iface->num_msginputs : 1];
 	memset(msgsignals, 0, node_iface->num_msginputs*sizeof(iot_node_base::iot_msg_signal));
-	const iot_msgclass_BASE* msgs[nummsgs > 0 ? nummsgs : 1];
+	const iot_msgtype_BASE* msgs[nummsgs > 0 ? nummsgs : 1];
 	uint16_t msgidx=0;
 
 	for(uint16_t i=0; i<notifyupdate->numitems; i++) {
@@ -435,7 +435,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 			assert(i>0 && notifyupdate->item[i-1].real_index==j); //msgs with same real_index MUST GO SEQUENTIALLY!!!
 			continue;
 		}
-		msgs[msgidx]=static_cast<const iot_msgclass_BASE*>(item->data);
+		msgs[msgidx]=static_cast<const iot_msgtype_BASE*>(item->data);
 		item->data=NULL;
 		msgidx++;
 		msgsignals[j].num++;
@@ -480,7 +480,7 @@ printf("Got error %d from process_input_signals of node %" IOT_PRIiotid "\n", er
 	return err==0 ? true : false;
 }
 
-int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valueclass_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgclass_BASE** msgs) {
+int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valuetype_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgtype_BASE** msgs) {
 	assert(modinstlk.modinst!=NULL);
 	assert(uv_thread_self()==modinstlk.modinst->thread->thread);
 	auto allocator=modinstlk.modinst->thread->allocator;
@@ -530,11 +530,11 @@ int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8
 
 	//allocate signal structs and necessary msg/value objects
 	iot_modelsignal* outsignals=NULL; //in case of memory error this list will be released together with data values
-	const iot_valueclass_BASE* newvalues[node_iface->num_valueoutputs>0 ? node_iface->num_valueoutputs : 1];
+	const iot_valuetype_BASE* newvalues[node_iface->num_valueoutputs>0 ? node_iface->num_valueoutputs : 1];
 	for(uint8_t i=0;i<node_iface->num_valueoutputs;i++) newvalues[i]=curvalueoutput[i].instance_value; //init new values from current instance value
 
 	for(uint8_t i=0;i<num_values;i++) {
-		const iot_valueclass_BASE* &newvalue=newvalues[valueout_indexes[i]];
+		const iot_valuetype_BASE* &newvalue=newvalues[valueout_indexes[i]];
 		if(values[i]==newvalue || (newvalue && values[i] && *(values[i])==*newvalue)) continue; //no change
 		//output updated
 
@@ -542,7 +542,7 @@ int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8
 		if(values[i] && !values[i]->is_fixedvals()) { //need allocation
 			void *mem=allocator->allocate(values[i]->get_size(), true);
 			if(!mem) goto nomem;
-			newvalue=(const iot_valueclass_BASE*)values[i]->copyTo(mem, values[i]->get_size(), true);
+			newvalue=(const iot_valuetype_BASE*)values[i]->copyTo(mem, values[i]->get_size(), true);
 			assert(newvalue!=NULL);
 		} else newvalue=values[i];
 
@@ -564,11 +564,11 @@ int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8
 	for(uint8_t i=0;i<num_msgs;i++) {
 		//allocate memory for data msg if necessary
 		assert(msgs[i]!=NULL);
-		const iot_msgclass_BASE* newmsg;
+		const iot_msgtype_BASE* newmsg;
 		if(!msgs[i]->is_fixedvals()) { //need allocation
 			void *mem=allocator->allocate(msgs[i]->get_size(), true);
 			if(!mem) goto nomem;
-			newmsg=(const iot_msgclass_BASE*)msgs[i]->copyTo(mem, msgs[i]->get_size(), true);
+			newmsg=(const iot_msgtype_BASE*)msgs[i]->copyTo(mem, msgs[i]->get_size(), true);
 			assert(newmsg!=NULL);
 		} else newmsg=msgs[i];
 
@@ -609,7 +609,7 @@ int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8
 	//update refcounts and write instance_values
 	for(uint8_t i=0;i<num_values;i++) {
 		auto &instance_value=curvalueoutput[valueout_indexes[i]].instance_value;
-		const iot_valueclass_BASE* newvalue=newvalues[valueout_indexes[i]];
+		const iot_valuetype_BASE* newvalue=newvalues[valueout_indexes[i]];
 		if(instance_value==newvalue) continue;
 
 		if(newvalue) newvalue->incref(); //value is now copied to sig, so will have 2 refs
@@ -627,7 +627,7 @@ nomem:
 	return IOT_ERROR_NO_MEMORY;
 }
 
-const iot_valueclass_BASE* iot_nodemodel::get_outputvalue(uint8_t index) {
+const iot_valuetype_BASE* iot_nodemodel::get_outputvalue(uint8_t index) {
 	assert(modinstlk.modinst!=NULL);
 	assert(uv_thread_self()==modinstlk.modinst->thread->thread);
 	if(index>=node_iface->num_valueoutputs) return NULL;
@@ -635,7 +635,7 @@ const iot_valueclass_BASE* iot_nodemodel::get_outputvalue(uint8_t index) {
 }
 
 
-iot_modelsignal::iot_modelsignal(iot_nodemodel *model, const char* out_labeln, uint64_t reltime, const iot_dataclass_base* msgval, /*bool is_sync,*/ const iot_event_id_t* reason) : 
+iot_modelsignal::iot_modelsignal(iot_nodemodel *model, const char* out_labeln, uint64_t reltime, const iot_datatype_base* msgval, /*bool is_sync,*/ const iot_event_id_t* reason) : 
 	reltime(reltime), data(msgval)/*, is_sync(is_sync)*/ {
 		assert(model->cfgitem!=NULL);
 		node_id=model->node_id;

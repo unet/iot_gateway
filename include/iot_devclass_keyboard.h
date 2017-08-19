@@ -127,17 +127,19 @@ private:
 };
 
 
-inline iot_deviface_params_keyboard::iot_deviface_params_keyboard(bool is_pckbd, uint16_t max_keycode) : iot_deviface_params(&iot_devifacetype_metaclass_keyboard::object), istmpl(false) {
+inline iot_deviface_params_keyboard::iot_deviface_params_keyboard(bool is_pckbd, uint16_t max_keycode) : iot_deviface_params(&iot_devifacetype_metaclass_keyboard::object),
+	istmpl(false) {
 		spec.is_pckbd=is_pckbd ? 1 : 0;
 
-		uint32_t maxcode=iot_valueclass_bitmap::get_maxkeycode();
+		uint32_t maxcode=iot_valuetype_bitmap::get_maxkeycode();
 		spec.max_keycode = max_keycode > maxcode ? maxcode : max_keycode;
 }
-inline iot_deviface_params_keyboard::iot_deviface_params_keyboard(uint8_t is_pckbd) : iot_deviface_params(&iot_devifacetype_metaclass_keyboard::object), istmpl(true) {
+inline iot_deviface_params_keyboard::iot_deviface_params_keyboard(uint8_t is_pckbd) : iot_deviface_params(&iot_devifacetype_metaclass_keyboard::object),
+	istmpl(true) {
 		tmpl.is_pckbd=is_pckbd<=2 ? is_pckbd : 2;
 }
 inline const iot_deviface_params_keyboard* iot_deviface_params_keyboard::cast(const iot_deviface_params* params) {
-	if(!params || !params->is_valid()) return NULL;
+	if(!params) return NULL;
 	return params->get_metaclass()==&iot_devifacetype_metaclass_keyboard::object ? static_cast<const iot_deviface_params_keyboard*>(params) : NULL;
 }
 

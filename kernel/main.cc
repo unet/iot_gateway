@@ -216,6 +216,7 @@ int main(int argn, char **arg) {
 
 
 	cfg=config_registry->read_jsonfile(TYPESDB_PATH, "typesdb");
+	if(!cfg) goto onexit;
 
 	//load modules with autoload. autoload could be modified by config (TODO)
 	modules_registry->start(cfg);

@@ -15,7 +15,7 @@ static hwdev_registry_t _hwdev_registry; //instantiate singleton
 //	IOT_ERROR_INVALID_ARGS - provided ident is template or action unknown
 //	IOT_ERROR_NOT_FOUND - interface to ident's data not found (invalid or module cannot be loaded)
 //	IOT_ERROR_TEMPORARY_ERROR - some temporary error (no memory etc). retry can succeed
-int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_data* custom_data) {
+int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data) {
 		assert(uv_thread_self()==main_thread);
 		if(!ident) return IOT_ERROR_INVALID_ARGS;
 		char buf[256];
@@ -66,7 +66,7 @@ int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action
 		new(&it->dev_ident) iot_hwdev_ident_buffered(iot_current_hostid, ident);
 		if(custom_len) {
 			memcpy(it->custom_data, custom_data, custom_len);
-			it->dev_data=(iot_hwdev_data*)it->custom_data;
+			it->dev_data=(iot_hwdev_details*)it->custom_data;
 		} else {
 			it->dev_data=NULL;
 		}

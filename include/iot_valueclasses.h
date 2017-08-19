@@ -18,7 +18,7 @@
 #endif
 
 
-typedef iot_dataclass_id_t iot_valueclass_id_t;	//type for class ID of value for node input/output. MUST HAVE 0 in lower bit
+typedef iot_datatype_id_t iot_valuetype_id_t;	//type for class ID of value for node input/output. MUST HAVE 0 in lower bit
 
 
 
@@ -33,16 +33,16 @@ typedef iot_dataclass_id_t iot_valueclass_id_t;	//type for class ID of value for
 #define IOT_VALUECLASSID_BITMAP		(10 << 1)			//bitmap of keys which are currently down
 
 
-class iot_dataclass_base {
+class iot_datatype_base {
 protected:
-	const iot_dataclass_id_t classid;
+	const iot_datatype_id_t classid;
 	uint32_t datasize:24, //size of whole value, including sizeof base class
 		is_memblock:1; //flag that this object was allocated as memblock and thus release() and incref() will call corresponding memblock methods. otherwise static
 	const uint32_t fixed:1, //flag that ALL objects of this type have equal datasize
 		fixedvals:1;//flag that ALL possible values of data type are precreated statically and thus no memory allocation required
 	uint32_t custom_data:5; //unused by this class bits which can be used by derived classes
 
-	iot_dataclass_base(iot_dataclass_id_t classid, bool ismsg, bool memblock, bool is_fixed, bool is_fixedvals)
+	iot_datatype_base(iot_datatype_id_t classid, bool ismsg, bool memblock, bool is_fixed, bool is_fixedvals)
 			: classid(classid), is_memblock(memblock), fixed(is_fixed), fixedvals(is_fixedvals), custom_data(0) {
 		if(ismsg != (classid & 1)) {
 			classid=0;
@@ -53,7 +53,7 @@ protected:
 		}
 		datasize=sizeof(*this);
 	}
-	constexpr iot_dataclass_base(iot_dataclass_id_t classid, uint32_t datasize, bool ismsg, bool is_fixed, bool is_fixedvals, uint32_t custom_data=0)
+	constexpr iot_datatype_base(iot_datatype_id_t classid, uint32_t datasize, bool ismsg, bool is_fixed, bool is_fixedvals, uint32_t custom_data=0)
 			: classid(classid), datasize(datasize), is_memblock(false), fixed(is_fixed), fixedvals(is_fixedvals), custom_data(custom_data) {
 	}
 
@@ -71,31 +71,31 @@ public:
 		return fixedvals;
 	}
 
-	bool operator==(const iot_dataclass_base &op) const {
+	bool operator==(const iot_datatype_base &op) const {
 		if(&op==this) return true; //same object
 		if(classid!=op.classid) return false;
 		return check_eq(&op);
 	}
-	bool operator!=(const iot_dataclass_base &op) const {
+	bool operator!=(const iot_datatype_base &op) const {
 		return !(*this==op);
 	}
 
 	void release(void) const {
 		if(!is_memblock) return;
 		assert(!fixedvals);
-		iot_release_memblock(const_cast<iot_dataclass_base*>(this));
+		iot_release_memblock(const_cast<iot_datatype_base*>(this));
 	}
 	bool incref(void) const {
 		if(!is_memblock) return true;
 		assert(!fixedvals);
-		return iot_incref_memblock(const_cast<iot_dataclass_base*>(this));
+		return iot_incref_memblock(const_cast<iot_datatype_base*>(this));
 	}
 
 	//must copy data value/msg into specified buf. bufsize must be at least get_size() bytes. memblock tells if buf was allocated as memblock
 	//returns NULL if bufsize is too small OR current object has is_fixedvals property (so cannot be copied by content, only by address)
-	iot_dataclass_base* copyTo(void* buf, uint32_t bufsize, bool memblock=true) const {
+	iot_datatype_base* copyTo(void* buf, uint32_t bufsize, bool memblock=true) const {
 		if(is_fixedvals() || bufsize<get_size()) return NULL;
-		iot_dataclass_base* dst=(iot_dataclass_base*)buf;
+		iot_datatype_base* dst=(iot_datatype_base*)buf;
 		memcpy(dst, this, get_size());
 		dst->is_memblock=memblock ? 1 : 0;
 		return dst;
@@ -106,19 +106,19 @@ public:
 	virtual const char* type_name(void) const = 0; //must return short abbreviation of type name
 
 private:
-	virtual bool check_eq(const iot_dataclass_base *op) const = 0;
+	virtual bool check_eq(const iot_datatype_base *op) const = 0;
 };
 
 
-class iot_msgclass_BASE : public iot_dataclass_base {
+class iot_msgtype_BASE : public iot_datatype_base {
 protected:
-	iot_msgclass_BASE(iot_msgclass_id_t classid, bool memblock, bool is_fixed, bool is_fixedvals) : iot_dataclass_base(classid, true, memblock, is_fixed, is_fixedvals) {
+	iot_msgtype_BASE(iot_msgtype_id_t classid, bool memblock, bool is_fixed, bool is_fixedvals) : iot_datatype_base(classid, true, memblock, is_fixed, is_fixedvals) {
 		datasize=sizeof(*this);
 	}
-	constexpr iot_msgclass_BASE(bool isconstexpr, iot_msgclass_id_t classid, uint32_t datasize, bool is_fixed, bool is_fixedvals, uint32_t custom_data=0) : iot_dataclass_base(classid, datasize, true, is_fixed, is_fixedvals, custom_data) {
+	constexpr iot_msgtype_BASE(bool isconstexpr, iot_msgtype_id_t classid, uint32_t datasize, bool is_fixed, bool is_fixedvals, uint32_t custom_data=0) : iot_datatype_base(classid, datasize, true, is_fixed, is_fixedvals, custom_data) {
 	}
 public:
-	constexpr iot_msgclass_id_t get_classid(void) const {
+	constexpr iot_msgtype_id_t get_classid(void) const {
 		return classid;
 	}
 
@@ -142,15 +142,15 @@ public:
 };
 
 
-class iot_valueclass_BASE : public iot_dataclass_base {
+class iot_valuetype_BASE : public iot_datatype_base {
 protected:
-	iot_valueclass_BASE(iot_valueclass_id_t classid, bool memblock, bool is_fixed, bool is_fixedvals) : iot_dataclass_base(classid, false, memblock, is_fixed, is_fixedvals) {
+	iot_valuetype_BASE(iot_valuetype_id_t classid, bool memblock, bool is_fixed, bool is_fixedvals) : iot_datatype_base(classid, false, memblock, is_fixed, is_fixedvals) {
 		datasize=sizeof(*this);
 	}
-	constexpr iot_valueclass_BASE(bool isconstexpr, iot_valueclass_id_t classid, uint32_t datasize, bool is_fixed, bool is_fixedvals, uint32_t custom_data=0) : iot_dataclass_base(classid, datasize, false, is_fixed, is_fixedvals, custom_data) {
+	constexpr iot_valuetype_BASE(bool isconstexpr, iot_valuetype_id_t classid, uint32_t datasize, bool is_fixed, bool is_fixedvals, uint32_t custom_data=0) : iot_datatype_base(classid, datasize, false, is_fixed, is_fixedvals, custom_data) {
 	}
 public:
-	constexpr iot_valueclass_id_t get_classid(void) const {
+	constexpr iot_valuetype_id_t get_classid(void) const {
 		return classid;
 	}
 
@@ -177,7 +177,7 @@ public:
 //////////////BUILD-IN VALUE CLASSES
 
 
-class iot_valueclass_nodeerrorstate: public iot_valueclass_BASE {
+class iot_valuetype_nodeerrorstate: public iot_valuetype_BASE {
 	uint32_t state; //bitmap of enabled error states
 
 public:
@@ -186,15 +186,15 @@ public:
 		IOT_NODEERRORSTATE_NODEVICE=2,			//required device(s) not connected
 	};
 
-	static const iot_valueclass_nodeerrorstate const_noinst;
+	static const iot_valuetype_nodeerrorstate const_noinst;
 
-	iot_valueclass_nodeerrorstate(bool memblock=true) : iot_valueclass_BASE(IOT_VALUECLASSID_NODEERRORSTATE, memblock, true, false) {
+	iot_valuetype_nodeerrorstate(bool memblock=true) : iot_valuetype_BASE(IOT_VALUECLASSID_NODEERRORSTATE, memblock, true, false) {
 		datasize=sizeof(*this);
 		state=0;
 	}
-	constexpr iot_valueclass_nodeerrorstate(uint32_t st) : iot_valueclass_BASE(true, IOT_VALUECLASSID_NODEERRORSTATE, sizeof(iot_valueclass_nodeerrorstate), true, false), state(st) {
+	constexpr iot_valuetype_nodeerrorstate(uint32_t st) : iot_valuetype_BASE(true, IOT_VALUECLASSID_NODEERRORSTATE, sizeof(iot_valuetype_nodeerrorstate), true, false), state(st) {
 	}
-//	iot_valueclass_nodeerrorstate& operator=(uint32_t st) {
+//	iot_valuetype_nodeerrorstate& operator=(uint32_t st) {
 //		state=st;
 //		return *this;
 //	}
@@ -204,7 +204,7 @@ public:
 	constexpr bool operator!(void) const {
 		return state==0;
 	}
-	iot_valueclass_nodeerrorstate& set_noinstance(void) {
+	iot_valuetype_nodeerrorstate& set_noinstance(void) {
 		state |= IOT_NODEERRORSTATE_NOINSTANCE;
 		state &= ~(IOT_NODEERRORSTATE_NODEVICE);
 		return *this;
@@ -213,23 +213,23 @@ public:
 		return "NodeErrorState";
 	}
 private:
-	virtual bool check_eq(const iot_dataclass_base *op) const override {
-		const iot_valueclass_nodeerrorstate* opc=static_cast<const iot_valueclass_nodeerrorstate*>(op);
+	virtual bool check_eq(const iot_datatype_base *op) const override {
+		const iot_valuetype_nodeerrorstate* opc=static_cast<const iot_valuetype_nodeerrorstate*>(op);
 		return state==opc->state;
 	}
 };
 
 
-class iot_valueclass_boolean: public iot_valueclass_BASE {
+class iot_valuetype_boolean: public iot_valuetype_BASE {
 	//forbid to create class objects other than static constants by making constructor private
-	constexpr iot_valueclass_boolean(bool val) : iot_valueclass_BASE(true, IOT_VALUECLASSID_BOOLEAN, sizeof(iot_valueclass_boolean), true, true, val ? 1 : 0) {}
+	constexpr iot_valuetype_boolean(bool val) : iot_valuetype_BASE(true, IOT_VALUECLASSID_BOOLEAN, sizeof(iot_valuetype_boolean), true, true, val ? 1 : 0) {}
 public:
-	static const iot_valueclass_boolean const_true;
-	static const iot_valueclass_boolean const_false;
+	static const iot_valuetype_boolean const_true;
+	static const iot_valuetype_boolean const_false;
 
-	iot_valueclass_boolean(const iot_valueclass_boolean&) = delete; //forbid implicit copy (and move) constructor
+	iot_valuetype_boolean(const iot_valuetype_boolean&) = delete; //forbid implicit copy (and move) constructor
 
-//	iot_valueclass_boolean& operator=(uint32_t st) {
+//	iot_valuetype_boolean& operator=(uint32_t st) {
 //		state=st;
 //		return *this;
 //	}
@@ -242,8 +242,8 @@ public:
 	constexpr bool value(void) const {
 		return custom_data==1;
 	}
-	static const iot_valueclass_boolean* cast(const iot_valueclass_BASE*val) { //if val is not NULL and has correct class, casts pointer to this class
-		if(val && val->get_classid()==IOT_VALUECLASSID_BOOLEAN) return static_cast<const iot_valueclass_boolean*>(val);
+	static const iot_valuetype_boolean* cast(const iot_valuetype_BASE*val) { //if val is not NULL and has correct class, casts pointer to this class
+		if(val && val->get_classid()==IOT_VALUECLASSID_BOOLEAN) return static_cast<const iot_valuetype_boolean*>(val);
 		return NULL;
 	}
 	virtual const char* type_name(void) const { //must return short abbreviation of type name
@@ -251,12 +251,12 @@ public:
 	}
 	virtual char* sprint(char* buf, size_t bufsize) const override { //bufsize must include space for NUL
 		if(!bufsize) return buf;
-		snprintf(buf, bufsize, "'%s' %s",iot_valueclass_boolean::type_name(), custom_data==1 ? "TRUE" : "FALSE");
+		snprintf(buf, bufsize, "'%s' %s",iot_valuetype_boolean::type_name(), custom_data==1 ? "TRUE" : "FALSE");
 		return buf;
 	}
 private:
-	virtual bool check_eq(const iot_dataclass_base *op) const override {
-		const iot_valueclass_boolean* opc=static_cast<const iot_valueclass_boolean*>(op);
+	virtual bool check_eq(const iot_datatype_base *op) const override {
+		const iot_valuetype_boolean* opc=static_cast<const iot_valuetype_boolean*>(op);
 		return custom_data==opc->custom_data;
 	}
 };
@@ -266,20 +266,20 @@ private:
 	#include <linux/input-event-codes.h>
 #endif
 
-class iot_valueclass_bitmap: public iot_valueclass_BASE { //DYNAMICALL SIZED OBJECT!!! MEMORY FOR THIS OBJECT MUST BE ALLOCATED EXPLICITELY after 
-															//call to iot_valueclass_bitmap::calc_datasize. Constructor  on allocated memory called
-															//like 'new(memptr) iot_valueclass_bitmap(arguments)'
+class iot_valuetype_bitmap: public iot_valuetype_BASE { //DYNAMICALL SIZED OBJECT!!! MEMORY FOR THIS OBJECT MUST BE ALLOCATED EXPLICITELY after 
+															//call to iot_valuetype_bitmap::calc_datasize. Constructor  on allocated memory called
+															//like 'new(memptr) iot_valuetype_bitmap(arguments)'
 	uint16_t statesize; //number of items in state
 	uint32_t state[]; //bitmap of currently depressed keys
 
 public:
-	iot_valueclass_bitmap(uint32_t max_code, bool memblock=true) : iot_valueclass_BASE(IOT_VALUECLASSID_BITMAP, memblock, false, false) {
+	iot_valuetype_bitmap(uint32_t max_code, bool memblock=true) : iot_valuetype_BASE(IOT_VALUECLASSID_BITMAP, memblock, false, false) {
 		if(max_code>=65535*32) max_code=65535*32-1;
 		statesize=(max_code / 32)+1;
 		memset(state, 0, statesize*sizeof(uint32_t));
 		datasize=sizeof(*this)+sizeof(uint32_t)*statesize;
 	}
-	iot_valueclass_bitmap(uint32_t max_code, const uint32_t* statemap, uint8_t statemapsize, bool memblock=true) : iot_valueclass_BASE(IOT_VALUECLASSID_BITMAP, memblock, false, false) {
+	iot_valuetype_bitmap(uint32_t max_code, const uint32_t* statemap, uint8_t statemapsize, bool memblock=true) : iot_valuetype_BASE(IOT_VALUECLASSID_BITMAP, memblock, false, false) {
 		if(max_code>=65535*32) max_code=65535*32-1;
 		statesize=(max_code / 32)+1;
 		if(statemapsize<statesize) { //provided statemap must be of correct size or larger
@@ -296,10 +296,10 @@ public:
 	static size_t calc_datasize(uint32_t max_code) { //allows to determine necessary memory for object to hold state map with specific max key code
 		//returns 0 on unallowed value
 		if(max_code>=65535*32) max_code=65535*32-1;
-		return sizeof(iot_valueclass_bitmap)+sizeof(uint32_t)*((max_code / 32)+1);
+		return sizeof(iot_valuetype_bitmap)+sizeof(uint32_t)*((max_code / 32)+1);
 	}
-	static const iot_valueclass_bitmap* cast(const iot_valueclass_BASE*val) { //if val is not NULL and has correct class, casts pointer to this class
-		if(val && val->get_classid()==IOT_VALUECLASSID_BITMAP) return static_cast<const iot_valueclass_bitmap*>(val);
+	static const iot_valuetype_bitmap* cast(const iot_valuetype_BASE*val) { //if val is not NULL and has correct class, casts pointer to this class
+		if(val && val->get_classid()==IOT_VALUECLASSID_BITMAP) return static_cast<const iot_valuetype_bitmap*>(val);
 		return NULL;
 	}
 	constexpr static uint32_t get_maxkeycode(void) { //in cases when bitmap represents key states, this method can be used to obtain maximum possible key code to calculate maximum bitmap size
@@ -329,7 +329,7 @@ public:
 		}
 		bitmap32_clear_bit(state, code);
 	}
-	iot_valueclass_bitmap& operator= (const iot_valueclass_bitmap& op) {
+	iot_valuetype_bitmap& operator= (const iot_valuetype_bitmap& op) {
 		if(&op==this) return *this;
 		if(statesize<=op.statesize) {
 			memcpy(state, op.state, statesize*sizeof(uint32_t));
@@ -339,7 +339,7 @@ public:
 		}
 		return *this;
 	}
-	iot_valueclass_bitmap& operator|= (const iot_valueclass_bitmap& op) {
+	iot_valuetype_bitmap& operator|= (const iot_valuetype_bitmap& op) {
 		if(&op==this) return *this;
 		if(statesize<=op.statesize) {
 			for(uint32_t i=0;i<statesize;i++) state[i]|=op.state[i];
@@ -356,8 +356,8 @@ public:
 		return "Bitmap";
 	}
 private:
-	virtual bool check_eq(const iot_dataclass_base *op) const override {
-		const iot_valueclass_bitmap* opc=static_cast<const iot_valueclass_bitmap*>(op);
+	virtual bool check_eq(const iot_datatype_base *op) const override {
+		const iot_valuetype_bitmap* opc=static_cast<const iot_valuetype_bitmap*>(op);
 		return statesize==opc->statesize && memcmp(state, opc->state, statesize*sizeof(state[0]))==0;
 	}
 };
@@ -396,7 +396,7 @@ struct iot_srcstate_t {
 //Returns 0 on success and fills startoffset to point to start of data. This offset can then be passed to CLASS::get_size and/or CLASS::extract methods to get actual data
 //Possible errors:
 //IOT_ERROR_NOT_FOUND - class of data not present in state
-//int iot_find_srcstate_dataclass(iot_srcstate_t* state,iot_state_classid clsid, void** startoffset);
+//int iot_find_srcstate_datatype(iot_srcstate_t* state,iot_state_classid clsid, void** startoffset);
 
 //ECB_EXTERN_C_END
 

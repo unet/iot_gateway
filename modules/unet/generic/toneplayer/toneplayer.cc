@@ -21,24 +21,7 @@
 
 #include "iot_devclass_keyboard.h"
 #include "iot_devclass_activatable.h"
-#include "modules/unet/generic/toneplayer_type/iot_devclass_toneplayer.h"
-
-
-
-
-
-//list of modules in current bundle, their registered IDs. TODO: put real IDs when they will be allocated through some table in unetcommonsrc
-//#define BUNDLE_MODULES_MAP(XX) \
-//	XX(basic, 5) 
-
-
-////build constants like MODULEID_detector which resolve to registered module id
-//enum {
-//#define XX(name, id) MODULEID_ ## name = id,
-//	BUNDLE_MODULES_MAP(XX)
-//#undef XX
-//};
-
+#include "modules/unet/types/di_toneplayer/iot_devclass_toneplayer.h"
 
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -211,7 +194,7 @@ private:
 	virtual int process_input_signals(iot_event_id_t eventid, uint8_t num_valueinputs, const iot_value_signal *valueinputs, uint8_t num_msginputs, const iot_msg_signal *msginputs) override {
 		play=false;
 		if(valueinputs[0].new_value) {
-			const iot_valueclass_boolean* v=iot_valueclass_boolean::cast(valueinputs[0].new_value);
+			const iot_valuetype_boolean* v=iot_valuetype_boolean::cast(valueinputs[0].new_value);
 			if(*v) play=true;
 		}
 		if(!device.conn) return 0;

@@ -1,0 +1,56 @@
+{
+	"modules": {
+		"inputlinux" : {
+			"title": "Linux Input devices support",
+			"description": "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module.",
+			"platforms": ["linux"]
+			"provides": {
+				"driver": {
+					"description": "Provides support for arbitrary hardware devices through Linux 'input' abstraction layer. Supported input event types: KEY (allows to process key presses from any keyboard, mouse pointer, joystick, motherboard keys etc), LED (allows to control state of LEDs on keyboard, motherboard etc), SND (allows to play sound using system speaker).",
+					"device_interfaces": [ ":Keyboard", ":Activatable", "unet:Toneplayer" ] //list of device interfaces this driver can provide
+				},
+				"detector": {
+					"description": "Periodically scans list of available input devices",
+//					"accepts_manual_devices":false, //indication that detector accepts manual devices specs
+//					"supported_contypes":["unet:LinuxInput"], //list of connection types this detector can find devices on and understands in manual spec
+					"params_tmpl": {
+						//"shortDescr":
+						//"longDescr":
+						//"propList":
+						//"newDialog":
+						//"editDialog":
+					}
+				}
+			}
+		}
+	},
+	"contypes": {
+		"LinuxInput" : {
+			"title": "Linux input device",
+			"ident_tmpl": { //templates for processing localident data
+				"shortDescr":	["concatws", " ",
+					["data", "hwid.bus"],
+					["case", 
+						[["hash_exists", ["data", "hwid.caps"], "key", "rel"],		["txt","dev_mouse"]],
+						[["hash_exists", ["data", "hwid.caps"], "key"],				["txt","dev_keyboard"]],
+						[["hash_exists", ["data", "hwid.caps"], "led"],				["txt","dev_led"]],
+						[["hash_exists", ["data", "hwid.caps"], "snd"],				["txt","dev_snd"]],
+						[["hash_exists", ["data", "hwid.caps"], "sw"],				["txt","dev_sw"]]
+					],
+					["vendor_name", ["data", "hwid.vendor"]]
+				]
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"details_tmpl": { //templates for processing device details data
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		}
+	}
+}

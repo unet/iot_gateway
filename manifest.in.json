@@ -1,0 +1,28 @@
+{ //description of built-in types
+	"ifacetypes": {
+		"Keyboard" : {
+			"title": "Keyboard",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		},
+		"Activatable" : {
+			"title": "Activatable",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		}
+	},
+	"valuetypes": {
+	},
+	"msgtypes": {
+	}
+}

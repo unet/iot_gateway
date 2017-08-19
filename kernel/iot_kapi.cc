@@ -15,11 +15,26 @@
 
 extern uv_loop_t *main_loop;
 
+int iot_devifaces_list::add(const iot_deviface_params *cls) {
+		if(num>=IOT_CONFIG_MAX_IFACES_PER_DEVICE) return IOT_ERROR_LIMIT_REACHED;
+		if(!cls) return IOT_ERROR_INVALID_ARGS;
+		if(!cls->is_valid()) {
+			char buf[128];
+			outlog_info("Cannot use device iface type '%s' without assigned ID", cls->sprint(buf, sizeof(buf)));
+			return IOT_ERROR_INVALID_ARGS;
+		}
+		items[num]=cls;
+		num++;
+		return 0;
+}
+
+
+
 //Used by device detector modules for managing registry of available hardware devices
 //action is one of {IOT_ACTION_ADD, IOT_ACTION_REMOVE}
 //contype must be among those listed in .devcontypes field of detector module interface
 //returns:
-int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_data* custom_data) {
+int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data) {
 	//TODO check that ident->contype is listed in .devcontypes field of detector module interface
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk) return IOT_ERROR_INVALID_ARGS;
@@ -75,7 +90,7 @@ int iot_module_instance_base::kapi_self_abort(int errcode) { //can be called in 
 	return modinst->stop(false, true);
 }
 
-int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valueclass_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgclass_BASE** msgs) {
+int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valuetype_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgtype_BASE** msgs) {
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk || modinstlk.modinst->instance!=this) {
 		assert(false);
@@ -91,7 +106,7 @@ int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uin
 	return model->do_update_outputs(reason_eventid, num_values, valueout_indexes, values, num_msgs, msgout_indexes, msgs);
 }
 
-const iot_valueclass_BASE* iot_node_base::kapi_get_outputvalue(uint8_t index) {
+const iot_valuetype_BASE* iot_node_base::kapi_get_outputvalue(uint8_t index) {
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk || modinstlk.modinst->instance!=this) {
 		assert(false);
@@ -157,7 +172,7 @@ iot_hwdevcontype_metaclass::iot_hwdevcontype_metaclass(iot_type_id_t id, const c
 int iot_hwdevcontype_metaclass::from_json(json_object* json, char* buf, size_t bufsize, const iot_hwdev_localident*& obj, iot_type_id_t default_contype) {
 	json_object* val=NULL;
 	iot_type_id_t contype=default_contype;
-	if(json_object_object_get_ex(json, "conntype_id", &val)) { //zero or absent value leaves IOT_DEVCONTYPE_ANY
+	if(json_object_object_get_ex(json, "contype_id", &val)) { //zero or absent value leaves IOT_DEVCONTYPE_ANY
 		IOT_JSONPARSE_UINT(json, iot_type_id_t, contype);
 	}
 	if(!contype) return IOT_ERROR_BAD_DATA;
@@ -283,10 +298,10 @@ uint32_t iot_devifacetype_toneplayer::get_d2c_maxmsgsize(const char* cls_data) c
 }
 */
 //use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created
-constexpr iot_valueclass_nodeerrorstate iot_valueclass_nodeerrorstate::const_noinst(iot_valueclass_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
+constexpr iot_valuetype_nodeerrorstate iot_valuetype_nodeerrorstate::const_noinst(iot_valuetype_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
 
-constexpr iot_valueclass_boolean iot_valueclass_boolean::const_true(true);
-constexpr iot_valueclass_boolean iot_valueclass_boolean::const_false(false);
+constexpr iot_valuetype_boolean iot_valuetype_boolean::const_true(true);
+constexpr iot_valuetype_boolean iot_valuetype_boolean::const_false(false);
 
 constexpr iot_valuenotion_keycode iot_valuenotion_keycode::iface;
 constexpr iot_valuenotion_degcelcius iot_valuenotion_degcelcius::iface;

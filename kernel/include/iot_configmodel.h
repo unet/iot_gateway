@@ -31,7 +31,7 @@ struct iot_modelsignal : public iot_releasable { //represents signal from specif
 	iot_event_id_t reason_event; //optional event which was the reason of this signal
 
 	iot_config_node_out_t* node_out=NULL; //use as temporary var during event processing to match node by node_id and out_label
-	const iot_dataclass_base* data=NULL; //value or message. CAN BE NULL FOR AND ONLY FOR VALUE LINES
+	const iot_datatype_base* data=NULL; //value or message. CAN BE NULL FOR AND ONLY FOR VALUE LINES
 	iot_id_t node_id;
 	uint32_t module_id;
 	alignas(uint32_t) char out_label[IOT_CONFIG_LINKLABEL_MAXLEN+1+1]; //first char is 'm' for msg and 'v' for value output
@@ -39,7 +39,7 @@ struct iot_modelsignal : public iot_releasable { //represents signal from specif
 //	bool is_sync=false; //if true, then reason_event is current event being executed (if hasn't timedout)
 //				//if false then says that event is NOT response to sync execution of reason_event (reason_event then can be some old event which became the reason).
 
-	iot_modelsignal(iot_nodemodel *model, const char* out_labeln, uint64_t reltime, const iot_dataclass_base* msgval=NULL, /*bool is_sync=false,*/ const iot_event_id_t* reason=NULL);
+	iot_modelsignal(iot_nodemodel *model, const char* out_labeln, uint64_t reltime, const iot_datatype_base* msgval=NULL, /*bool is_sync=false,*/ const iot_event_id_t* reason=NULL);
 	iot_modelsignal(void) : reason_event {}, node_id(0), module_id(0) {
 		out_label[0]='\0';
 	}
@@ -79,7 +79,7 @@ struct iot_notify_inputsupdate : public iot_releasable {
 	uint16_t numitems=0, numalloced;
 	struct {
 		int16_t real_index;
-		const iot_dataclass_base* data; //value or message. CAN BE NULL FOR AND ONLY FOR VALUE LINES
+		const iot_datatype_base* data; //value or message. CAN BE NULL FOR AND ONLY FOR VALUE LINES
 	} item[];
 
 	iot_notify_inputsupdate(uint16_t numalloced) : numalloced(numalloced) {
@@ -124,17 +124,17 @@ struct iot_nodemodel {
 
 	struct {
 		iot_config_node_out_t* link;
-		iot_valueclass_nodeerrorstate* instance_value;
+		iot_valuetype_nodeerrorstate* instance_value;
 	} erroutput;
 
 	struct {
 		iot_config_node_in_t* link;
-		const iot_valueclass_BASE* instance_value; //last value, received by module instance. i.e. it is current input value from modinstance point of view
+		const iot_valuetype_BASE* instance_value; //last value, received by module instance. i.e. it is current input value from modinstance point of view
 	} *curvalueinput; //array of current value input connections matching by index to node_iface->valueinput. contains
 										//node_iface->num_valueinputs items if module is loaded, NULL otherwise
 	struct {
 		iot_config_node_out_t* link; //directs to all consumers of output value (inputs of other nodes)
-		const iot_valueclass_BASE* instance_value; //last value, set by module instance. i.e. it is current outputted value from modinstance point of view. UPDATED FROM instance thread!!!
+		const iot_valuetype_BASE* instance_value; //last value, set by module instance. i.e. it is current outputted value from modinstance point of view. UPDATED FROM instance thread!!!
 	} *curvalueoutput; //array of current output values and connections matching by index to node_iface->valueoutput. contains
 						//node_iface->num_valueoutputs items if module is loaded, NULL otherwise
 
@@ -211,8 +211,8 @@ public:
 
 	bool execute(bool forceasync, iot_threadmsg_t *&msg, iot_modelsignal *&outsignals); //main thread
 	bool do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal *&outsignals); //instance thread
-	int do_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valueclass_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgclass_BASE** msgs);
-	const iot_valueclass_BASE* get_outputvalue(uint8_t index);
+	int do_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valuetype_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgtype_BASE** msgs);
+	const iot_valuetype_BASE* get_outputvalue(uint8_t index);
 
 private:
 	void try_create_instance(void); //called to recreate node module instance

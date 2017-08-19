@@ -78,11 +78,11 @@ $(kernel_ccobjs): %.o : %.cc
 
 static_modules:
 	@echo Making static modules...
-	@for i in $(BUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i; done
+	@set -e; for i in $(BUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i; done
 
 modules:
 	@echo Making dynamic modules...
-	@for i in $(DYNBUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i; done
+	@set -e; for i in $(DYNBUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i; done
 
 
 .PHONY : $(PHONY)

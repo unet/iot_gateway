@@ -9,8 +9,8 @@
 			"start" : optional key with false value to disable start of detector in module (if it is started by default), true value to enable start of detector
 			"manual" : [ //optional list of manually configured devices (if module supports)
 				{
-					"conntype_id": 1, //ID of device connection type. must be among those supported by detector module
-					"data": <custom object> //conntype-specific data entered by user
+					"contype_id": 1, //ID of device connection type. must be among those supported by detector module
+					"data": <custom object> //contype-specific data entered by user
 				}
 			],
 			"manual_modtime": 1234566789, //timestamp of last update of manual devices list
@@ -20,8 +20,8 @@
 	},
 	"hwdevice_drivers": [ //manual override of driver for hardware devices
 		{
-			"conntype_id": 1, //ID of device connection type of hwdevice
-			"ident": <custom object>, //conntype-specific data with exact or wildcard specification
+			"contype_id": 1, //ID of device connection type of hwdevice
+			"ident": <custom object>, //contype-specific data with exact or wildcard specification
 			"driver_modules": [ MODULE_ID1, MODULE_ID2 ] //list of driver modules to try for device in order or precedence. empty list disables driver search
 		}
 	]

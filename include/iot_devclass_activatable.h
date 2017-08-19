@@ -135,7 +135,7 @@ inline iot_deviface_params_activatable::iot_deviface_params_activatable(uint16_t
 	tmpl.max_sublines=max_sublines;
 }
 inline const iot_deviface_params_activatable* iot_deviface_params_activatable::cast(const iot_deviface_params* params) {
-	if(!params || !params->is_valid()) return NULL;
+	if(!params) return NULL;
 	return params->get_metaclass()==&iot_devifacetype_metaclass_activatable::object ? static_cast<const iot_deviface_params_activatable*>(params) : NULL;
 }
 

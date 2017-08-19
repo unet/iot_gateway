@@ -445,7 +445,7 @@ class iot_modules_registry_t {
 	iot_devifacetype_metaclass *devifacetypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
 	iot_hwdevcontype_metaclass* devcontypes_head=NULL; //list of registered hwdevcontypes as list of addresses of metaclass instances
 
-	json_object* conntypes_table=NULL;
+	json_object* contypes_table=NULL;
 	json_object* ifacetypes_table=NULL;
 
 public:
