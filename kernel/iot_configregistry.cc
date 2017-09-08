@@ -91,9 +91,12 @@ iot_config_item_link_t link={
 };
 
 */
-json_object* iot_configregistry_t::read_jsonfile(const char* relpath, const char *name) {
-	char namebuf[256];
-	snprintf(namebuf, sizeof(namebuf), "%s%s", rootpath, relpath);
+json_object* iot_configregistry_t::read_jsonfile(const char* dir, const char* relpath, const char *name) {
+	char namebuf[512];
+	if(dir)
+		snprintf(namebuf, sizeof(namebuf), "%s/%s", dir, relpath);
+		else
+		snprintf(namebuf, sizeof(namebuf), "%s", relpath);
 
 	int fd=open(namebuf, O_RDONLY);
 	if(fd<0) {

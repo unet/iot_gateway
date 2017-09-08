@@ -1,16 +1,12 @@
 {
+//	"platforms": ["linux"],
 	"modules": {
-		"inputlinux" : {
-			"title": "Linux Input devices support",
-			"description": "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module.",
-			"platforms": ["linux"]
+		"det" : {
+//			"id": OLD_MODULE_ID  must be specified only if module changed its parent library
+			"title": "Linux Input devices detector",
+			"description": "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module. Periodically scans list of available input devices.",
 			"provides": {
-				"driver": {
-					"description": "Provides support for arbitrary hardware devices through Linux 'input' abstraction layer. Supported input event types: KEY (allows to process key presses from any keyboard, mouse pointer, joystick, motherboard keys etc), LED (allows to control state of LEDs on keyboard, motherboard etc), SND (allows to play sound using system speaker).",
-					"device_interfaces": [ ":Keyboard", ":Activatable", "unet:Toneplayer" ] //list of device interfaces this driver can provide
-				},
 				"detector": {
-					"description": "Periodically scans list of available input devices",
 //					"accepts_manual_devices":false, //indication that detector accepts manual devices specs
 //					"supported_contypes":["unet:LinuxInput"], //list of connection types this detector can find devices on and understands in manual spec
 					"params_tmpl": {
@@ -22,11 +18,20 @@
 					}
 				}
 			}
+		},
+		"drv" : {
+			"title": "Linux Input devices driver",
+			"description": "Provides support for arbitrary hardware devices through Linux 'input' abstraction layer. Supported input event types: KEY (allows to process key presses from any keyboard, mouse pointer, joystick, motherboard keys etc), LED (allows to control state of LEDs on keyboard, motherboard etc), SND (allows to play sound using system speaker).",
+			"provides": {
+				"driver": {
+					"device_interfaces": [ ":Keyboard", ":Activatable", "unet:Toneplayer" ] //list of device interfaces this driver can provide
+				}
+			}
 		}
 	},
 	"contypes": {
-		"LinuxInput" : {
-			"title": "Linux input device",
+		"linuxinput" : {
+			"title": "Linux input device connection",
 			"ident_tmpl": { //templates for processing localident data
 				"shortDescr":	["concatws", " ",
 					["data", "hwid.bus"],

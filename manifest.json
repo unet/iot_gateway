@@ -1,6 +1,6 @@
 { //description of built-in types
 	"ifacetypes": {
-		"Keyboard" : {
+		"keyboard" : {
 			"title": "Keyboard",
 			"tmpl": {
 				//"shortDescr":
@@ -10,7 +10,7 @@
 				//"editDialog":
 			}
 		},
-		"Activatable" : {
+		"activatable" : {
 			"title": "Activatable",
 			"tmpl": {
 				//"shortDescr":
@@ -20,9 +20,9 @@
 				//"editDialog":
 			}
 		}
-	},
-	"valuetypes": {
-	},
-	"msgtypes": {
-	}
+	}//,
+//	"valuetypes": {
+//	},
+//	"msgtypes": {
+//	}
 }

@@ -1,6 +1,6 @@
 {
 	"ifacetypes": {
-		"Toneplayer" : {
+		"toneplayer" : {
 			"title": "Music tone player",
 			"tmpl": {
 				//"shortDescr":

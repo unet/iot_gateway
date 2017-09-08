@@ -35,8 +35,10 @@ class iot_hwdev_details;
 
 class iot_hwdevcontype_metaclass { //base abstract class for specifc device contype metaclass singleton objects 
 	iot_type_id_t contype_id;
-	const char *vendor_name; //is NULL for built-in types
+	uint32_t ver; //version of realization of metaclass and all its child classes
+//	const char *vendor_name; //is NULL for built-in types
 	const char *type_name;
+	const char *parentlib;
 
 	PACKED(
 		struct serialize_base_t {
@@ -48,20 +50,26 @@ public:
 													//for position in pending registration list
 
 protected:
-	iot_hwdevcontype_metaclass(iot_type_id_t id, const char* vendor, const char* type); //id must be zero for non-builtin types. vendor is NULL for builtin types. type cannot be NULL
+	iot_hwdevcontype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver, const char* parentlib=IOT_CURLIBRARY); //id must be zero for non-builtin types. vendor is NULL for builtin types. type cannot be NULL
 
 public:
 	iot_hwdevcontype_metaclass(const iot_hwdevcontype_metaclass&) = delete; //block copy-construtors and default assignments
 
-	iot_type_id_t get_contype_id(void) const {
+	iot_type_id_t get_id(void) const {
 		return contype_id;
 	}
 	const char* get_name(void) const {
 		return type_name;
 	}
-	const char* get_vendor(void) const {
-		return vendor_name;
+	const char* get_library(void) const {
+		return parentlib;
 	}
+	uint32_t get_version(void) const {
+		return ver;
+	}
+//	const char* get_vendor(void) const {
+//		return vendor_name;
+//	}
 	void set_contype_id(iot_type_id_t id) {
 		if(contype_id>0 || !id) {
 			assert(false);
@@ -72,7 +80,8 @@ public:
 	char* get_fullname(char *buf, size_t bufsize, int *doff=NULL) const { //doff - delta offset. will be incremented on number of written chars
 	//returns buf value
 		if(!bufsize) return buf;
-		int len=snprintf(buf, bufsize, "CONTYPE:%s:%s", vendor_name ? vendor_name : "BUILTIN", type_name);
+//		int len=snprintf(buf, bufsize, "CONTYPE:%s:%s", vendor_name ? vendor_name : "BUILTIN", type_name);
+		int len=snprintf(buf, bufsize, "CONTYPE:%s", type_name);
 		if(doff) *doff += len>=int(bufsize-1) ? int(bufsize-1) : len;
 		return buf;
 	}
@@ -129,11 +138,11 @@ public:
 	const iot_hwdevcontype_metaclass* get_metaclass(void) const {
 		return meta;
 	}
-	iot_type_id_t get_contype_id(void) const { //returns either valid contype id OR zero
-		return meta ? meta->get_contype_id() : 0;
+	iot_type_id_t get_id(void) const { //returns either valid contype id OR zero
+		return meta ? meta->get_id() : 0;
 	}
 	bool is_valid(void) const {
-		return get_contype_id()!=0;
+		return get_id()!=0;
 	}
 	virtual size_t get_size(void) const = 0; //must return 0 if object is statically precreated and thus must not be copied by value, only by reference
 };
@@ -150,12 +159,12 @@ public:
 	const iot_hwdevcontype_metaclass* get_metaclass(void) const {
 		return meta;
 	}
-	iot_type_id_t get_contype_id(void) const { //returns either valid contype id OR zero
-		return meta->get_contype_id();
+	iot_type_id_t get_id(void) const { //returns either valid contype id OR zero
+		return meta->get_id();
 	}
 	bool is_valid(void) const {
 		if(!meta) return false;
-		return get_contype_id()!=0;
+		return get_id()!=0;
 	}
 	void invalidate(void) { //can be used on allocated objects of derived classes or on internal buffer of iot_hwdev_ident_buffered
 		meta=NULL;
@@ -164,9 +173,13 @@ public:
 		if(meta) return meta->get_fullname(buf, bufsize, doff);
 
 		if(!bufsize) return buf;
-		int len=snprintf(buf, bufsize, "%s", "CONTYPE:Invalid");
+		int len=snprintf(buf, bufsize, "%s", "CONTYPE:INVALID");
 		if(doff) *doff += len>=int(bufsize-1) ? int(bufsize-1) : len;
 		return buf;
+	}
+	const char* get_name(void) const {
+		if(meta) return meta->get_name();
+		return "INVALID";
 	}
 
 	virtual bool is_tmpl(void) const = 0; //check if current objects represents template. otherwise it must be exact connection specification
@@ -238,7 +251,7 @@ private:
 //represents special hwdev contype to create filters matching ANY contypes
 
 class iot_hwdevcontype_metaclass_any : public iot_hwdevcontype_metaclass {
-	iot_hwdevcontype_metaclass_any(void) : iot_hwdevcontype_metaclass(IOT_DEVCONTYPE_ANY, NULL, "Any") {}
+	iot_hwdevcontype_metaclass_any(void) : iot_hwdevcontype_metaclass(IOT_DEVCONTYPE_ANY, "any", IOT_VERSION_COMPOSE(0,1,1)) {}
 public:
 	static iot_hwdevcontype_metaclass_any object; //the only instance of this class
 
@@ -434,8 +447,9 @@ struct iot_hwdev_ident_buffered : public iot_hwdev_ident { //same as iot_hwdev_i
 	}
 	iot_hwdev_ident_buffered(iot_hostid_t hostid_=0) {
 		hostid=hostid_;
-		local=(iot_hwdev_localident*)localbuf;
-		((iot_hwdev_localident*)localbuf)->invalidate();
+		iot_hwdev_localident* p=(iot_hwdev_localident*)localbuf;
+		local=p;
+		p->invalidate();
 	}
 
 	static int deserialize(const char* data, size_t datasize, iot_hwdev_ident_buffered* obj) { //obj must point to somehow allocated iot_hwdev_ident_buffered struct
@@ -629,8 +643,10 @@ class iot_deviface_params;
 
 class iot_devifacetype_metaclass { //base abstract class for specifc device interface metaclass singleton objects
 	iot_type_id_t ifacetype_id;
-	const char *vendor_name; //is NULL for built-in types
+	uint32_t ver; //version of realization of metaclass and all its child classes
+//	const char *vendor_name; //is NULL for built-in types
 	const char *type_name;
+	const char *parentlib;
 
 	PACKED(
 		struct serialize_base_t {
@@ -642,20 +658,26 @@ public:
 													//for position in pending registration list
 
 protected:
-	iot_devifacetype_metaclass(iot_type_id_t id, const char* vendor, const char* type); //id must be zero for non-builtin types. vendor is NULL for builtin types. type cannot be NULL
+	iot_devifacetype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver, const char* parentlib=IOT_CURLIBRARY); //id must be zero for non-builtin types. vendor is NULL for builtin types. type cannot be NULL
 
 public:
 	iot_devifacetype_metaclass(const iot_devifacetype_metaclass&) = delete; //block copy-construtors and default assignments
 
-	iot_type_id_t get_ifacetype_id(void) const {
+	iot_type_id_t get_id(void) const {
 		return ifacetype_id;
+	}
+	uint32_t get_version(void) const {
+		return ver;
 	}
 	const char* get_name(void) const {
 		return type_name;
 	}
-	const char* get_vendor(void) const {
-		return vendor_name;
+	const char* get_library(void) const {
+		return parentlib;
 	}
+//	const char* get_vendor(void) const {
+//		return vendor_name;
+//	}
 	void set_ifacetype_id(iot_type_id_t id) {
 		if(ifacetype_id>0 || !id) {
 			assert(false);
@@ -666,7 +688,8 @@ public:
 	char* get_fullname(char *buf, size_t bufsize, int *doff=NULL) const { //doff - delta offset. will be incremented on number of written chars
 	//returns buf value
 		if(!bufsize) return buf;
-		int len=snprintf(buf, bufsize, "IFACETYPE:%s:%s", vendor_name ? vendor_name : "BUILTIN", type_name);
+//		int len=snprintf(buf, bufsize, "IFACETYPE:%s:%s", vendor_name ? vendor_name : "BUILTIN", type_name);
+		int len=snprintf(buf, bufsize, "IFACETYPE:%s", type_name);
 		if(doff) *doff += len>=int(bufsize-1) ? int(bufsize-1) : len;
 		return buf;
 	}
@@ -677,13 +700,7 @@ public:
 		if(res<0) return res;
 		return sizeof(serialize_base_t)+res;
 	}
-	int serialize(const iot_deviface_params* obj, char* buf, size_t bufsize) const { //returns error code or 0 on success
-		assert(ifacetype_id!=0);
-		if(bufsize<sizeof(serialize_base_t)) return IOT_ERROR_NO_BUFSPACE;
-		serialize_base_t *p=(serialize_base_t*)buf;
-		p->ifacetype_id=repack_type_id(ifacetype_id);
-		return p_serialize(obj, buf+sizeof(serialize_base_t), bufsize-sizeof(serialize_base_t));
-	}
+	int serialize(const iot_deviface_params* obj, char* buf, size_t bufsize) const; //returns error code or 0 on success
 	static int deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_deviface_params*& obj) {
 		//returns negative error code OR number of bytes written to provided buffer OR required buffer size when buf is NULL
 		//returned value can be zero (regardless buf was NULL or not) to indicate that buffer was not used (or is not necessary) and that obj was assigned to
@@ -703,12 +720,15 @@ public:
 	//default_ifacetype is used when no "ifacetype_id" property in provided json or it is incorrect. Thus if it is 0, then required.
 	static int from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj, iot_type_id_t default_ifacetype=0);
 
+	//returns negative error code (IOT_ERROR_NO_MEMORY) or zero on success
+	int to_json(const iot_deviface_params* obj, json_object* &dst) const;
 
 private:
 	virtual int p_serialized_size(const iot_deviface_params* obj) const = 0;
 	virtual int p_serialize(const iot_deviface_params* obj, char* buf, size_t bufsize) const = 0; //returns error code or 0 on success
 	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_deviface_params*& obj) const = 0;
 	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj) const = 0;
+	virtual int p_to_json(const iot_deviface_params* obj, json_object* &dst) const = 0;
 };
 
 
@@ -723,12 +743,12 @@ public:
 	const iot_devifacetype_metaclass* get_metaclass(void) const {
 		return meta;
 	}
-	iot_type_id_t get_ifacetype_id(void) const { //returns either valid ifacetype id OR zero
-		return meta->get_ifacetype_id();
+	iot_type_id_t get_id(void) const { //returns either valid ifacetype id OR zero
+		return meta->get_id();
 	}
 	bool is_valid(void) const {
 		if(!meta) return false;
-		return get_ifacetype_id()!=0;
+		return get_id()!=0;
 	}
 	void invalidate(void) { //can be used on allocated objects of derived classes or on internal buffer of iot_hwdev_ident_buffered
 		meta=NULL;
@@ -737,9 +757,13 @@ public:
 		if(meta) return meta->get_fullname(buf, bufsize, doff);
 
 		if(!bufsize) return buf;
-		int len=snprintf(buf, bufsize, "%s", "IFACETYPE:Invalid");
+		int len=snprintf(buf, bufsize, "%s", "IFACETYPE:INVALID");
 		if(doff) *doff += len>=int(bufsize-1) ? int(bufsize-1) : len;
 		return buf;
+	}
+	const char* get_name(void) const {
+		if(meta) return meta->get_name();
+		return "INVALID";
 	}
 
 
@@ -762,6 +786,9 @@ public:
 	int serialize(char* buf, size_t bufsize) const { //returns error code or 0 on success
 		return meta->serialize(this, buf, bufsize);
 	}
+	int to_json(json_object* &dst) const { //returns error code or 0 on success
+		return meta->to_json(this, dst);
+	}
 
 	virtual bool is_tmpl(void) const = 0; //check if current objects represents template. otherwise it must be exact connection specification
 	virtual size_t get_size(void) const = 0; //must return 0 if object is statically precreated and thus must not be copied by value, only by reference
@@ -778,8 +805,9 @@ struct iot_deviface_params_buffered { //same as iot_deviface_params but has buil
 	alignas(iot_deviface_params) char databuf[IOT_DEVIFACE_PARAMS_MAXSIZE]; //preallocated buffer 
 
 	iot_deviface_params_buffered(void) {
-		data=(iot_deviface_params*)databuf;
-		((iot_deviface_params*)databuf)->invalidate();
+		iot_deviface_params* p=(iot_deviface_params*)databuf;
+		data=p;
+		p->invalidate();
 	}
 	iot_deviface_params_buffered(const iot_deviface_params_buffered &op) {
 		size_t sz=op.data->get_size();
@@ -964,15 +992,15 @@ private:
 
 //IOT DEVCLASSID codes with type iot_devifacetype_id_t
 #define IOT_DEVIFACETYPE_IDMAP(XX) \
-	XX(KEYBOARD, 1) 	/*of keys or standard keyboard (with SHIFT, CTRL and ALT keys)*/	\
-	XX(ACTIVATABLE, 2)	/*simplest interface of set of devices which can be activated or deactivated without current status information */	\
+	XX(KEYBOARD, 1000) 	/*of keys or standard keyboard (with SHIFT, CTRL and ALT keys)*/	\
+	XX(ACTIVATABLE, 1001)	/*simplest interface of set of devices which can be activated or deactivated without current status information */	\
 
 
-enum iot_deviface_basic_ids : uint8_t {
+enum iot_deviface_basic_ids : iot_type_id_t {
 #define XX(nm, cc) IOT_DEVIFACETYPEID_ ## nm = cc,
 	IOT_DEVIFACETYPE_IDMAP(XX)
 #undef XX
-	IOT_DEVIFACETYPEID_MAX = 255
+	IOT_DEVIFACETYPEID_MAX = 1001
 };
 
 

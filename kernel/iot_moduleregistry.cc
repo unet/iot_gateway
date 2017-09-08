@@ -13,18 +13,18 @@
 #include "iot_kernel.h"
 
 
-#define IOT_MODULESDB_BUNDLE_OBJ(vendor, bundle) ECB_CONCAT(iot_moddb_bundle_, ECB_CONCAT(vendor, ECB_CONCAT(__, bundle)))
-#define IOT_MODULESDB_BUNDLE_REC(vendor, bundle) static iot_modulesdb_bundle_t IOT_MODULESDB_BUNDLE_OBJ(vendor, bundle)
+//#define IOT_MODULESDB_BUNDLE_OBJ(vendor, bundle) ECB_CONCAT(iot_moddb_bundle_, ECB_CONCAT(vendor, ECB_CONCAT(__, bundle)))
+//#define IOT_MODULESDB_BUNDLE_REC(vendor, bundle) static iot_regitem_lib_t IOT_MODULESDB_BUNDLE_OBJ(vendor, bundle)
 
-#define UV_LIB_INIT {NULL, NULL}
+//#define UV_LIB_INIT {NULL, NULL}
 
-#include "iot_bundlesdb.h"
+//#include "iot_linkedlibs.h"
 
-static iot_modulesdb_item_t modules_db[]={
-#include "iot_modulesdb.h"
-};
+//static iot_regitem_module_t modules_db[]={
+//#include "iot_modulesdb.h"
+//};
 
-#define MODULES_DB_ITEMS (sizeof(modules_db)/sizeof(modules_db[0]))
+//#define MODULES_DB_ITEMS (sizeof(modules_db)/sizeof(modules_db[0]))
 
 
 iot_modules_registry_t *modules_registry=NULL;
@@ -41,10 +41,30 @@ const char* iot_modinsttype_name[IOT_MODINSTTYPE_MAX+1]={
 
 //finds module's index in modules DB by module_id
 //returns -1 if not found
-static inline int module_db_index_by_id(uint32_t module_id) { //TODO make some index for quick search
+/*static inline int module_db_index_by_id(uint32_t module_id) { //TODO make some index for quick search
 	for(unsigned i=0;i<MODULES_DB_ITEMS;i++) if(modules_db[i].module_id==module_id) return i;
 	return -1;
+}*/
+
+/*iot_regitem_module_t* iot_modules_registry_t::find_modulesdb_item(const char* name, const iot_regitem_lib_t* bundle) { //name must be pure module's name when bundle defined and full otherwise
+	if(bundle) {
+		for(unsigned i=0;i<MODULES_DB_ITEMS;i++) if(modules_db[i].bundle==bundle && strcmp(name, modules_db[i].module_name)==0) return &modules_db[i];
+	} else {
+		const char *purename=strrchr(name, ':');
+		if(!purename) return NULL;
+		size_t bundlenamelen=purename-name;
+		purename++;
+		for(unsigned i=0;i<MODULES_DB_ITEMS;i++) {
+			if(!modules_db[i].bundle) { //compare by full name spec
+				if(strcmp(name, modules_db[i].module_name)==0) return &modules_db[i];
+			} else { //compare by bundle name and pure module name
+				if(memcmp(modules_db[i].bundle->name, name, bundlenamelen)==0 && strcmp(purename, modules_db[i].module_name)==0) return &modules_db[i];
+			}
+		}
+	}
+	return NULL;
 }
+
 
 static int bundlepath2symname(const char *path, char *buf, size_t bufsz) {
 	char *bufend=buf+bufsz-1;
@@ -61,7 +81,7 @@ static int bundlepath2symname(const char *path, char *buf, size_t bufsz) {
 	if(cur<=bufend) *cur='\0';
 	return int(cur-buf);
 }
-
+*/
 /*const iot_hwdevident_iface* iot_hwdev_localident_t::find_iface(bool tryload) const { //searches for connection type interface class realization in local registry
 	//must run in main thread if tryload is true
 	//returns NULL if interface not found or cannot be loaded
@@ -259,10 +279,10 @@ void iot_module_item_t::recheck_job(bool no_jobs) { //reschedules timers and/or 
 }
 
 
-void iot_modules_registry_t::start(json_object* typesdb) {
+void iot_modules_registry_t::start(void) {
 	assert(uv_thread_self()==main_thread);
 
-	if(typesdb) {
+/*	if(typesdb) {
 		if(json_object_object_get_ex(typesdb, "contypes", &contypes_table)) {
 			if(!json_object_is_type(contypes_table,  json_type_object)) {
 				outlog_error("Invalid data in types DB! Top level 'contypes' item must be a JSON-object");
@@ -280,19 +300,22 @@ void iot_modules_registry_t::start(json_object* typesdb) {
 			}
 		}
 	}
+	libregistry->register_pending_metaclasses(); //register built-in devifaces and from statically linked bundles
+*/
 
-	register_pending_metaclasses(); //register built-in devifaces and from statically linked bundles
-
+	iot_regitem_module_t* module=iot_regitem_module_t::get_listhead();
 	int err;
-
-	for(unsigned i=0;i<MODULES_DB_ITEMS;i++) {
-		if(!modules_db[i].autoload)	continue;
-		//module requires autoloading
-		err=load_module(i, 0, NULL);
-		if(err) {
-			outlog_error("Error autoloading module with ID %u: %s", modules_db[i].module_id, kapi_strerror(err));
+	while(module) {
+		if(module->autoload) {
+			err=load_module(module->module_id, NULL);
+			if(err) {
+				outlog_error("Error autoloading module %s: %s", module->module_name, kapi_strerror(err));
+			}
 		}
+		module=module->next;
 	}
+
+
 	//start detectors with autostart
 	iot_module_item_t* it=detectors_head;
 	while(it) {
@@ -303,7 +326,7 @@ void iot_modules_registry_t::start(json_object* typesdb) {
 
 void iot_modules_registry_t::stop(void) {
 	//TODO
-	if(contypes_table) {
+/*	if(contypes_table) {
 		json_object_put(contypes_table);
 		contypes_table=NULL;
 	}
@@ -311,8 +334,9 @@ void iot_modules_registry_t::stop(void) {
 		json_object_put(ifacetypes_table);
 		ifacetypes_table=NULL;
 	}
+*/
 }
-
+/*
 void iot_modules_registry_t::register_pending_metaclasses(void) {
 	assert(uv_thread_self()==main_thread);
 	iot_devifacetype_metaclass* &ifacetype_head=devifacetype_pendingreg_head(), *ifacetype_next;
@@ -330,27 +354,30 @@ void iot_modules_registry_t::register_pending_metaclasses(void) {
 
 		ifacetype_next=ifacetype_head->next;
 
-		if(!ifacetype_head->get_ifacetype_id()) {
-			const char* vendor=ifacetype_head->get_vendor();
+		if(!ifacetype_head->get_id()) {
+//			const char* vendor=ifacetype_head->get_vendor();
 			const char* name=ifacetype_head->get_name();
-			if(!vendor) {
-				outlog_error("Built-in device interface type '%s' has zero type ID and cannot be used", name);
-			} else {
+//			if(!vendor) {
+//				outlog_error("Built-in device interface type '%s' has zero type ID and cannot be used", name);
+//			} else {
 				char key[256];
-				snprintf(key, sizeof(key), "%s:%s", vendor, name);
+//				snprintf(key, sizeof(key), "%s:%s", vendor, name);
+				snprintf(key, sizeof(key), "%s", name);
 				iot_type_id_t type_id=0;
 				if(ifacetypes_table) {
 					json_object* val=NULL;
-					if(json_object_object_get_ex(ifacetypes_table, key, &val)) {
-						IOT_JSONPARSE_UINT(val, iot_type_id_t, type_id);
+					json_object* idval;
+					if(json_object_object_get_ex(ifacetypes_table, key, &val) && json_object_is_type(val, json_type_array) && (idval=json_object_array_get_idx(val, 0))) {
+						IOT_JSONPARSE_UINT(idval, iot_type_id_t, type_id);
+					}
+					if(!type_id) {
+						outlog_info("Cannot find device interface type ID for '%s' in types DB", key);
 					}
 				}
-				if(!type_id) {
-					outlog_error("Cannot find device interface type ID for '%s' in types DB", key);
-				} else {
+				if(type_id) {
 					ifacetype_head->set_ifacetype_id(type_id);
 				}
-			}
+//			}
 		}
 		BILINKLIST_INSERTHEAD(ifacetype_head, devifacetypes_head, next, prev);
 
@@ -371,34 +398,37 @@ void iot_modules_registry_t::register_pending_metaclasses(void) {
 		}
 
 		contype_next=contype_head->next;
-		if(!contype_head->get_contype_id()) {
-			const char* vendor=contype_head->get_vendor();
+		if(!contype_head->get_id()) {
+//			const char* vendor=contype_head->get_vendor();
 			const char* name=contype_head->get_name();
-			if(!vendor) {
-				outlog_error("Built-in device connection type '%s' has zero type ID", name);
-			} else {
+//			if(!vendor) {
+//				outlog_error("Built-in device connection type '%s' has zero type ID", name);
+//			} else {
 				char key[256];
-				snprintf(key, sizeof(key), "%s:%s", vendor, name);
+//				snprintf(key, sizeof(key), "%s:%s", vendor, name);
+				snprintf(key, sizeof(key), "%s", name);
 				iot_type_id_t type_id=0;
 				if(contypes_table) {
 					json_object* val=NULL;
-					if(json_object_object_get_ex(contypes_table, key, &val)) {
-						IOT_JSONPARSE_UINT(val, iot_type_id_t, type_id);
+					json_object* idval;
+					if(json_object_object_get_ex(contypes_table, key, &val) && json_object_is_type(val, json_type_array) && (idval=json_object_array_get_idx(val, 0))) {
+						IOT_JSONPARSE_UINT(idval, iot_type_id_t, type_id);
+					}
+					if(!type_id) {
+						outlog_error("Cannot find device connection type ID for '%s' in types DB", key);
 					}
 				}
-				if(!type_id) {
-					outlog_error("Cannot find device connection type ID for '%s' in types DB", key);
-				} else {
+				if(type_id) {
 					contype_head->set_contype_id(type_id);
 				}
-			}
+//			}
 		}
 		BILINKLIST_INSERTHEAD(contype_head, devcontypes_head, next, prev);
 		contype_head=contype_next;
 	}
 
 }
-
+*/
 /*int iot_modules_registry_t::register_devifaceclasses(const iot_devifacetype_iface** iface, uint32_t num, uint32_t module_id) { //main thread
 	//zero module_id is used for built-in device iface classes. It can be used to config class IDs from other modules
 	assert(uv_thread_self()==main_thread);
@@ -456,66 +486,90 @@ void iot_modules_registry_t::register_pending_metaclasses(void) {
 
 //returns error code:
 //0 - success
+//IOT_ERROR_CRITICAL_ERROR - bundle cannot be loaded, is misconfigured or init failed
+/*
+int iot_modules_registry_t::load_bundle(iot_regitem_lib_t* bundle, const char* module_name) { //tries to load bundle
+	static void* main_hmodule=NULL;
+	char buf[256];
+
+	//try to load bundle
+	if(bundle->error) return IOT_ERROR_CRITICAL_ERROR; //bundle loading is impossible
+	if(bundle->duplicate) {
+		outlog_error("Bundle %s is duplicated for module %s: build configuration is broken", bundle->name, module_name ? module_name : "<empty>");
+		bundle->error=true;
+		return IOT_ERROR_CRITICAL_ERROR;
+	}
+
+	if(bundle->linked) { //module is linked into executable
+		if(!main_hmodule) main_hmodule=bundle->hmodule=dlopen(NULL,RTLD_NOW | RTLD_LOCAL);
+			else bundle->hmodule=main_hmodule;
+		strcpy(buf,"SELF");
+	} else { //module is in external library
+		snprintf(buf, sizeof(buf), "%s/%s%s", modules_dir, bundle->name, IOT_SOEXT);
+
+		bundle->hmodule=dlopen(buf, RTLD_NOW | RTLD_GLOBAL);
+	}
+	if(!bundle->hmodule) {
+		outlog_error("Error loading module bundle %s: %s", buf, dlerror());
+		bundle->error=true;
+		return IOT_ERROR_CRITICAL_ERROR;
+	}
+	int off=snprintf(buf, sizeof(buf), "%s","iot_libversion_");
+	off+=bundlepath2symname(bundle->name, buf+off, sizeof(buf)-off);
+	if(off>=int(sizeof(buf))) {
+		outlog_error("Too small buffer to load version from bundle '%s'", bundle->name);
+		return IOT_ERROR_CRITICAL_ERROR;
+	}
+	uint32_t *verptr=(uint32_t*)dlsym(bundle->hmodule, buf);
+	if(!verptr) {
+		outlog_error("Error loading version symbol '%s' from bundle '%s': %s", buf, bundle->name, dlerror());
+		return IOT_ERROR_CRITICAL_ERROR;
+	}
+	bundle->version=*verptr;
+
+	register_pending_metaclasses(); //register devifaces from just linked bundles
+	return 0;
+}
+*/
+
+//returns error code:
+//0 - success
 //IOT_ERROR_NOT_FOUND
-//IOT_ERROR_CRITICAL_ERROR - module cannot be loaded, is misconfigured or init failed
+//IOT_ERROR_CRITICAL_ERROR - module or bundle cannot be loaded, is misconfigured or init failed
 //IOT_ERROR_NO_MEMORY
-int iot_modules_registry_t::load_module(int module_index, uint32_t module_id, iot_module_item_t**rval) { //tries to load module and register. module's module_init method is also called
+
+int iot_modules_registry_t::load_module(uint32_t module_id, iot_module_item_t**rval) { //tries to load module and register. module's module_init method is also called
 //module_index is index of module's db item in modules_db array. It can be <0 to request search by provided module_id
 //module_id is ignored if module_index>=0 provided. otherwise used to find modules_db index with module data
 //rval if provided is filled with address of module item on success
 	assert(uv_thread_self()==main_thread);
 
-	static void* main_hmodule=NULL;
-	char buf[256];
-	if(module_index<0) {
-		if((module_index=module_db_index_by_id(module_id))<0) return IOT_ERROR_NOT_FOUND;
+	iot_regitem_module_t* mod=libregistry->find_module_item(module_id);
+
+	if(!mod) {
+		outlog_error("Error loading module with ID %u: unknown module ID", module_id);
+		return IOT_ERROR_NOT_FOUND;
 	}
 
-	if(modules_db[module_index].item) { //already loaded
-		if(rval) *rval=modules_db[module_index].item;
+	if(mod->item) { //already loaded
+		if(rval) *rval=mod->item;
 		return 0;
 	}
 
-	if(!modules_db[module_index].bundle->hmodule) { //bundle is not loaded
-		//try to load bundle
-		if(modules_db[module_index].bundle->error) return IOT_ERROR_CRITICAL_ERROR; //bundle loading is impossible
-
-		if(modules_db[module_index].bundle->linked) { //module is linked into executable
-			if(!main_hmodule) main_hmodule=modules_db[module_index].bundle->hmodule=dlopen(NULL,RTLD_NOW | RTLD_LOCAL);
-				else modules_db[module_index].bundle->hmodule=main_hmodule;
-			strcpy(buf,"SELF");
-		} else { //module is in external library
-			snprintf(buf, sizeof(buf), "%smodules/%s%s", rootpath, modules_db[module_index].bundle->name, IOT_SOEXT);
-
-			modules_db[module_index].bundle->hmodule=dlopen(buf, RTLD_NOW | RTLD_GLOBAL);
-		}
-		if(!modules_db[module_index].bundle->hmodule) {
-			outlog_error("Error loading module bundle %s: %s", buf, dlerror());
-			modules_db[module_index].bundle->error=true;
-			return IOT_ERROR_CRITICAL_ERROR;
-		}
-		modules_registry->register_pending_metaclasses(); //register devifaces from just linked bundles
-	}
-	//bundle is loaded
-	//load symbol with module config
-	int off=snprintf(buf, sizeof(buf), "%s","iot_modconf_");
-	off+=bundlepath2symname(modules_db[module_index].bundle->name, buf+off, sizeof(buf)-off);
-	if(off<int(sizeof(buf))) {
-		off+=snprintf(buf+off, sizeof(buf)-off, "__%s",modules_db[module_index].module_name);
-	}
-	if(off>=int(sizeof(buf))) {
-		outlog_error("Too small buffer to load module '%s' from bundle '%s'", modules_db[module_index].module_name, modules_db[module_index].bundle->name);
+	if(!mod->bundle) { //bundle is not present or disabled
+		outlog_error("Error loading module %s: no bundle", mod->module_name);
 		return IOT_ERROR_CRITICAL_ERROR;
 	}
+
+	int err;
 	iot_moduleconfig_t* cfg=NULL;
-	cfg=(iot_moduleconfig_t*)dlsym(modules_db[module_index].bundle->hmodule, buf);
-	if(!cfg) {
-		outlog_error("Error loading symbol '%s' for module '%s' from bundle '%s': %s", buf, modules_db[module_index].module_name, modules_db[module_index].bundle->name, dlerror());
-		return IOT_ERROR_CRITICAL_ERROR;
-	}
-	int err=register_module(cfg, &modules_db[module_index]);
+	err=libregistry->find_module_config(mod->module_name, mod->bundle, cfg);
+	if(err) return err;
+	//cfg found
+
+	err=register_module(cfg, mod);
 	if(!err) {
-		if(rval) *rval=modules_db[module_index].item;
+		if(rval) *rval=mod->item;
 		return 0;
 	}
 	return err==IOT_ERROR_NO_MEMORY ? err : IOT_ERROR_CRITICAL_ERROR;
@@ -527,16 +581,16 @@ int iot_modules_registry_t::load_module(int module_index, uint32_t module_id, io
 //IOT_ERROR_CRITICAL_ERROR
 //IOT_ERROR_NO_MEMORY
 //IOT_ERROR_NOT_INITED
-int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem) {
+int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_regitem_module_t *regitem) {
 	assert(uv_thread_self()==main_thread);
 
-//	if(dbitem->module_id != cfg->module_id) {
-//		outlog_error("Module '%s::%s' ID %u from executable does not match value %u from DB", dbitem->bundle->name, dbitem->module_name, cfg->module_id, dbitem->module_id);
+//	if(regitem->module_id != cfg->module_id) {
+//		outlog_error("Module '%s::%s' ID %u from executable does not match value %u from DB", regitem->bundle->name, regitem->module_name, cfg->module_id, regitem->module_id);
 //		return IOT_ERROR_CRITICAL_ERROR;
 //	}
-	assert(dbitem->item==NULL);
+	assert(regitem->item==NULL);
 
-	iot_module_item_t* item=new iot_module_item_t(cfg, dbitem);
+	iot_module_item_t* item=new iot_module_item_t(cfg, regitem);
 	if(!item) return IOT_ERROR_NO_MEMORY;
 
 	int err;
@@ -544,51 +598,46 @@ int iot_modules_registry_t::register_module(iot_moduleconfig_t* cfg, iot_modules
 	if(cfg->init_module) {
 		err=cfg->init_module();
 		if(err) {
-			outlog_error("Error initializing module '%s::%s' with ID %u: %s", dbitem->bundle->name, dbitem->module_name, dbitem->module_id, kapi_strerror(err));
+			outlog_error("Error initializing module '%s::%s' with ID %u: %s", regitem->bundle->name, regitem->module_name, regitem->module_id, kapi_strerror(err));
 			delete item;
 			return IOT_ERROR_NOT_INITED;
 		}
 	}
-	dbitem->item=item;
+	regitem->item=item;
 	BILINKLIST_INSERTHEAD(item, all_head, next, prev);
 
 	//register provided custom device connection types
 //	if(cfg->devcontype_config && cfg->num_devcontypes>0) {
-//		register_devcontypes(cfg->devcontype_config, cfg->num_devcontypes, dbitem->module_id);
+//		register_devcontypes(cfg->devcontype_config, cfg->num_devcontypes, regitem->module_id);
 //	}
 
-	if(cfg->iface_device_detector) {
+	if(cfg->iface_node) {
+		if(!cfg->iface_node->init_instance || !cfg->iface_node->deinit_instance) {
+			outlog_error("Module '%s::%s' with ID %u has incomplete node interface", regitem->bundle->name, regitem->module_name, regitem->module_id);
+		} else if(cfg->iface_node->num_valueoutputs>IOT_CONFIG_MAX_NODE_VALUEOUTPUTS || cfg->iface_node->num_valueinputs>IOT_CONFIG_MAX_NODE_VALUEINPUTS
+				|| cfg->iface_node->num_msgoutputs>IOT_CONFIG_MAX_NODE_MSGOUTPUTS || cfg->iface_node->num_msginputs>IOT_CONFIG_MAX_NODE_MSGINPUTS) {
+			outlog_error("Module '%s::%s' with ID %u has illegal number of inputs or outputs", regitem->bundle->name, regitem->module_name, regitem->module_id);
+		} else {
+			item->state[IOT_MODINSTTYPE_NODE]=IOT_MODULESTATE_OK;
+			BILINKLIST_INSERTHEAD(item, node_head, next_node, prev_node);
+		}
+	} else if(cfg->iface_device_driver) {
+		if(!cfg->iface_device_driver->init_instance || !cfg->iface_device_driver->deinit_instance) {
+			outlog_error("Module '%s::%s' with ID %u has incomplete driver interface", regitem->bundle->name, regitem->module_name, regitem->module_id);
+		} else {
+			item->state[IOT_MODINSTTYPE_DRIVER]=IOT_MODULESTATE_OK;
+			BILINKLIST_INSERTHEAD(item, drivers_head, next_driver, prev_driver);
+			hwdev_registry->try_find_hwdev_for_driver(item); //during initial module loading HW devices are not known yet, so this call is only meaningful for later module loading
+		}
+	} else if(cfg->iface_device_detector) {
 		if(!cfg->iface_device_detector->init_instance || !cfg->iface_device_detector->deinit_instance) {
-			outlog_error("Module '%s::%s' with ID %u has incomplete detector interface", dbitem->bundle->name, dbitem->module_name, dbitem->module_id);
+			outlog_error("Module '%s::%s' with ID %u has incomplete detector interface", regitem->bundle->name, regitem->module_name, regitem->module_id);
 		} else {
 			item->state[IOT_MODINSTTYPE_DETECTOR]=IOT_MODULESTATE_OK;
 			BILINKLIST_INSERTHEAD(item, detectors_head, next_detector, prev_detector);
 		}
 	}
-	if(cfg->iface_device_driver) {
-		if(!cfg->iface_device_driver->init_instance || !cfg->iface_device_driver->deinit_instance) {
-			outlog_error("Module '%s::%s' with ID %u has incomplete driver interface", dbitem->bundle->name, dbitem->module_name, dbitem->module_id);
-		} else {
-			item->state[IOT_MODINSTTYPE_DRIVER]=IOT_MODULESTATE_OK;
-			BILINKLIST_INSERTHEAD(item, drivers_head, next_driver, prev_driver);
-		}
-	}
-	if(cfg->iface_node) {
-		if(!cfg->iface_node->init_instance || !cfg->iface_node->deinit_instance) {
-			outlog_error("Module '%s::%s' with ID %u has incomplete node interface", dbitem->bundle->name, dbitem->module_name, dbitem->module_id);
-		} else if(cfg->iface_node->num_valueoutputs>IOT_CONFIG_MAX_NODE_VALUEOUTPUTS || cfg->iface_node->num_valueinputs>IOT_CONFIG_MAX_NODE_VALUEINPUTS
-				|| cfg->iface_node->num_msgoutputs>IOT_CONFIG_MAX_NODE_MSGOUTPUTS || cfg->iface_node->num_msginputs>IOT_CONFIG_MAX_NODE_MSGINPUTS) {
-			outlog_error("Module '%s::%s' with ID %u has illegal number of inputs or outputs", dbitem->bundle->name, dbitem->module_name, dbitem->module_id);
-		} else {
-			item->state[IOT_MODINSTTYPE_NODE]=IOT_MODULESTATE_OK;
-			BILINKLIST_INSERTHEAD(item, node_head, next_node, prev_node);
-		}
-	}
-	//do post actions after filling all item props
-
-	if(item->state[IOT_MODINSTTYPE_DRIVER]==IOT_MODULESTATE_OK) { //during initial module loading HW devices are not known yet, so this branch is only meaningful for later module loading
-		hwdev_registry->try_find_hwdev_for_driver(item);
-	}
+//	//do post actions after filling all item props
 	return 0;
 }
 

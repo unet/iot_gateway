@@ -1,8 +1,0 @@
-{
-	"contypes": {
-		"unet:LinuxInput": 1
-	},
-	"ifacetypes": {
-		"unet:Toneplayer": 1
-	}
-}

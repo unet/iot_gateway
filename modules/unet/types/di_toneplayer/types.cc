@@ -1,4 +1,7 @@
 #include "iot_module.h"
+
+IOT_LIBVERSION_DEFINE; //creates global symbol with library full version spec according to IOT_LIBVERSION, IOT_LIBPATCHLEVEL and IOT_LIBREVISION defines
+
 #include "iot_devclass_toneplayer.h"
 
 

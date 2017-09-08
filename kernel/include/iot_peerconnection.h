@@ -14,6 +14,12 @@ class iot_peer_link_t;
 struct iot_remote_driverinst_item_t;
 class iot_peers_registry_t;
 
+//enum iot_peerreq {
+//	IOT_PEERREQ_
+//};
+
+
+
 #include "iot_moduleregistry.h"
 #include "iot_kernel.h"
 #include "iot_configregistry.h"
@@ -87,5 +93,6 @@ public:
 		return NULL;
 	}
 };
+
 
 #endif //IOT_PEERCONNECTION_H

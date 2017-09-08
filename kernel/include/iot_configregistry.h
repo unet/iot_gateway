@@ -5,12 +5,12 @@
 #include<stdint.h>
 #include<assert.h>
 
-#include <json-c/json.h>
+#include "json.h"
 
-#define IOTCONFIG_PATH "config.json"
+#define IOTCONFIG_NAME "config.json"
 
 #include "iot_module.h"
-#include <mhbtree.h>
+#include "mhbtree.h"
 #include "iot_common.h"
 
 
@@ -357,7 +357,7 @@ public:
 			ULINKLIST_INSERTHEAD(&eventsbuf[i], events_freelist, qnext);
 	}
 
-	json_object* read_jsonfile(const char* relpath, const char *name); //main thread
+	static json_object* read_jsonfile(const char* dir, const char* relpath, const char *name); //main thread
 	int load_config(json_object* cfg, bool skiphosts);
 	int load_hosts_config(json_object* cfg);
 

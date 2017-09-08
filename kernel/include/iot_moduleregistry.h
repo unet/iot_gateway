@@ -9,6 +9,7 @@
 #include "iot_module.h"
 #include "iot_common.h"
 #include "iot_daemonlib.h"
+#include "iot_libregistry.h"
 
 struct iot_module_item_t;
 struct iot_modinstance_item_t;
@@ -338,38 +339,7 @@ inline void iot_driverclient_conndata_t::block_driver(dbllist_node<iot_device_en
 
 
 //builds unique identifier name for exporting moduleconfig_t object from full module specification
-#define IOT_MODULE_CONF(vendor, bundle, name) ECB_CONCAT(ECB_CONCAT(iot_modconf_, ECB_CONCAT(vendor, ECB_CONCAT(__, ECB_CONCAT(bundle, __)))), name)
-
-#define IOT_SOEXT ".so"
-
-struct iot_modulesdb_bundle_t {
-	const char *name; //like "vendor/subdirs/bundlename". extension (.so) must be appended
-	bool linked; //bundle is statically linked
-	bool error=false; //was error loading, so do not try again
-	void *hmodule=NULL; //handle of dynamically loaded file or of main executable when linked is true
-
-	iot_modulesdb_bundle_t(const char* name, bool linked) : name(name), linked(linked) {}
-};
-
-
-struct iot_modulesdb_item_t {
-	uint32_t module_id;
-	iot_modulesdb_bundle_t* bundle;
-	const char *module_name;
-	bool autoload; //module's config must be auto loaded (after loading appropriate bundle into memory)
-	bool autostart_detector; //if module has detector interface, it must be started automatically after load
-	iot_module_item_t *item=NULL; //assigned during module loading
-
-	iot_modulesdb_item_t(const char* name, iot_modulesdb_bundle_t* bundle, uint32_t module_id, bool autoload, bool autostart_detector=true)
-		: module_id(module_id), bundle(bundle), autoload(autoload), autostart_detector(autostart_detector)
-	{
-		if(bundle) {
-			const char *n=strrchr(name, ':');
-			if(n) module_name=n+1;
-				else module_name=name;
-		} else module_name=name; //when bundle is NULL, name of module must be full like "vendor/dir/bundle:name"
-	}
-};
+//#define IOT_MODULE_CONF(vendor, bundle, name) ECB_CONCAT(ECB_CONCAT(iot_modconf_, ECB_CONCAT(vendor, ECB_CONCAT(__, ECB_CONCAT(bundle, __)))), name)
 
 
 //represents loaded and inited module
@@ -379,7 +349,7 @@ struct iot_module_item_t {
 	iot_module_item_t *next_driver, *prev_driver;//position in iot_modules_registry_t::drivers_head list
 	iot_module_item_t *next_node, *prev_node;//position in iot_modules_registry_t::node_head list
 	iot_moduleconfig_t *config;
-	iot_modulesdb_item_t *dbitem;
+	iot_regitem_module_t *dbitem;
 	iot_module_state_t state[IOT_MODINSTTYPE_MAX+1]; //zero index used for detector
 	uint8_t errors[IOT_MODINSTTYPE_MAX+1]; //critical errors counter to implement increasing retry period and limit number of retries
 	uint64_t timeout[IOT_MODINSTTYPE_MAX+1]; //used when corresponding state is IOT_MODULESTATE_BLOCKED. contains value consistent with uv_now
@@ -389,7 +359,7 @@ struct iot_module_item_t {
 	iot_modinstance_item_t* driver_instances_head; //list of existing driver instances (module must have driver interface)
 	iot_modinstance_item_t* node_instances_head; //list of existing node instances (module must have node interface)
 
-	iot_module_item_t(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem_) : recheck_timer(this, [](void* param)->void {((iot_module_item_t*)param)->recheck_job(false);}) {
+	iot_module_item_t(iot_moduleconfig_t* cfg, iot_regitem_module_t *dbitem_) : recheck_timer(this, [](void* param)->void {((iot_module_item_t*)param)->recheck_job(false);}) {
 		next=prev=next_detector=prev_detector=next_driver=prev_driver=next_node=prev_node=NULL;
 		config=cfg;
 		dbitem=dbitem_;
@@ -442,11 +412,11 @@ class iot_modules_registry_t {
 //	iot_devifaceclass_item_t *devifacecls_head=NULL;
 //	iot_devifacetype_iface *devifaces_head=NULL;
 //	iot_devcontype_item_t *devcontypes_head=NULL;
-	iot_devifacetype_metaclass *devifacetypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
-	iot_hwdevcontype_metaclass* devcontypes_head=NULL; //list of registered hwdevcontypes as list of addresses of metaclass instances
+//	iot_devifacetype_metaclass *devifacetypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
+//	iot_hwdevcontype_metaclass* devcontypes_head=NULL; //list of registered hwdevcontypes as list of addresses of metaclass instances
 
-	json_object* contypes_table=NULL;
-	json_object* ifacetypes_table=NULL;
+//	json_object* contypes_table=NULL;
+//	json_object* ifacetypes_table=NULL;
 
 public:
 	bool is_shutdown=false;
@@ -462,7 +432,7 @@ public:
 	void free_modinstance(iot_modinstance_item_t* modinst); //main thread
 
 	//inits some object data, loads modules marked for autoload, starts detectors. must be called once during startup
-	void start(json_object *typesdb); //main thread
+	void start(void); //main thread
 	//stops detectors and driver instances
 	void stop(void); //main thread
 
@@ -473,7 +443,7 @@ public:
 			item=item->next;
 		}
 		if(tryload && IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid)>0) {
-			if(!load_module(-1, IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid), NULL)) return find_devifaceclass(clsid, false);
+			if(!load_module(IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid), NULL)) return find_devifaceclass(clsid, false);
 		}
 		return NULL;
 	}*/
@@ -484,20 +454,28 @@ public:
 			item=item->next;
 		}
 		if(tryload && IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid)>0) {
-			if(!load_module(-1, IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid), NULL)) return find_deviface(clsid, false);
+			if(!load_module(IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid), NULL)) return find_deviface(clsid, false);
 		}
 		return NULL;
 	}*/
-	const iot_devifacetype_metaclass* find_devifacetype(iot_type_id_t ifacetp, bool tryload) { //must run in main thread if tryload is true
+/*	const iot_devifacetype_metaclass* find_devifacetype(iot_type_id_t ifacetp, bool tryload) { //must run in main thread if tryload is true
 		if(!ifacetp) return NULL;
 		const iot_devifacetype_metaclass* item=devifacetypes_head;
 		while(item) {
-			if(item->get_ifacetype_id()==ifacetp) return item;
+			if(item->get_id()==ifacetp) return item;
 			item=item->next;
 		}
 		if(tryload) {// && IOT_DEVCONTYPE_CUSTOM_MODULEID(ifacetp)>0) 
 			//TODO search in registry for bundle name
-//			if(!load_module(-1, IOT_DEVCONTYPE_CUSTOM_MODULEID(ifacetp), NULL)) return find_devcontype(ifacetp, false);
+//			if(!load_module(IOT_DEVCONTYPE_CUSTOM_MODULEID(ifacetp), NULL)) return find_devcontype(ifacetp, false);
+		}
+		return NULL;
+	}
+	const iot_devifacetype_metaclass* find_devifacetype(const char* name) {
+		const iot_devifacetype_metaclass* item=devifacetypes_head;
+		while(item) {
+			if(strcmp(item->get_name(), name)==0) return item;
+			item=item->next;
 		}
 		return NULL;
 	}
@@ -505,19 +483,21 @@ public:
 		if(!contp) return NULL;
 		const iot_hwdevcontype_metaclass* item=devcontypes_head;
 		while(item) {
-			if(item->get_contype_id()==contp) return item;
+			if(item->get_id()==contp) return item;
 			item=item->next;
 		}
 		if(tryload) {// && IOT_DEVCONTYPE_CUSTOM_MODULEID(contp)>0) 
 			//TODO search in registry for bundle name
-//			if(!load_module(-1, IOT_DEVCONTYPE_CUSTOM_MODULEID(contp), NULL)) return find_devcontype(contp, false);
+//			if(!load_module(IOT_DEVCONTYPE_CUSTOM_MODULEID(contp), NULL)) return find_devcontype(contp, false);
 		}
 		return NULL;
 	}
 
 
+	int load_bundle(iot_regitem_lib_t* bundle, const char* module_name); //tries to load bundle
+*/
 	//tries to load module and register. module's module_init method is also called
-	int load_module(int module_index, uint32_t module_id, iot_module_item_t**rval); //main thread
+	int load_module(uint32_t module_id, iot_module_item_t**rval); //main thread
 
 	//after detecting new hw device tries to find appropriate driver
 	void try_find_driver_for_hwdev(iot_hwdevregistry_item_t* devitem);  //main thread
@@ -540,7 +520,7 @@ public:
 		uv_stop (main_loop);
 	}
 
-	static iot_devifacetype_metaclass*& devifacetype_pendingreg_head(void) {
+/*	static iot_devifacetype_metaclass*& devifacetype_pendingreg_head(void) {
 		static iot_devifacetype_metaclass *head=NULL; //use function-scope static to guarantee initialization before first use
 		return head;
 	}
@@ -548,7 +528,9 @@ public:
 		static iot_hwdevcontype_metaclass *head=NULL; //use function-scope static to guarantee initialization before first use
 		return head;
 	}
-	void register_pending_metaclasses(void); //main thread
+*/
+//	static iot_regitem_module_t* find_modulesdb_item(const char* name, const iot_regitem_lib_t* bundle); //name must be pure module's name when bundle defined and full otherwise
+//	void register_pending_metaclasses(void); //main thread
 
 //METHODS CALLED IN OTHER THREADS
 
@@ -559,7 +541,7 @@ private:
 //	int register_devifaceclasses(const iot_devifacetype_iface** iface, uint32_t num, uint32_t module_id); //main thread
 //	int register_devcontypes(const iot_hwdevident_iface** iface, uint32_t num, uint32_t module_id); //main thread
 
-	int register_module(iot_moduleconfig_t* cfg, iot_modulesdb_item_t *dbitem); //main thread
+	int register_module(iot_moduleconfig_t* cfg, iot_regitem_module_t *dbitem); //main thread
 
 	iot_modinstance_item_t* register_modinstance(iot_module_item_t* module, iot_modinstance_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance); //main thread
 	iot_modinstance_item_t* find_modinstance_byid(const iot_miid_t &miid); //kernel code in main thread

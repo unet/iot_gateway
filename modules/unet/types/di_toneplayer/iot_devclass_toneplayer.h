@@ -173,7 +173,7 @@ private:
 };
 
 class iot_devifacetype_metaclass_toneplayer : public iot_devifacetype_metaclass {
-	iot_devifacetype_metaclass_toneplayer(void) : iot_devifacetype_metaclass(0, "unet", "Toneplayer") {}
+	iot_devifacetype_metaclass_toneplayer(void) : iot_devifacetype_metaclass(0, "toneplayer", IOT_VERSION_COMPOSE(0,3,3)) {}
 
 	PACKED(
 		struct serialize_header_t {
@@ -201,9 +201,18 @@ private:
 		return 0;
 	}
 	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		assert(false);
 		return 0;
 	}
 	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		assert(false);
+		return 0;
+	}
+	virtual int p_to_json(const iot_deviface_params* obj0, json_object* &dst) const override {
+		const iot_deviface_params_toneplayer* obj=iot_deviface_params_toneplayer::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+
+		dst=NULL; //no params
 		return 0;
 	}
 };

@@ -65,7 +65,7 @@ private:
 };
 
 class iot_devifacetype_metaclass_keyboard : public iot_devifacetype_metaclass {
-	iot_devifacetype_metaclass_keyboard(void) : iot_devifacetype_metaclass(IOT_DEVIFACETYPEID_KEYBOARD, NULL, "Keyboard") {}
+	iot_devifacetype_metaclass_keyboard(void) : iot_devifacetype_metaclass(IOT_DEVIFACETYPEID_KEYBOARD, "keyboard", IOT_VERSION_COMPOSE(0,1,1)) {}
 
 	PACKED(
 		struct serialize_header_t {
@@ -119,9 +119,52 @@ private:
 		return 0;
 	}
 	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		assert(false);
 		return 0;
 	}
 	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		assert(false);
+		return 0;
+	}
+	virtual int p_to_json(const iot_deviface_params* obj0, json_object* &dst) const override {
+		const iot_deviface_params_keyboard* obj=iot_deviface_params_keyboard::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+
+		json_object* ob=json_object_new_object();
+		if(!ob) return IOT_ERROR_NO_MEMORY;
+
+		json_object* val;
+
+		if(obj->istmpl) { //{is_tmpl: true, is_pckbd: true/false/non-existent}
+			val=json_object_new_boolean(1);
+			if(!val) {
+				json_object_put(ob);
+				return IOT_ERROR_NO_MEMORY;
+			}
+			json_object_object_add(ob, "is_tmpl", val);
+			if(obj->tmpl.is_pckbd<2) {
+				val=json_object_new_boolean(obj->tmpl.is_pckbd);
+				if(!val) {
+					json_object_put(ob);
+					return IOT_ERROR_NO_MEMORY;
+				}
+				json_object_object_add(ob, "is_pckbd", val);
+			} //alse "any" is_pckbd allowed. represent it as undefined
+		} else { //{is_pckbd: true/false, max_keycode: integer}
+			val=json_object_new_boolean(obj->spec.is_pckbd);
+			if(!val) {
+				json_object_put(ob);
+				return IOT_ERROR_NO_MEMORY;
+			}
+			json_object_object_add(ob, "is_pckbd", val);
+			val=json_object_new_int(obj->spec.max_keycode);
+			if(!val) {
+				json_object_put(ob);
+				return IOT_ERROR_NO_MEMORY;
+			}
+			json_object_object_add(ob, "max_keycode", val);
+		}
+		dst=ob;
 		return 0;
 	}
 };

@@ -79,6 +79,19 @@ inline uint32_t iot_strtou32(const char* str, char **endptr, int base) {
 #endif
 }
 
+//converts integer version into string representation like "VER.PATCHLEVEL[:REVISION]" (revision present when non-zero only)
+inline char* iot_version_str(uint32_t ver, char* buf, size_t bufsize) { //maximum result length is 13 plus NUL
+	unsigned vers, patch, rev;
+	vers=ver>>24;
+	patch=(ver>>16)&0xFF;
+	rev=ver&0xFFFF;
+	if(rev>0) snprintf(buf, bufsize, "%u.%u:%u", vers, patch, rev);
+		else snprintf(buf, bufsize, "%u.%u", vers, patch);
+	return buf;
+}
+
+//convers string version representation like "VER.PATCHLEVEL[:REVISION]" into integer. returns UINT32_MAX on parse error
+uint32_t iot_parse_version(const char* s);
 
 //Uni-linked list without tail (NULL value of next field tells about EOL). headvar is of the same type as itemptr. Empty list has headvar==NULL
 //Insert item with address itemptr at head of list. nextfld - name of field inside item struct for linking to next item
@@ -88,8 +101,29 @@ inline uint32_t iot_strtou32(const char* str, char **endptr, int base) {
 		headvar = itemptr;								\
 	} while(0)
 
-//removing of any element. itemptr CANNOT BE same expression as headvar
-#define ULINKLIST_REMOVE(itemptr, headvar, nextfld)	\
+//removing of any element when previous item is not tracked. itemptr and previtemptr CANNOT BE same expression as headvar
+#define ULINKLIST_REMOVE(itemptr, previtemptr, headvar, nextfld)	\
+	do {											\
+		if((itemptr)==headvar) {					\
+			headvar=(itemptr)->nextfld;				\
+		} else {									\
+			(previtemptr)->nextfld=(itemptr)->nextfld;	\
+		}											\
+		(itemptr)->nextfld=NULL;					\
+	} while(0)
+
+//removing of any element when previous item is not tracked. itemptr and previtemptr CANNOT BE same expression as headvar
+#define ULINKLIST_REMOVE_NOCL(itemptr, previtemptr, headvar, nextfld)	\
+	do {											\
+		if((itemptr)==headvar) {					\
+			headvar=(itemptr)->nextfld;				\
+		} else {									\
+			(previtemptr)->nextfld=(itemptr)->nextfld;	\
+		}											\
+	} while(0)
+
+//removing of any element when previous item is not tracked. itemptr CANNOT BE same expression as headvar
+#define ULINKLIST_REMOVE_NOPREV(itemptr, headvar, nextfld)	\
 	do {											\
 		if((itemptr)==headvar) {					\
 			headvar=(itemptr)->nextfld;				\
@@ -108,7 +142,7 @@ inline uint32_t iot_strtou32(const char* str, char **endptr, int base) {
 	} while(0)
 
 //version of remove without cleaning next field value. itemptr CANNOT BE same expression as headvar
-#define ULINKLIST_REMOVE_NOCL(itemptr, headvar, nextfld)	\
+#define ULINKLIST_REMOVE_NOCL_NOPREV(itemptr, headvar, nextfld)	\
 	do {											\
 		if((itemptr)==headvar) {					\
 			headvar=(itemptr)->nextfld;				\

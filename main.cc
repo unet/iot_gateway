@@ -18,8 +18,9 @@
 #include "iot_configregistry.h"
 
 
-#define PIDFILE_PATH "run/daemon.pid"
-#define TYPESDB_PATH "typesdb.json"
+#define PIDFILE_NAME "daemon.pid"
+#define LOGFILE_NAME "daemon.log"
+#define REGISTRYFILE_NAME "registry.json"
 
 
 uint64_t iot_starttime_ms; //start time of process like returned by uv_now (monotonic in ms since unknown point)
@@ -52,7 +53,7 @@ struct daemon_setup_t {
 
 bool parse_setup(void) {
 	char namebuf[256];
-	snprintf(namebuf, sizeof(namebuf), "%s%s", rootpath, "setup.json");
+	snprintf(namebuf, sizeof(namebuf), "%s/%s", conf_dir, "setup.json");
 
 	int fd=open(namebuf, O_RDONLY);
 	if(fd<0) {
@@ -139,7 +140,12 @@ int main(int argn, char **arg) {
 
 	assert(sizeof(iot_threadmsg_t)==64);
 
-	if(!parse_args(argn, arg, "run")) {
+	if(!parse_args(argn, arg)) {
+		return 1;
+	}
+
+	if(mkdir(run_dir, 0755) && errno!=EEXIST) {
+		fprintf(stderr,"Error creating '%s': %s\n", run_dir, strerror(errno));
 		return 1;
 	}
 
@@ -152,7 +158,7 @@ int main(int argn, char **arg) {
 		else min_loglevel=LMIN;
 	}
 
-	if(!init_log("run/daemon.log")) {
+	if(!init_log(run_dir, LOGFILE_NAME)) {
 		fprintf(stderr, "Cannot init log, exiting\n");
 		return 1;
 	}
@@ -166,7 +172,7 @@ int main(int argn, char **arg) {
 		}
 	}
 
-	if(!create_pidfile(PIDFILE_PATH)) goto onexit;
+	if(!create_pidfile(run_dir, PIDFILE_NAME)) goto onexit;
 	pidcreated=true;
 
 	//block SIGPIPE
@@ -190,7 +196,7 @@ int main(int argn, char **arg) {
 	outlog_debug("Started, my host id is %" IOT_PRIhostid, iot_current_hostid);
 
 	json_object* cfg;
-	cfg=config_registry->read_jsonfile(IOTCONFIG_PATH, "config");
+	cfg=config_registry->read_jsonfile(conf_dir, IOTCONFIG_NAME, "config");
 	if(!cfg) goto onexit;
 
 	err=config_registry->load_hosts_config(cfg);
@@ -215,15 +221,14 @@ int main(int argn, char **arg) {
 
 
 
-	cfg=config_registry->read_jsonfile(TYPESDB_PATH, "typesdb");
+	cfg=config_registry->read_jsonfile(conf_dir, REGISTRYFILE_NAME, "registry");
 	if(!cfg) goto onexit;
+	if(libregistry->apply_registry(cfg, true)) goto onexit;
+	json_object_put(cfg); //libregistry->apply_registry must increment references to necessary sub-objects
+	cfg=NULL;
 
 	//load modules with autoload. autoload could be modified by config (TODO)
-	modules_registry->start(cfg);
-	if(cfg) {
-		json_object_put(cfg); //modules_registry->start must increment references to necessary sub-objects
-		cfg=NULL;
-	}
+	modules_registry->start();
 
 
 //	uv_run(main_loop, UV_RUN_ONCE);
@@ -292,7 +297,7 @@ onexit:
 	outlog_notice("Terminated%s",need_restart ? ", restart requested" : "");
 	close_log();
 #ifndef _WIN32
-	if(pidcreated) remove_pidfile(PIDFILE_PATH);
+	if(pidcreated) remove_pidfile(run_dir, PIDFILE_NAME);
 	if(need_restart && daemon(1,0)==0) {
 		execv(arg[0],arg);
 	}

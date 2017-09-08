@@ -57,14 +57,8 @@
 						"prefix": 24 //network address prefix size in ip (to calculate network address)
 					}
 				],
-				"connect_host" : "mygw.dyndns.org", //manually specified by user host/IP to allow connection to gateway. used after trying conenct_map
+				"connect_host" : "mygw.dyndns.org", //manually specified by user host/IP to allow connection to gateway. used after trying connect_map
 				"connect_port" : 12001, //manually specified by user to override listen_port to allow connection to gateway. Should be redirected to listen_port by some router.
-				"connect_map" : { //manually specified by user source-host to current host connection map
-					SRC_HOST_ID: {
-						"host": "1.2.3.4", //host/IP which must be used by SRC_HOST_ID to connect to this host. defaults to connect_host
-						"port" : 12002, //port which must be used by SRC_HOST_ID to connect to this host. defaults to connect_port. negative value forbids direct connection
-					}
-				},
 				"cfgmanager_host": HOST_ID, //id of host which can send configuration updates to current host. (?) specified host will know from this record that it must proxy conf updates to current host if it isn't default cfgmanager
 				"logger_host": HOST_ID, //id of host where all events and status updates are directed. (?) specified host will know from this record that it must proxy notifications updates from current host if it isn't default logger
 			}

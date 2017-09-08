@@ -65,7 +65,7 @@ private:
 
 
 class iot_devifacetype_metaclass_activatable : public iot_devifacetype_metaclass {
-	iot_devifacetype_metaclass_activatable(void) : iot_devifacetype_metaclass(IOT_DEVIFACETYPEID_ACTIVATABLE, NULL, "Activatable") {}
+	iot_devifacetype_metaclass_activatable(void) : iot_devifacetype_metaclass(IOT_DEVIFACETYPEID_ACTIVATABLE, "activatable", IOT_VERSION_COMPOSE(0,1,1)) {}
 
 	PACKED(
 		struct serialize_header_t {
@@ -119,9 +119,54 @@ private:
 		return 0;
 	}
 	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		assert(false);
 		return 0;
 	}
 	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj) const override {
+		assert(false);
+		return 0;
+	}
+	virtual int p_to_json(const iot_deviface_params* obj0, json_object* &dst) const override {
+		const iot_deviface_params_activatable* obj=iot_deviface_params_activatable::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+
+		json_object* ob=json_object_new_object();
+		if(!ob) return IOT_ERROR_NO_MEMORY;
+
+		json_object* val;
+
+		if(obj->istmpl) { //{is_tmpl: true, min_lines: positive/non-existent, max_lines: positive/non-existent}
+			val=json_object_new_boolean(1);
+			if(!val) {
+				json_object_put(ob);
+				return IOT_ERROR_NO_MEMORY;
+			}
+			json_object_object_add(ob, "is_tmpl", val);
+			if(obj->tmpl.min_sublines>0) {
+				val=json_object_new_int(obj->tmpl.min_sublines);
+				if(!val) {
+					json_object_put(ob);
+					return IOT_ERROR_NO_MEMORY;
+				}
+				json_object_object_add(ob, "min_lines", val);
+			}
+			if(obj->tmpl.max_sublines>0) {
+				val=json_object_new_int(obj->tmpl.max_sublines);
+				if(!val) {
+					json_object_put(ob);
+					return IOT_ERROR_NO_MEMORY;
+				}
+				json_object_object_add(ob, "max_lines", val);
+			}
+		} else { //{num_lines: integer}
+			val=json_object_new_int(obj->spec.num_sublines);
+			if(!val) {
+				json_object_put(ob);
+				return IOT_ERROR_NO_MEMORY;
+			}
+			json_object_object_add(ob, "num_lines", val);
+		}
+		dst=ob;
 		return 0;
 	}
 };

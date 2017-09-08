@@ -16,6 +16,8 @@
 
 #include "iot_module.h"
 
+IOT_LIBVERSION_DEFINE; //creates global symbol with library full version spec according to IOT_LIBVERSION, IOT_LIBPATCHLEVEL and IOT_LIBREVISION defines
+
 #include "iot_devclass_keyboard.h"
 #include "iot_devclass_activatable.h"
 #include "modules/unet/types/di_toneplayer/iot_devclass_toneplayer.h"
@@ -149,7 +151,7 @@ private:
 };
 
 class iot_hwdevcontype_metaclass_linuxinput : public iot_hwdevcontype_metaclass {
-	iot_hwdevcontype_metaclass_linuxinput(void) : iot_hwdevcontype_metaclass(0, "unet", "LinuxInput") {}
+	iot_hwdevcontype_metaclass_linuxinput(void) : iot_hwdevcontype_metaclass(0, "linuxinput", IOT_VERSION_COMPOSE(0,1,1)) {}
 
 	PACKED(
 		struct serialize_header_t {
@@ -680,6 +682,18 @@ static iot_iface_device_detector_t detector_iface = {
 	.check_system = &detector::check_system
 
 //	.hwdevcontypes = detector_devcontypes
+};
+
+iot_moduleconfig_t IOT_MODULE_CONF(det)={
+//	.title = "Linux Input devices support",
+//	.descr = "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module.",
+//	.module_id = MODULEID_inputlinux, //Registered ID of this module. Must correspond to its full name in registry
+	.version = IOT_VERSION_COMPOSE(0,1,1),
+	.init_module = NULL,
+	.deinit_module = NULL,
+	.iface_node = NULL,
+	.iface_device_driver = NULL,
+	.iface_device_detector = &detector_iface
 };
 
 //static const iot_hwdevident_iface* detector_devcontype_config[]={&linuxinput_iface_obj};
@@ -1454,21 +1468,13 @@ static iot_iface_device_driver_t driver_iface = {
 };
 
 
-iot_moduleconfig_t IOT_MODULE_CONF(inputlinux)={
-	.title = "Linux Input devices support",
-	.descr = "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module.",
-//	.module_id = MODULEID_inputlinux, //Registered ID of this module. Must correspond to its full name in registry
-	.version = 0x000100001,
-	.config_version = 0,
-//	.num_devifaces = 0,
-//	.num_devcontypes = 1,
+iot_moduleconfig_t IOT_MODULE_CONF(drv)={
+	.version = IOT_VERSION_COMPOSE(0,1,1),
 	.init_module = NULL,
 	.deinit_module = NULL,
-//	.deviface_config = NULL,
-//	.devcontype_config = detector_devcontype_config,
 	.iface_node = NULL,
 	.iface_device_driver = &driver_iface,
-	.iface_device_detector = &detector_iface
+	.iface_device_detector = NULL
 };
 
 

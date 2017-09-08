@@ -11,7 +11,6 @@
 #include "iot_module.h"
 #include "iot_common.h"
 
-
 struct iot_threadmsg_t;
 struct iot_thread_item_t;
 class iot_thread_registry_t;

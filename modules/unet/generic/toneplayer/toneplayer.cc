@@ -19,6 +19,8 @@
 
 #include "iot_module.h"
 
+IOT_LIBVERSION_DEFINE;
+
 #include "iot_devclass_keyboard.h"
 #include "iot_devclass_activatable.h"
 #include "modules/unet/types/di_toneplayer/iot_devclass_toneplayer.h"
@@ -219,8 +221,8 @@ static const iot_deviface_params* basic_devifaces[]={
 
 
 static iot_iface_node_t basic_iface_node = {
-	.descr = NULL,
-	.params_tmpl = NULL,
+//	.descr = NULL,
+//	.params_tmpl = NULL,
 	.num_devices = 1,
 	.num_valueoutputs = 0,
 	.num_valueinputs = 1,
@@ -233,7 +235,7 @@ static iot_iface_node_t basic_iface_node = {
 	.devcfg={
 		{
 			.label = "dev",
-			.descr = "Any device with Toneplayer interface",
+//			.descr = "Any device with Toneplayer interface",
 			.num_devifaces = sizeof(basic_devifaces)/sizeof(basic_devifaces[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
@@ -244,8 +246,8 @@ static iot_iface_node_t basic_iface_node = {
 	.valueinput={
 		{
 			.label = "enable",
-			.descr = "Enabling input",
-			.notion = 0,
+//			.descr = "Enabling input",
+			.notion_id = 0,
 			.vclass_id = IOT_VALUECLASSID_BOOLEAN
 		}
 	},
@@ -260,11 +262,11 @@ static iot_iface_node_t basic_iface_node = {
 };
 
 iot_moduleconfig_t IOT_MODULE_CONF(basic)={
-	.title = "Basic player for toneplayer devices",
-	.descr = "Module to play tones on toneplayer capable devices. Several songs can be specified as sequence of tones.",
+//	.title = "Basic player for toneplayer devices",
+//	.descr = "Module to play tones on toneplayer capable devices. Several songs can be specified as sequence of tones.",
 //	.module_id = MODULEID_basic, //Registered ID of this module. Must correspond to its full name in registry
-	.version = 0x000100001,
-	.config_version = 0,
+	.version = IOT_VERSION_COMPOSE(0,1,1),
+//	.config_version = 0,
 //	.num_devifaces = 0,
 //	.num_devcontypes = 0,
 	.init_module = NULL,

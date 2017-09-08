@@ -24,5 +24,11 @@
 			"ident": <custom object>, //contype-specific data with exact or wildcard specification
 			"driver_modules": [ MODULE_ID1, MODULE_ID2 ] //list of driver modules to try for device in order or precedence. empty list disables driver search
 		}
-	]
+	],
+	"peer_connect_map": { //manually specified by user current host to specific host connection parameters override
+		DST_HOST_ID: {
+			"host": "1.2.3.4", //host/IP which must be used by current host to connect to this host. defaults to connect_host in common hosts config
+			"port" : 12002, //port which must be used by current host to connect to this host. defaults to connect_port in common hosts config. negative value forbids direct connection
+		}
+	}
 }

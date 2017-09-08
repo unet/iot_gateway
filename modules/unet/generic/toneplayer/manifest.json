@@ -1,0 +1,39 @@
+{
+	"modules": {
+		"basic" : {
+			"title": "Basic player for toneplayer devices",
+			"description": "Module to play tones on toneplayer capable devices. Several songs can be specified as sequence of tones.",
+			"provides": {
+				"node": {
+					"description": "Periodically scans list of available input devices",
+					"params_tmpl": {
+						//"shortDescr":
+						//"longDescr":
+						//"propList":
+						//"newDialog":
+						//"editDialog":
+					},
+					"device_connections": {
+						"dev": {
+							"description":"Any device with Toneplayer interface",
+//							"interfaces":[
+//								{
+//									"type":":Keyboard",
+//									"params": {
+//									}
+//								}
+//							]
+						},
+					},
+					"value_inputs": {
+						"enable": {
+							"description": "Enabling input",
+//							"notion": ":Keycode",
+//							"type": ":Bitmap"
+						}
+					}
+				}
+			}
+		}
+	}
+}

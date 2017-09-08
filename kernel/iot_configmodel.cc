@@ -180,7 +180,7 @@ void iot_nodemodel::try_create_instance(void) {
 
 	if(!module) { //retry to load module first
 		iot_module_item_t *module_=NULL;
-		err=modules_registry->load_module(-1, cfgitem->module_id, &module_);
+		err=modules_registry->load_module(cfgitem->module_id, &module_);
 
 		if(err) {
 			outlog_error("Error loading module with ID %u to instantiate node_id %" IOT_PRIiotid ": %s", cfgitem->module_id, node_id, kapi_strerror(err));

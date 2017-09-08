@@ -6,7 +6,7 @@
 
 #include<assert.h>
 
-#include<json-c/json.h>
+#include "json.h"
 
 #include "uv.h"
 #include "iot_utils.h"
@@ -27,6 +27,11 @@
 
 extern int min_loglevel;
 
+#define IOT_VERSION_COMPOSE(ver, patchlevel, revision) ((((ver)&0xFF)<<24)|(((patchlevel)&0xFF)<<16)|((revision)&0xFFFF))
+
+#define IOT_KERNEL_VERSION IOT_VERSION_COMPOSE(0, 1, 10)
+
+
 #ifndef DAEMON_KERNEL
 ////////////////////////////////////////////////////////////////////
 ///////////////////////////Specific declarations for external modules
@@ -40,12 +45,27 @@ extern int min_loglevel;
 #error IOT_VENDOR must be defined before including iot_module.h
 #endif
 
+#ifndef IOT_BUNDLEDIR
+#error IOT_BUNDLEDIR must be defined before including iot_module.h
+#endif
+
 #ifndef IOT_BUNDLENAME
 #error IOT_BUNDLENAME must be defined before including iot_module.h
 #endif
 
+#define IOT_CURLIBRARY ECB_STRINGIFY(IOT_VENDOR) "/" ECB_STRINGIFY(IOT_BUNDLEDIR) "/" ECB_STRINGIFY(IOT_BUNDLENAME)
+
+#define IOT_LIBSYMBOL_NAME(prefix, name) ECB_CONCAT(prefix, ECB_CONCAT(IOT_VENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLEDIR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLENAME, ECB_CONCAT(_, name)))))))
+#define IOT_LIBSYMBOL(name) ECB_CONCAT(name, ECB_CONCAT(IOT_VENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLEDIR, ECB_CONCAT(__, IOT_BUNDLENAME)))))
+
 //builds unique identifier name for exporting moduleconfig_t object from module bundle
-#define IOT_MODULE_CONF(name) ECB_CONCAT(ECB_CONCAT(iot_modconf_, ECB_CONCAT(IOT_VENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLEDIR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLENAME, __)))))), name)
+#define IOT_MODULE_CONF(modulename) IOT_LIBSYMBOL_NAME(iot_modconf ## _, _ ## modulename)
+
+//builds unique identifier name for exporting moduleconfig_t object from module bundle
+#define IOT_LIBVERSION_VAR IOT_LIBSYMBOL(iot_libversion ## _)
+
+#define IOT_LIBVERSION_DEFINE uint32_t IOT_LIBVERSION_VAR=IOT_VERSION_COMPOSE(IOT_LIBVERSION, IOT_LIBPATCHLEVEL, IOT_LIBREVISION)
+
 
 
 #define kapi_outlog_error(format... ) do_outlog(__FILE__, __LINE__, __func__, LERROR, format)
@@ -60,11 +80,13 @@ extern int min_loglevel;
 ///////////////////////////Specific declarations for kernel
 ////////////////////////////////////////////////////////////////////
 
+#define IOT_CURLIBRARY "CORE"
+
 //gets module ID from value obtained by IOT_DEVIFACETYPE_CUSTOM macro
-#define IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid) ((clsid)>>8)
+//#define IOT_DEVIFACETYPE_CUSTOM_MODULEID(clsid) ((clsid)>>8)
 
 //gets module ID from value obtained by IOT_DEVCONTYPE_CUSTOM macro
-#define IOT_DEVCONTYPE_CUSTOM_MODULEID(contp) ((contp)>>8)
+//#define IOT_DEVCONTYPE_CUSTOM_MODULEID(contp) ((contp)>>8)
 
 #endif //DAEMON_KERNEL
 
@@ -92,6 +114,7 @@ extern int min_loglevel;
 
 #define IOT_MEMOBJECT_MAXREF 65536
 
+extern const uint32_t iot_kernel_version;
 extern uv_thread_t main_thread;
 extern uint64_t iot_starttime_ms; //start time of process like returned by uv_now (in ms since unknown point)
 
@@ -644,7 +667,7 @@ struct iot_node_base : public iot_driver_client_base {
 
 struct iot_deviceconn_filter_t { //represents general filter for selecting device driver for node device connections
 	const char *label; //unique label to name device connection. device conn in iot configuration is matched by this label. maximum length is IOT_CONFIG_DEVLABEL_MAXLEN
-	const char *descr; //text description of connection. If begins with '[', then must be evaluated as template
+//	const char *descr; //text description of connection. If begins with '[', then must be evaluated as template
 	uint8_t num_devifaces:4,					//number of allowed classes for current device (number of items in devifaces list in this struct). can be zero when item is unused (num_devices <= index of current struct) of when ANY classid is suitable.
 		flag_canauto:1,						//flag that current device can be automatically selected by kernel according to classids. otherwise only user can select device
 		flag_localonly:1;					//flag that current driver (and thus hwdevice) must run on same host as node instance
@@ -654,8 +677,8 @@ struct iot_deviceconn_filter_t { //represents general filter for selecting devic
 
 struct iot_node_valuelinkcfg_t {
 	const char *label; //unique label to name input/output ('err' is reserved for implicit error output). node link in iot configuration is matched by this label plus 'v' as beginning. maximum length is IOT_CONFIG_LINKLABEL_MAXLEN.
-	const char *descr; //text description of link. If begins with '[', then must be evaluated as template
-	iot_valuenotion_id_t notion; //unit for values if appropriate. If begins with '[', then must be evaluated as template
+//	const char *descr; //text description of link. If begins with '[', then must be evaluated as template
+	iot_valuenotion_id_t notion_id;//unit for values if not 0
 	iot_valuetype_id_t vclass_id;
 
 	bool is_compatible(iot_valuetype_id_t cls) const {
@@ -689,8 +712,8 @@ struct iot_node_msglinkcfg_t {
 };
 
 struct iot_iface_node_t {
-	const char *descr; //text description of module node functionality. If begins with '[', then must be evaluated as template
-	const char *params_tmpl; //set of templates for showing/editing user params of node. can be NULL if module has no params
+//	const char *descr; //text description of module node functionality. If begins with '[', then must be evaluated as template
+//	const char *params_tmpl; //set of templates for showing/editing user params of node. can be NULL if module has no params
 	uint32_t num_devices:3,						//number of devices this module should be connected to. limited by IOT_CONFIG_MAX_NODE_DEVICES
 			num_valueoutputs:5,					//number of output value lines this module provides. limited by IOT_CONFIG_MAX_NODE_VALUEOUTPUTS. "error" output
 												//is always present and not counted here
@@ -740,29 +763,17 @@ struct iot_iface_node_t {
 
 
 
-typedef struct {
-	const char *title; //text title of module. If begins with '[', then must be evaluated as template. max length is 64 bytes, only latin1
-	const char *descr; //text description of module. If begins with '[', then must be evaluated as template
-
-//	uint32_t module_id;								//system assigned unique module ID for consistency check
-	uint32_t version;								//module version (0xHHLLREVI = HH.LL.REVI)
-	uint8_t config_version;							//separate version of module configuration. must be increased when any configuration of module or any of its
-													//interfaces is changed (e.g. node input/outputs/device lines changed)
-//	uint8_t num_devifaces;							//number of items in deviface_config array. can be 0
-//	uint8_t num_devcontypes;						//number of items in devcontype_config array. can be 0
+struct iot_moduleconfig_t {
+	uint32_t version;								//module version (0xHHLLREVI = HH.LL:REVI), use macro IOT_VERSION_COMPOSE(version, patchlevel, revision)
 
 	int (*init_module)(void);						//always called in main thread. once after loading (if loaded dynamically) or during startup (if compiled in statically)
 	int (*deinit_module)(void);						//called in main thread before unloading dynamically loaded module
 
-//	const iot_devifacetype_iface **deviface_config;//optional array of module-defined device interface classes. can be NULL if num_devifaces==0
-//	const iot_hwdevident_iface **devcontype_config;	//optional array of module-defined device connection types. can be NULL if num_devcontypes==0
-
-//Role interfaces
+	//Only one interface pointer must be assigned. First found non-NULL value is used in such order:
 	const iot_iface_node_t *iface_node;
 	const iot_iface_device_driver_t* iface_device_driver;
 	const iot_iface_device_detector_t *iface_device_detector;
-//TODO other roles
-} iot_moduleconfig_t;
+};
 
 
 #endif //IOT_MODULE_H

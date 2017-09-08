@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <time.h>
+#include <string.h>
 
 
 //#include "iot_compat.h"
@@ -14,6 +15,32 @@
 
 
 extern uv_loop_t *main_loop;
+
+const uint32_t iot_kernel_version=IOT_KERNEL_VERSION;
+
+uint32_t iot_parse_version(const char* s) {
+	uint32_t vers, patch, rev;
+	const char* semicol=strchr(s, ':');
+	const char* dot;
+	char* end;
+	if(semicol) {
+		rev=iot_strtou32(semicol+1, &end, 10);
+		if(rev>65535 || (!rev && end==semicol+1) || *end!='\0') return UINT32_MAX; //error
+		dot=(const char*)memchr(s, '.', semicol-s);
+	} else {
+		rev=0;
+		dot=strchr(s, '.');
+	}
+	if(!dot) {
+		patch=0;
+	} else {
+		patch=iot_strtou32(dot+1, &end, 10);
+		if(patch>255 || (!patch && end==dot+1)) return UINT32_MAX; //error
+	}
+	vers=iot_strtou32(s, &end, 10);
+	if(vers>255) return UINT32_MAX; //error
+	return IOT_VERSION_COMPOSE(vers, patch, rev);
+}
 
 int iot_devifaces_list::add(const iot_deviface_params *cls) {
 		if(num>=IOT_CONFIG_MAX_IFACES_PER_DEVICE) return IOT_ERROR_LIMIT_REACHED;
@@ -145,10 +172,10 @@ const char* kapi_err_name(int err) {
 	return "UNKNOWN";
 }
 
-iot_hwdevcontype_metaclass::iot_hwdevcontype_metaclass(iot_type_id_t id, const char* vendor, const char* type) {
-	assert(type!=NULL);
+iot_hwdevcontype_metaclass::iot_hwdevcontype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver_, const char* parentlib_) {
+	assert(type!=NULL && parentlib_!=NULL);
 
-	iot_hwdevcontype_metaclass* &head=iot_modules_registry_t::devcontype_pendingreg_head(), *cur;
+	iot_hwdevcontype_metaclass* &head=iot_libregistry_t::devcontype_pendingreg_head(), *cur;
 	cur=head;
 	while(cur) {
 		if(cur==this) {
@@ -163,8 +190,10 @@ iot_hwdevcontype_metaclass::iot_hwdevcontype_metaclass(iot_type_id_t id, const c
 
 	prev=NULL;
 	contype_id=id;
-	vendor_name=vendor;
+//	vendor_name=vendor;
 	type_name=type;
+	ver=ver_;
+	parentlib=parentlib_;
 }
 
 
@@ -187,7 +216,7 @@ int iot_hwdevcontype_metaclass::from_json(json_object* json, char* buf, size_t b
 }
 
 const iot_hwdevcontype_metaclass* iot_hwdevcontype_metaclass::findby_contype_id(iot_type_id_t contype_id, bool try_load) {
-	return modules_registry->find_devcontype(contype_id, try_load);
+	return libregistry->find_devcontype(contype_id, try_load);
 }
 
 
@@ -245,11 +274,10 @@ int iot_hwdev_ident::from_json(json_object* json, iot_hwdev_ident* obj, char* id
 
 
 
-iot_devifacetype_metaclass::iot_devifacetype_metaclass(iot_type_id_t id, const char* vendor, const char* type) {
-	assert(type!=NULL);
+iot_devifacetype_metaclass::iot_devifacetype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver_, const char* parentlib_) {
+	assert(type!=NULL && parentlib_!=NULL);
 
-printf("!!!%s\n",type);
-	iot_devifacetype_metaclass* &head=iot_modules_registry_t::devifacetype_pendingreg_head(), *cur;
+	iot_devifacetype_metaclass* &head=iot_libregistry_t::devifacetype_pendingreg_head(), *cur;
 	cur=head;
 	while(cur) {
 		if(cur==this) {
@@ -264,9 +292,63 @@ printf("!!!%s\n",type);
 
 	prev=NULL;
 	ifacetype_id=id;
-	vendor_name=vendor;
+//	vendor_name=vendor;
 	type_name=type;
+	ver=ver_;
+	parentlib=parentlib_;
 }
+const iot_devifacetype_metaclass* iot_devifacetype_metaclass::findby_ifacetype_id(iot_type_id_t ifacetype_id, bool try_load) {
+	return libregistry->find_devifacetype(ifacetype_id, try_load);
+}
+
+int iot_devifacetype_metaclass::from_json(json_object* json, char* buf, size_t bufsize, const iot_deviface_params*& obj, iot_type_id_t default_ifacetype) {
+	json_object* val=NULL;
+	iot_type_id_t ifacetype=default_ifacetype;
+	if(json_object_object_get_ex(json, "ifacetype_id", &val)) {
+		IOT_JSONPARSE_UINT(json, iot_type_id_t, ifacetype);
+	}
+	if(!ifacetype) return IOT_ERROR_BAD_DATA;
+
+	const iot_devifacetype_metaclass* metaclass=iot_devifacetype_metaclass::findby_ifacetype_id(ifacetype);
+	if(!metaclass) return IOT_ERROR_NOT_FOUND;
+
+	val=NULL;
+	json_object_object_get_ex(json, "params", &val);
+	obj=NULL;
+	return metaclass->p_from_json(val, buf, bufsize, obj);
+}
+int iot_devifacetype_metaclass::to_json(const iot_deviface_params* obj, json_object* &dst) const {
+	assert(ifacetype_id!=0 && obj);
+
+	json_object* ob=json_object_new_object();
+	if(!ob) return IOT_ERROR_NO_MEMORY;
+	json_object* idob=json_object_new_int64(ifacetype_id);
+	if(!idob) {
+		json_object_put(ob);
+		return IOT_ERROR_NO_MEMORY;
+	}
+	json_object_object_add(ob, "ifacetype_id", idob);
+	json_object* paramsob=NULL;
+	int err=p_to_json(obj, paramsob);
+	if(err) {
+		json_object_put(ob);
+		return err;
+	}
+	if(paramsob) { //can stay NULL if iface type has no params
+		json_object_object_add(ob, "params", paramsob);
+	}
+	dst=ob;
+	return 0;
+}
+
+int iot_devifacetype_metaclass::serialize(const iot_deviface_params* obj, char* buf, size_t bufsize) const { //returns error code or 0 on success
+	assert(ifacetype_id!=0 && obj);
+	if(bufsize<sizeof(serialize_base_t)) return IOT_ERROR_NO_BUFSPACE;
+	serialize_base_t *p=(serialize_base_t*)buf;
+	p->ifacetype_id=repack_type_id(ifacetype_id);
+	return p_serialize(obj, buf+sizeof(serialize_base_t), bufsize-sizeof(serialize_base_t));
+}
+
 
 const iot_devifacetype_metaclass_keyboard iot_devifacetype_metaclass_keyboard::object;
 const iot_devifacetype_metaclass_activatable iot_devifacetype_metaclass_activatable::object;

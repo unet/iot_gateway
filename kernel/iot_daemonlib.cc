@@ -28,8 +28,14 @@ static const char *loglevel_str[]={
 
 
 static int logfd=-1;
-char rootpath[128]; //root dir for daemon
-size_t rootlen; //length of root dir
+char bin_dir[256]; //parent dir for daemon binary
+size_t bin_dir_len;
+char bin_basename[64];
+
+char run_dir[256];
+char conf_dir[256];
+char modules_dir[256];
+
 
 int min_loglevel=-1; //means 'unset'
 
@@ -49,10 +55,10 @@ static timespec prevlogts={0,0};
 
 //opens or reopens logfile with provided relative path inside daemon's root dir
 //returns false on error
-bool init_log(const char* logfile)
+bool init_log(const char* dir, const char* logfile)
 {
 	char buf[256];
-	snprintf(buf,sizeof(buf),"%s%s",rootpath,logfile);
+	snprintf(buf,sizeof(buf),"%s/%s",dir,logfile);
 	int newlogfd=open(buf,O_WRONLY|O_APPEND|O_CREAT,0666);
 	if(newlogfd<0) {
 		char errbuf[256];
@@ -83,7 +89,7 @@ bool init_log(const char* logfile)
 	
 	logclock_cost=(ts2.tv_nsec-ts.tv_nsec+1000000000*(ts2.tv_sec-ts.tv_sec))/8;
 	prevlogts=ts2;
-printf("loglevel=%d\n",min_loglevel);
+
 	if(min_loglevel==LDEBUG) {
 		long mindif=100000;
 		for(int i=8;i>=0;i--) {
@@ -108,9 +114,14 @@ void close_log(void)
 	logfd=-1;
 }
 
-static void do_voutlog(const char*file, int line, const char* func,int level, const char *fmt, va_list ap)
+static inline void do_voutlog(const char*file, int line, const char* func,int level, const char *fmt, va_list ap)
 {
-	if(logfd<0) return;
+	if(logfd<0) { //just print msg to stdout (used in manifest_proc)
+		printf("[%s] ", loglevel_str[level]);
+		vprintf(fmt, ap);
+		printf("\n");
+		return;
+	}
 	char buf[2048];
 	size_t len;
 
@@ -174,20 +185,20 @@ void do_outlog(const char*file, int line, const char* func, int level, const cha
 
 #ifndef _WIN32
 
-void remove_pidfile(const char* pidfile)
+void remove_pidfile(const char* dir, const char* pidfile)
 {
 	char namebuf[256];
-	snprintf(namebuf,sizeof(namebuf),"%s%s",rootpath,pidfile);
+	snprintf(namebuf,sizeof(namebuf),"%s/%s",dir,pidfile);
 	unlink(namebuf);
 }
 
 
-int create_pidfile(const char* pidfile)
+int create_pidfile(const char* dir, const char* pidfile)
 {
 	char namebuf[256];
 	int pidf;
 	size_t l;
-	snprintf(namebuf,sizeof(namebuf),"%s%s",rootpath,pidfile);
+	snprintf(namebuf,sizeof(namebuf),"%s/%s",dir,pidfile);
 	pidf=open(namebuf,O_RDWR|O_CREAT,0644);
 	if(pidf<0) {
 		outlog_errno(errno,LERROR,"cannot create pid file %s: %s",namebuf,errbuf);
@@ -225,41 +236,39 @@ int create_pidfile(const char* pidfile)
 }
 
 
-bool parse_args(int argc, char **arg, const char* rundir, const char* addhelparg, const char* addhelpmsg)
+bool parse_args(int argc, char **arg)
 {
-	int i;
-	if(argc<2 || !arg[1]) {
-		i=snprintf(rootpath,sizeof(rootpath)-1,"%s",".");
-//		fprintf(stderr,"Missing mandatory parameter.\n"
-//"Syntax: PROGNAME workdir [loglevel]%s\n"
-//"\tworkdir\t\tdaemon home directory, where config files are searched and subdir '/%s' is used for DB, pid-file and logs\n"
-//"\tloglevel\tlevel of logging: 0-debug,1-info,2-notice,3-error (default is %d)\n"
-//"%s\n",addhelparg ? addhelparg : "", rundir, min_loglevel, addhelpmsg ? addhelpmsg : "");
-//		return false;
+	char* slash=strrchr(arg[0], '/');
+	if(!slash) { //assume dir is '.'
+		bin_dir_len=1;
+		memcpy(bin_dir, ".", bin_dir_len);
 	} else {
-		i=snprintf(rootpath,sizeof(rootpath)-1,"%s",arg[1]); //reserve one char for trailing '/'
-		if(i>=(int)sizeof(rootpath)-1 || i<=0) {
-			fprintf(stderr,"Error: length of workdir must not exceed %d chars\n\n",int(sizeof(rootpath))-2);
+		bin_dir_len=slash-arg[0];
+		if(bin_dir_len>=(int)sizeof(bin_dir)) {
+			fprintf(stderr,"Error: length of binary's parent path exceeds %d chars\n\n",int(sizeof(bin_dir))-1);
 			return false;
 		}
+		memcpy(bin_dir, arg[0], bin_dir_len);
 	}
-	rootlen=i;
-	if(rootpath[rootlen-1]!='/') { //append '/' is necessary
-		rootpath[rootlen++]='/';
-		rootpath[rootlen]='\0';
-	}
-	if(argc>=3 && arg[2]) {
-		min_loglevel=atoi(arg[2]);
-		if(min_loglevel<LDEBUG) min_loglevel=LDEBUG;
-			else if(min_loglevel>LERROR) min_loglevel=LERROR;
-	}
+	bin_dir[bin_dir_len]='\0';
+	snprintf(bin_basename, sizeof(bin_basename), "%s", slash+1);
 
-	char namebuf[256];
-	snprintf(namebuf,sizeof(namebuf),"%s%s",rootpath,rundir);
-	if(mkdir(namebuf, 0755) && errno!=EEXIST) {
-		fprintf(stderr,"Error creating '%s': %s\n", namebuf, strerror(errno));
-		return false;
-	}
+	const char* s=CONF_DIR;
+	if(s[0]=='/') snprintf(conf_dir, sizeof(conf_dir), "%s", s);
+		else if(s[0]) snprintf(conf_dir, sizeof(conf_dir), "%s/%s", bin_dir, s);
+		else snprintf(conf_dir, sizeof(conf_dir), "%s", bin_dir);
+
+	s=RUN_DIR;
+	if(s[0]=='/') snprintf(run_dir, sizeof(run_dir), "%s", s);
+		else if(s[0]) snprintf(run_dir, sizeof(run_dir), "%s/%s", bin_dir, s);
+		else snprintf(run_dir, sizeof(run_dir), "%s", bin_dir);
+
+	s=MODULES_DIR;
+	if(s[0]=='/') snprintf(modules_dir, sizeof(modules_dir), "%s", s);
+		else if(s[0]) snprintf(modules_dir, sizeof(modules_dir), "%s/%s", bin_dir, s);
+		else snprintf(modules_dir, sizeof(modules_dir), "%s", bin_dir);
+
+
 	return true;
 }
 
