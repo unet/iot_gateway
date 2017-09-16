@@ -10,7 +10,17 @@
 #include "iot_common.h"
 #include "iot_daemonlib.h"
 
-struct iot_module_item_t;
+enum iot_module_type_t : uint8_t {
+	IOT_MODTYPE_DETECTOR=0,
+	IOT_MODTYPE_DRIVER=1,	//module which realizes interface of hardware device driver iface_device_driver
+	IOT_MODTYPE_NODE=2,	//module which can be source of events. Realizes iface_event_source interface
+
+	IOT_MODTYPE_MAX=2
+};
+
+extern const char* iot_modtype_name[];
+
+
 class iot_libregistry_t;
 extern iot_libregistry_t* libregistry;
 
@@ -19,7 +29,8 @@ extern iot_libregistry_t* libregistry;
 //#include "iot_deviceconn.h"
 //#include "iot_peerconnection.h"
 
-struct iot_regitem_module_t;
+//struct iot_regitem_module_t;
+struct iot_any_module_item_t;
 struct iot_regitem_lib_t {
 	static iot_regitem_lib_t*& get_listhead(void) {
 		static iot_regitem_lib_t* listhead=NULL;
@@ -27,8 +38,9 @@ struct iot_regitem_lib_t {
 	}
 
 	iot_regitem_lib_t* next;
-	iot_regitem_module_t* modules_listhead=NULL;
-	const char *name; //like "vendor/subdirs/libname". extension (.so) must be appended
+//	iot_regitem_module_t* modules_listhead=NULL;
+	char name[IOT_LIBNAME_MAXLEN+1]; //like "vendor/subdirs/libname". extension (.so) must be appended
+	int namelen;
 	void *hmodule=NULL; //handle of dynamically loaded file or of main executable when linked is true
 
 	uint32_t version; //is checked when bundle is loaded (hmodule assigned). value UINT32_MAX means that check is skipped (actual version stored adter load)
@@ -38,9 +50,11 @@ struct iot_regitem_lib_t {
 	char signature[IOT_SIGLEN]; //binary signature
 //	bool duplicate=false;
 
-	iot_regitem_lib_t(const char* name, bool linked, uint32_t version=UINT32_MAX) : name(name), version(version), linked(linked) {
-		//check there are no same bundle already present
+	iot_regitem_lib_t(const char* libname, bool linked, uint32_t version=UINT32_MAX) : version(version), linked(linked) {
+		namelen=snprintf(name, sizeof(name), "%s", libname);
+		assert(namelen<(int)sizeof(name));
 		iot_regitem_lib_t* &listhead=get_listhead();
+//		//check there are no same bundle already present
 //		iot_regitem_lib_t* p=listhead;
 //		while(p) {
 //			if(strcmp(p->name, name)==0) {
@@ -53,39 +67,61 @@ struct iot_regitem_lib_t {
 		next=listhead;
 		listhead=this;
 	}
+	static iot_regitem_lib_t* find_item(const char* name) {
+		int len=(int)strlen(name);
+		iot_regitem_lib_t* lib=get_listhead();
+		while(lib) {
+			if(lib->namelen==len && memcmp(lib->name, name, len)==0) break;
+			lib=lib->next;
+		}
+		return lib;
+	}
 };
 
 
 struct iot_regitem_module_t {
-	static iot_regitem_module_t*& get_listhead(void) {
-		static iot_regitem_module_t* listhead=NULL;
-		return listhead;
+	static iot_regitem_module_t*& get_listhead(iot_module_type_t type) {
+		static iot_regitem_module_t* listhead[IOT_MODTYPE_MAX+1]={};
+		assert(type<=IOT_MODTYPE_MAX);
+		return listhead[type];
 	}
 
-
 	iot_regitem_module_t* next;
-	uint32_t module_id;
 	iot_regitem_lib_t* bundle;
-	const char *module_name; //pure module name   //////(if bundle defined) or full name with bundle path in it (if bundle is NULL)
+	iot_any_module_item_t *item=NULL; //assigned during module loading
+	int namelen;
+	uint32_t module_id;
+	char module_name[IOT_MODULENAME_MAXLEN+1]; //pure module name   //////(if bundle defined) or full name with bundle path in it (if bundle is NULL)
 	bool autoload; //module's config must be auto loaded (after loading appropriate bundle into memory)
-	bool autostart_detector; //if module has detector interface, it must be started automatically after load
-	iot_module_item_t *item=NULL; //assigned during module loading
+	iot_module_type_t type;
 
-	iot_regitem_module_t(const char* name, iot_regitem_lib_t* lib, uint32_t module_id, bool autoload=false, bool autostart_detector=true)
-		: module_id(module_id), bundle(lib), module_name(name), autoload(autoload), autostart_detector(autostart_detector)
+	iot_regitem_module_t(iot_module_type_t type, const char* modname, iot_regitem_lib_t* lib, uint32_t module_id, bool autoload=false)
+		: bundle(lib), module_id(module_id), autoload(autoload), type(type)
 	{
-//		if(bundle) {
-//			//just in case, check that provided module name is without bundle name
-//			const char *n=strrchr(name, ':');
-//			if(n) module_name=n+1;
-//				else module_name=name;
-//		} else module_name=name; //when bundle is NULL, name of module must be full like "vendor/dir/bundle:name"
-		iot_regitem_module_t* &listhead=get_listhead();
+		namelen=snprintf(module_name, sizeof(module_name), "%s", modname);
+		assert(namelen<(int)sizeof(module_name));
+		iot_regitem_module_t* &listhead=get_listhead(type);
 		next=listhead;
 		listhead=this;
 	}
+	static iot_regitem_module_t* find_item(iot_module_type_t type, const char* name, iot_regitem_lib_t* lib) {
+		int len=(int)strlen(name);
+		iot_regitem_module_t* module=get_listhead(type);
+		while(module) {
+			if(module->bundle==lib && module->namelen==len && memcmp(module->module_name, name, len)==0) break;
+			module=module->next;
+		}
+		return module;
+	}
+	static iot_regitem_module_t* find_item(iot_module_type_t type, uint32_t module_id) {
+		iot_regitem_module_t* module=get_listhead(type);
+		while(module) {
+			if(module->module_id==module_id) break;
+			module=module->next;
+		}
+		return module;
+	}
 };
-
 
 class iot_libregistry_t {
 	iot_devifacetype_metaclass *devifacetypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
@@ -111,10 +147,11 @@ public:
 			ifacetypes_table=NULL;
 		}
 	}
-	bool is_libname_valid(const char* libname) { //check if provided libname is valid like "vendor/libdir/name" and each component starts with letter and contains only [A-Za-z0-9_.], max len is 64
+	bool is_libname_valid(const char* libname) { //check if provided libname is valid like "vendor/libdir/name" and each component starts with letter and contains only [A-Za-z0-9_], max len is 64
 		size_t len=strlen(libname);
-		if(len>64) return false;
-		if(strspn(libname,"QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm0123456789_/.")!=len) return false;
+		if(len>IOT_LIBNAME_MAXLEN) return false;
+		if(strstr(libname, "__")) return false; //must not have two underscores one after one
+		if(strspn(libname,"QWERTYUIOPASDFGHJKLZXCVBNMqwertyuiopasdfghjklzxcvbnm0123456789_/")!=len) return false;
 		const char *s=libname, *e;
 		//check vendor
 		if(!((*s>='A' && *s<='Z') || (*s>='a' && *s<='z'))) return false;
@@ -181,7 +218,7 @@ public:
 					continue;
 				}
 				bool linked=json_object_get_boolean(json_object_array_get_idx(libdata,0)) ? true : false;
-				iot_regitem_lib_t* libitem=find_lib_item(libname);
+				iot_regitem_lib_t* libitem=iot_regitem_lib_t::find_item(libname);
 				if(libitem) { //should be true for linked-in libs only
 					assert(libitem->linked);
 					if(libitem->linked!=linked) outlog_notice("Invalid data in lib registry. Library linked state is incorrect for 'libs.\"%s\"'", libname);
@@ -192,7 +229,7 @@ public:
 					}
 				} else {
 					if(linked) outlog_notice("Invalid data in lib registry. Library linked state is incorrect for 'libs.\"%s\"'", libname);
-					libitem=new iot_regitem_lib_t(strdup(libname), false, version);
+					libitem=new iot_regitem_lib_t(libname, false, version);
 					if(!libitem) {
 						outlog_error("Cannot allocate memory for library item '%s'", libname);
 						return IOT_ERROR_NO_MEMORY;
@@ -208,43 +245,54 @@ public:
 			}
 		}
 
-		if(json_object_object_get_ex(reg, "modules", &ob)) {
-			if(!json_object_is_type(ob,  json_type_object)) {
-				outlog_error("Invalid data in lib registry! Top level 'modules' item must be a JSON-object");
-				return IOT_ERROR_BAD_DATA;
-			}
-			json_object* val;
-			json_object_object_foreach(ob, modid, moddata) {
-				if(!json_object_is_type(moddata, json_type_array)) {
-					outlog_error("Invalid data in lib registry! Values in 'modules' object must be JSON-arrays, but 'modules.%s' is not", modid);
+		char keybuf[32];
+		for(uint8_t tp=0; tp<=IOT_MODTYPE_MAX; tp++) {
+			snprintf(keybuf, sizeof(keybuf), "%s_modules", iot_modtype_name[tp]);
+
+			if(json_object_object_get_ex(reg, keybuf, &ob)) {
+				if(!json_object_is_type(ob,  json_type_object)) {
+					outlog_error("Invalid data in lib registry! Top level '%s' item must be a JSON-object", keybuf);
 					return IOT_ERROR_BAD_DATA;
 				}
-				val=json_object_array_get_idx(moddata,0);
-				if(!val || !json_object_is_type(val, json_type_string)) continue;
-				int namelen=json_object_get_string_len(val);
-				if(!namelen || namelen>32) continue;
-				const char* name=json_object_get_string(val);
+				json_object* val;
+				json_object_object_foreach(ob, modid, moddata) {
+					if(!json_object_is_type(moddata, json_type_array)) {
+						outlog_error("Invalid data in lib registry! Values in '%s' object must be JSON-arrays, but value under '%s' is not", keybuf, modid);
+						return IOT_ERROR_BAD_DATA;
+					}
+					val=json_object_array_get_idx(moddata,0);
+					if(!val || !json_object_is_type(val, json_type_string)) {
+						outlog_notice("Ignoring invalid module record '%s.%s' in lib registry. Module name must be a string.", keybuf, modid);
+						continue;
+					}
+					int namelen=json_object_get_string_len(val);
+					if(!namelen || namelen>IOT_MODULENAME_MAXLEN) {
+						outlog_notice("Ignoring invalid module record '%s.%s' in lib registry. Module name length must be from 0 to %d.", keybuf, modid, IOT_MODULENAME_MAXLEN);
+						continue;
+					}
+					const char* name=json_object_get_string(val);
 
-				val=json_object_array_get_idx(moddata,1);
-				if(!val || !json_object_is_type(val, json_type_string)) continue;
-				const char* libname=json_object_get_string(val);
-				iot_regitem_lib_t* libitem=find_lib_item(libname);
-				if(!libitem) continue;
+					val=json_object_array_get_idx(moddata,1);
+					if(!val || !json_object_is_type(val, json_type_string)) continue;
+					const char* libname=json_object_get_string(val);
+					iot_regitem_lib_t* libitem=iot_regitem_lib_t::find_item(libname);
+					if(!libitem) continue;
 
-				uint32_t module_id=0;
-				IOT_STRPARSE_UINT(modid, uint32_t, module_id);
-				if(!module_id) continue;
+					uint32_t module_id=0;
+					IOT_STRPARSE_UINT(modid, uint32_t, module_id);
+					if(!module_id) continue;
 
-				iot_regitem_module_t* moditem=find_module_item(name, libitem);
-				if(moditem) {
-					if(moditem->module_id==module_id) continue;
-					outlog_error("Invalid data in lib registry! Module '%s:%s' has several records with different IDs %" PRIu32 " and %" PRIu32, libname, name, moditem->module_id, module_id);
-					return IOT_ERROR_BAD_DATA;
-				}
-				moditem=new iot_regitem_module_t(strdup(name), libitem, module_id, true);
-				if(!moditem) {
-					outlog_error("Cannot allocate memory for module item '%s:%s'", libname, name);
-					return IOT_ERROR_NO_MEMORY;
+					iot_regitem_module_t* moditem=iot_regitem_module_t::find_item(iot_module_type_t(tp), name, libitem);
+					if(moditem) {
+						if(moditem->module_id==module_id) continue;
+						outlog_error("Invalid data in lib registry! %s module '%s:%s' has several records with different IDs %" PRIu32 " and %" PRIu32, iot_modtype_name[tp], libname, name, moditem->module_id, module_id);
+						return IOT_ERROR_BAD_DATA;
+					}
+					moditem=new iot_regitem_module_t(iot_module_type_t(tp), name, libitem, module_id, tp==IOT_MODTYPE_NODE ? false : true); //TODO set autoload according to config
+					if(!moditem) {
+						outlog_error("Cannot allocate memory for %s module item '%s:%s'", iot_modtype_name[tp], libname, name);
+						return IOT_ERROR_NO_MEMORY;
+					}
 				}
 			}
 		}
@@ -316,34 +364,10 @@ public:
 		return head;
 	}
 
-	iot_regitem_lib_t* find_lib_item(const char* name) {
-		iot_regitem_lib_t* lib=iot_regitem_lib_t::get_listhead();
-		while(lib) {
-			if(strcmp(lib->name, name)==0) break;
-			lib=lib->next;
-		}
-		return lib;
-	}
 	int load_lib(iot_regitem_lib_t* lib/*, const char* module_name*/); //tries to load library
-	int find_module_config(const char* module_name, iot_regitem_lib_t* lib, iot_moduleconfig_t* &cfg);
-	iot_regitem_module_t* find_module_item(const char* name, iot_regitem_lib_t* lib) {
-		iot_regitem_module_t* module=iot_regitem_module_t::get_listhead();
-		while(module) {
-			if(module->bundle==lib && strcmp(module->module_name, name)==0) break;
-			module=module->next;
-		}
-		return module;
-	}
-	iot_regitem_module_t* find_module_item(uint32_t module_id) {
-		iot_regitem_module_t* module=iot_regitem_module_t::get_listhead();
-		while(module) {
-			if(module->module_id==module_id) break;
-			module=module->next;
-		}
-		return module;
-	}
+	int find_module_config(iot_module_type_t type, const char* module_name, iot_regitem_lib_t* lib, void* &cfg);
 
-	static iot_regitem_module_t* find_modulesdb_item(const char* name, const iot_regitem_lib_t* bundle); //name must be pure module's name when bundle defined and full otherwise
+//	static iot_regitem_module_t* find_modulesdb_item(const char* name, const iot_regitem_lib_t* bundle); //name must be pure module's name when bundle defined and full otherwise
 	void register_pending_metaclasses(void); //main thread
 };
 

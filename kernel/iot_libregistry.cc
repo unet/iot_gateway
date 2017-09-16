@@ -23,35 +23,15 @@
 
 #include "iot_linkedlibs.cc"
 
+const char* iot_modtype_name[IOT_MODTYPE_MAX+1]={
+	"detector",
+	"driver",
+	"node"
+};
+
+
 iot_libregistry_t *libregistry=NULL;
 static iot_libregistry_t _libregistry; //instantiate singleton
-
-//finds module's index in modules DB by module_id
-//returns -1 if not found
-//static inline int module_db_index_by_id(uint32_t module_id) { //TODO make some index for quick search
-//	for(unsigned i=0;i<MODULES_DB_ITEMS;i++) if(modules_db[i].module_id==module_id) return i;
-//	return -1;
-//}
-/*
-iot_regitem_module_t* iot_libregistry_t::find_modulesdb_item(const char* name, const iot_regitem_lib_t* bundle) { //name must be pure module's name when bundle defined and full otherwise
-	if(bundle) {
-		for(unsigned i=0;i<MODULES_DB_ITEMS;i++) if(modules_db[i].bundle==bundle && strcmp(name, modules_db[i].module_name)==0) return &modules_db[i];
-	} else {
-		const char *purename=strrchr(name, ':');
-		if(!purename) return NULL;
-		size_t bundlenamelen=purename-name;
-		purename++;
-		for(unsigned i=0;i<MODULES_DB_ITEMS;i++) {
-			if(!modules_db[i].bundle) { //compare by full name spec
-				if(strcmp(name, modules_db[i].module_name)==0) return &modules_db[i];
-			} else { //compare by bundle name and pure module name
-				if(memcmp(modules_db[i].bundle->name, name, bundlenamelen)==0 && strcmp(purename, modules_db[i].module_name)==0) return &modules_db[i];
-			}
-		}
-	}
-	return NULL;
-}
-*/
 
 static int libpath2symname(const char *path, char *buf, size_t bufsz) {
 	char *bufend=buf+bufsz-1;
@@ -107,7 +87,7 @@ void iot_libregistry_t::register_pending_metaclasses(void) {
 			if(!type_id) {
 				outlog_info("Cannot find device interface type ID for '%s:%s' in lib registry", ifacetype_cur->get_library(), name);
 			} else {
-				ifacetype_cur->set_ifacetype_id(type_id);
+				ifacetype_cur->set_id(type_id);
 			}
 		}
 		if(type_id) {
@@ -150,7 +130,7 @@ void iot_libregistry_t::register_pending_metaclasses(void) {
 			if(!type_id) {
 				outlog_info("Cannot find device connection type ID for '%s:%s' in lib registry", contype_cur->get_library(), name);
 			} else {
-				contype_cur->set_contype_id(type_id);
+				contype_cur->set_id(type_id);
 			}
 		}
 		if(type_id) {
@@ -226,18 +206,18 @@ int iot_libregistry_t::load_lib(iot_regitem_lib_t* lib/*, const char* module_nam
 //IOT_ERROR_NOT_FOUND
 //IOT_ERROR_CRITICAL_ERROR - module or bundle cannot be loaded, is misconfigured or init failed
 //IOT_ERROR_NO_MEMORY
-int iot_libregistry_t::find_module_config(const char* module_name, iot_regitem_lib_t* lib, iot_moduleconfig_t* &cfg) { //tries to find module in specified library and returns its config
+int iot_libregistry_t::find_module_config(iot_module_type_t type, const char* module_name, iot_regitem_lib_t* lib, void* &cfg) { //tries to find module in specified library and returns its config
 	char buf[256];
 	int err;
 
 	cfg=NULL;
-	int off=snprintf(buf, sizeof(buf), "%s","iot_modconf_");
+	int off=snprintf(buf, sizeof(buf), "iot_abi" IOT_CORE_ABI_VERSION_STR "_%s_modconf_", iot_modtype_name[type]);
 	off+=libpath2symname(lib->name, buf+off, sizeof(buf)-off);
 	if(off<int(sizeof(buf))) {
 		off+=snprintf(buf+off, sizeof(buf)-off, "__%s",module_name);
 	}
 	if(off>=int(sizeof(buf))) {
-		outlog_error("Too small buffer to load module '%s' from library '%s'", module_name, lib->name);
+		outlog_error("Too small buffer to load %s  module '%s' from library '%s'", iot_modtype_name[type], module_name, lib->name);
 		return IOT_ERROR_CRITICAL_ERROR;
 	}
 
@@ -247,9 +227,9 @@ int iot_libregistry_t::find_module_config(const char* module_name, iot_regitem_l
 	}
 	//lib is loaded
 	//load symbol with module config
-	cfg=(iot_moduleconfig_t*)dlsym(lib->hmodule, buf);
+	cfg=dlsym(lib->hmodule, buf);
 	if(!cfg) {
-		outlog_error("Error loading symbol '%s' for module '%s' from library '%s': %s", buf, module_name, lib->name, dlerror());
+		outlog_error("Error loading symbol '%s' for %s module '%s' from library '%s': %s", buf, iot_modtype_name[type], module_name, lib->name, dlerror());
 		return IOT_ERROR_NOT_FOUND;
 	}
 	return 0;

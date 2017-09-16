@@ -720,6 +720,6 @@ void iot_release_msg(iot_threadmsg_t *&msg, bool nofree_msgmemblock) { //nofree_
 }
 
 //marks module (its current version) as buggy across restarts. Schedules restart of program
-void iot_process_module_bug(iot_module_item_t *module) {
+void iot_process_module_bug(iot_any_module_item_t *module_item) {
 	//TODO
 }

@@ -1,38 +1,47 @@
 {
-//	"platforms": ["linux"],
-	"modules": {
+	"description": "Support for generic input devices and speaker under Linux",
+	"platforms": ["linux"],
+	"detector_modules": {
 		"det" : {
 //			"id": OLD_MODULE_ID  must be specified only if module changed its parent library
-			"title": "Linux Input devices detector",
-			"description": "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module. Periodically scans list of available input devices.",
-			"provides": {
-				"detector": {
-//					"accepts_manual_devices":false, //indication that detector accepts manual devices specs
-//					"supported_contypes":["unet:LinuxInput"], //list of connection types this detector can find devices on and understands in manual spec
-					"params_tmpl": {
-						//"shortDescr":
-						//"longDescr":
-						//"propList":
-						//"newDialog":
-						//"editDialog":
-					}
+			"title": ["txt","det_title"],
+			"description": ["txt","det_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"manual_devices": { //optional set of templates to enter device spec manually. detector's code can (and must) interpret it as hints to find devices
+				"stub_device": {
+					"title": "Stub devices"
+					//"shortDescr":
+					//"longDescr":
+					//"propList":
+					//"newDialog":
+					//"editDialog":
 				}
 			}
-		},
+		}
+	},
+	"driver_modules": {
 		"drv" : {
-			"title": "Linux Input devices driver",
-			"description": "Provides support for arbitrary hardware devices through Linux 'input' abstraction layer. Supported input event types: KEY (allows to process key presses from any keyboard, mouse pointer, joystick, motherboard keys etc), LED (allows to control state of LEDs on keyboard, motherboard etc), SND (allows to play sound using system speaker).",
-			"provides": {
-				"driver": {
-					"device_interfaces": [ ":Keyboard", ":Activatable", "unet:Toneplayer" ] //list of device interfaces this driver can provide
-				}
+			"title": ["txt","drv_title"],
+			"description": ["txt","drv_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
 			}
 		}
 	},
 	"contypes": {
 		"linuxinput" : {
 			"title": "Linux input device connection",
-			"ident_tmpl": { //templates for processing localident data
+			"tmpl": { //templates for processing localident data. if key starts with 'details', then template is applied to hw device details, otherwise template if for ident
 				"shortDescr":	["concatws", " ",
 					["data", "hwid.bus"],
 					["case", 
@@ -48,13 +57,7 @@
 				//"propList":
 				//"newDialog":
 				//"editDialog":
-			},
-			"details_tmpl": { //templates for processing device details data
-				//"shortDescr":
-				//"longDescr":
-				//"propList":
-				//"newDialog":
-				//"editDialog":
+				//"detailsPropList":
 			}
 		}
 	}

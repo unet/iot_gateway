@@ -173,7 +173,7 @@ private:
 };
 
 class iot_devifacetype_metaclass_toneplayer : public iot_devifacetype_metaclass {
-	iot_devifacetype_metaclass_toneplayer(void) : iot_devifacetype_metaclass(0, "toneplayer", IOT_VERSION_COMPOSE(0,3,3)) {}
+	iot_devifacetype_metaclass_toneplayer(void) : iot_devifacetype_metaclass(0, "toneplayer", IOT_VERSION_COMPOSE(0,0,1)) {}
 
 	PACKED(
 		struct serialize_header_t {

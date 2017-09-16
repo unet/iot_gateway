@@ -220,22 +220,23 @@ static const iot_deviface_params* basic_devifaces[]={
 };
 
 
-static iot_iface_node_t basic_iface_node = {
-//	.descr = NULL,
-//	.params_tmpl = NULL,
+
+iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(basic)={
+	.version = IOT_VERSION_COMPOSE(0,0,1),
+	.init_module = NULL,
+	.deinit_module = NULL,
+	.cpu_loading = 0,
 	.num_devices = 1,
 	.num_valueoutputs = 0,
 	.num_valueinputs = 1,
 	.num_msgoutputs = 0,
 	.num_msginputs = 0,
-	.cpu_loading = 0,
 	.is_persistent = 1,
 	.is_sync = 0,
 
 	.devcfg={
 		{
 			.label = "dev",
-//			.descr = "Any device with Toneplayer interface",
 			.num_devifaces = sizeof(basic_devifaces)/sizeof(basic_devifaces[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
@@ -246,9 +247,8 @@ static iot_iface_node_t basic_iface_node = {
 	.valueinput={
 		{
 			.label = "enable",
-//			.descr = "Enabling input",
 			.notion_id = 0,
-			.vclass_id = IOT_VALUECLASSID_BOOLEAN
+			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
 		}
 	},
 	.msgoutput={},
@@ -259,23 +259,6 @@ static iot_iface_node_t basic_iface_node = {
 	.deinit_instance = &basic_instance::deinit_instance
 
 //	.get_state = [](void* instance, iot_srcstate_t* statebuf, size_t bufsize)->int{return ((keys_instance*)instance)->get_state(statebuf, bufsize);},
-};
-
-iot_moduleconfig_t IOT_MODULE_CONF(basic)={
-//	.title = "Basic player for toneplayer devices",
-//	.descr = "Module to play tones on toneplayer capable devices. Several songs can be specified as sequence of tones.",
-//	.module_id = MODULEID_basic, //Registered ID of this module. Must correspond to its full name in registry
-	.version = IOT_VERSION_COMPOSE(0,1,1),
-//	.config_version = 0,
-//	.num_devifaces = 0,
-//	.num_devcontypes = 0,
-	.init_module = NULL,
-	.deinit_module = NULL,
-//	.deviface_config = NULL,
-//	.devcontype_config = NULL,
-	.iface_node = &basic_iface_node,
-	.iface_device_driver = NULL,
-	.iface_device_detector = NULL
 };
 
 

@@ -29,6 +29,11 @@ IOT_LIBVERSION_DEFINE; //creates global symbol with library full version spec ac
 
 class iot_hwdev_localident_linuxinput : public iot_hwdev_localident {
 	friend class iot_hwdevcontype_metaclass_linuxinput;
+	struct spec_t {
+		uint16_t vendor,
+			product,	 //this field can be 0 meaning "any product" or exact product id
+			version;	 //used to specify exact product version (only if product is exact) or 0xFFFF meaning "any"
+	};
 	union {
 		struct {
 //hwid:
@@ -43,11 +48,7 @@ class iot_hwdev_localident_linuxinput : public iot_hwdev_localident {
 		} spec;
 		struct {
 			uint32_t bustype; //bitmask of allowed bus types or 0 for any bus type
-			struct {
-				uint16_t vendor,
-					product,	 //this field can be 0 meaning "any product" or exact product id
-					version;	 //used to specify exact product version or 0xFFFF meaning "any"
-			} spec[8]; //array with specific product requirements
+			spec_t spec[8]; //array with specific product requirements
 			uint32_t cap_bitmap; //bitmap of required caps, so 0 means 'no requirements'
 			uint8_t num_specs; //number of valid items in spec[]. zero means that no specific product requirements
 		} tmpl;
@@ -57,6 +58,8 @@ class iot_hwdev_localident_linuxinput : public iot_hwdev_localident {
 public:
 	
 	iot_hwdev_localident_linuxinput(void);
+	iot_hwdev_localident_linuxinput(uint8_t event_index, uint16_t bustype, uint16_t vendor, uint16_t product, uint16_t version, uint32_t cap_bitmap, const char* phys);
+	iot_hwdev_localident_linuxinput(uint32_t bustypemask, uint32_t cap_bitmap, uint8_t num_specs, const spec_t (&spec)[8]);
 
 	static const iot_hwdev_localident_linuxinput* cast(const iot_hwdev_localident* ident);
 
@@ -70,6 +73,17 @@ public:
 		spec.version=version;
 		spec.cap_bitmap=cap_bitmap;
 		snprintf(spec.phys, sizeof(spec.phys), "%s", phys);
+		return 0;
+	}
+	int init_tmpl(uint32_t bustypemask, uint32_t cap_bitmap, uint8_t num_specs, const spec_t (&spec)[8]) {
+		if(num_specs>8) return IOT_ERROR_INVALID_ARGS;
+		istmpl=true;
+		tmpl.bustype=bustypemask;
+		tmpl.cap_bitmap=cap_bitmap;
+		tmpl.num_specs=num_specs;
+		uint8_t i;
+		for(i=0;i<num_specs;i++) tmpl.spec[i]=spec[i];
+		for(;i<8;i++) tmpl.spec[i]={};
 		return 0;
 	}
 
@@ -125,7 +139,7 @@ private:
 		const iot_hwdev_localident_linuxinput* opspec=cast(opspec0);
 		if(!opspec) return false;
 		if(istmpl) {
-			if(tmpl.bustype && (tmpl.bustype & opspec->spec.bustype)==0) return false;
+			if(tmpl.bustype && (tmpl.bustype & (1u<<opspec->spec.bustype))==0) return false;
 			if(tmpl.cap_bitmap && (tmpl.cap_bitmap & opspec->spec.cap_bitmap)!=tmpl.cap_bitmap) return false;
 			if(!tmpl.num_specs) return true;
 			for(unsigned i=0;i<tmpl.num_specs;i++) { //check if any exact spec matches
@@ -151,7 +165,7 @@ private:
 };
 
 class iot_hwdevcontype_metaclass_linuxinput : public iot_hwdevcontype_metaclass {
-	iot_hwdevcontype_metaclass_linuxinput(void) : iot_hwdevcontype_metaclass(0, "linuxinput", IOT_VERSION_COMPOSE(0,1,1)) {}
+	iot_hwdevcontype_metaclass_linuxinput(void) : iot_hwdevcontype_metaclass(0, "linuxinput", IOT_VERSION_COMPOSE(0,0,1)) {}
 
 	PACKED(
 		struct serialize_header_t {
@@ -232,19 +246,120 @@ private:
 		return 0;
 	}
 	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const override {
+		assert(false);
 		return 0;
 	}
 	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const override {
+		assert(false);
 		return 0;
+	}
+	virtual int p_to_json(const iot_hwdev_localident* obj0, json_object* &dst) const override {
+		const iot_hwdev_localident_linuxinput* obj=iot_hwdev_localident_linuxinput::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+
+		json_object* ob=json_object_new_object();
+		if(!ob) return IOT_ERROR_NO_MEMORY;
+
+		json_object* val;
+
+		if(obj->istmpl) { //{is_tmpl: true, bustype_mask: integer/undefined, cap_mask: integer/undefined, product_specs: [[vendor(integer), product(integer/undefined), version]]/undefined}
+			val=json_object_new_boolean(1);
+			if(!val) goto nomem;
+			json_object_object_add(ob, "is_tmpl", val);
+			if(obj->tmpl.bustype>0) {
+				val=json_object_new_int64(obj->tmpl.bustype);
+				if(!val) goto nomem;
+				json_object_object_add(ob, "bustype_mask", val);
+			} //alse "any" bustype allowed. represent it as undefined
+			if(obj->tmpl.cap_bitmap>0) {
+				val=json_object_new_int64(obj->tmpl.cap_bitmap);
+				if(!val) goto nomem;
+				json_object_object_add(ob, "cap_mask", val);
+			} //alse "any" capability allowed. represent it as undefined
+			if(obj->tmpl.num_specs>0) {
+				val=json_object_new_array();
+				if(!val) goto nomem;
+				json_object_object_add(ob, "product_specs", val);
+				json_object* arr, *subval;
+				for(uint8_t i=0;i<obj->tmpl.num_specs; i++) {
+					arr=json_object_new_array();
+					if(!arr) goto nomem;
+					json_object_array_add(val, arr);
+					//add vendor
+					subval=json_object_new_int(obj->tmpl.spec[i].vendor);
+					if(!subval) goto nomem;
+					json_object_array_add(arr, subval);
+					if(obj->tmpl.spec[i].product>0) { //product specifed, add it
+						subval=json_object_new_int(obj->tmpl.spec[i].product);
+						if(!subval) goto nomem;
+						json_object_array_add(arr, subval);
+						if(obj->tmpl.spec[i].version!=0xFFFF) { //version specifed, add it
+							subval=json_object_new_int(obj->tmpl.spec[i].version);
+							if(!subval) goto nomem;
+							json_object_array_add(arr, subval);
+						}
+					}
+				}
+			}
+		} else { //{event_index: integer, cap_mask: integer, bustype: integer, vendor: integer, product: integer, version: integer, phys_path: string}
+			val=json_object_new_int(obj->spec.event_index);
+			if(!val) goto nomem;
+			json_object_object_add(ob, "event_index", val);
+
+			val=json_object_new_int64(obj->spec.cap_bitmap);
+			if(!val) goto nomem;
+			json_object_object_add(ob, "cap_mask", val);
+
+			val=json_object_new_int(obj->spec.bustype);
+			if(!val) goto nomem;
+			json_object_object_add(ob, "bustype", val);
+
+			val=json_object_new_int(obj->spec.vendor);
+			if(!val) goto nomem;
+			json_object_object_add(ob, "vendor", val);
+
+			val=json_object_new_int(obj->spec.product);
+			if(!val) goto nomem;
+			json_object_object_add(ob, "product", val);
+
+			val=json_object_new_int(obj->spec.version);
+			if(!val) goto nomem;
+			json_object_object_add(ob, "version", val);
+
+			val=json_object_new_string(obj->spec.phys);
+			if(!val) goto nomem;
+			json_object_object_add(ob, "phys_path", val);
+		}
+		dst=ob;
+		return 0;
+nomem:
+		json_object_put(ob);
+		return IOT_ERROR_NO_MEMORY;
 	}
 };
 
 const iot_hwdevcontype_metaclass_linuxinput iot_hwdevcontype_metaclass_linuxinput::object; //the only instance of this class
 
 
-iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(void) : iot_hwdev_localident(&iot_hwdevcontype_metaclass_linuxinput::object)
+iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(void)
+: iot_hwdev_localident(&iot_hwdevcontype_metaclass_linuxinput::object)
 {
 }
+iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(uint8_t event_index, uint16_t bustype, uint16_t vendor, uint16_t product, uint16_t version, uint32_t cap_bitmap, const char* phys)
+: iot_hwdev_localident(&iot_hwdevcontype_metaclass_linuxinput::object)
+{
+	if(init_spec(event_index, bustype, vendor, product, version, cap_bitmap, phys)) {
+		assert(false);
+	}
+}
+iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(uint32_t bustypemask, uint32_t cap_bitmap, uint8_t num_specs, const spec_t (&spec)[8])
+: iot_hwdev_localident(&iot_hwdevcontype_metaclass_linuxinput::object)
+{
+	if(init_tmpl(bustypemask, cap_bitmap, num_specs, spec)) {
+		assert(false);
+	}
+}
+
 const iot_hwdev_localident_linuxinput* iot_hwdev_localident_linuxinput::cast(const iot_hwdev_localident* ident) {
 	if(!ident) return NULL;
 	return ident->get_metaclass()==&iot_hwdevcontype_metaclass_linuxinput::object ? static_cast<const iot_hwdev_localident_linuxinput*>(ident) : NULL;
@@ -601,7 +716,7 @@ public:
 		return 0;
 	}
 
-	static int init_instance(iot_device_detector_base**instance, uv_thread_t thread) {
+	static int init_instance(iot_device_detector_base**instance, uv_thread_t thread, json_object *json_cfg, json_object *manual_devices) {
 		assert(uv_thread_self()==main_thread);
 
 		detector *inst=new detector(thread);
@@ -672,28 +787,18 @@ public:
 //static iot_hwdevcontype_t detector_devcontypes[]={DEVCONTYPE_CUSTOM_LINUXINPUT};
 
 
-static iot_iface_device_detector_t detector_iface = {
-//	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
-	.accepts_manual = 0,
+iot_detector_moduleconfig_t IOT_DETECTOR_MODULE_CONF(det)={
+	.version = IOT_VERSION_COMPOSE(0,0,1),
+	.init_module = NULL,
+	.deinit_module = NULL,
 	.cpu_loading = 0,
+//	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
 
 	.init_instance = &detector::init_instance,
 	.deinit_instance = &detector::deinit_instance,
 	.check_system = &detector::check_system
 
 //	.hwdevcontypes = detector_devcontypes
-};
-
-iot_moduleconfig_t IOT_MODULE_CONF(det)={
-//	.title = "Linux Input devices support",
-//	.descr = "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module.",
-//	.module_id = MODULEID_inputlinux, //Registered ID of this module. Must correspond to its full name in registry
-	.version = IOT_VERSION_COMPOSE(0,1,1),
-	.init_module = NULL,
-	.deinit_module = NULL,
-	.iface_node = NULL,
-	.iface_device_driver = NULL,
-	.iface_device_detector = &detector_iface
 };
 
 //static const iot_hwdevident_iface* detector_devcontype_config[]={&linuxinput_iface_obj};
@@ -1456,25 +1561,36 @@ private:
 
 };
 
-static iot_iface_device_driver_t driver_iface = {
-//	.num_devclassids = 0,
-	.num_hwdevcontypes = 0,
-	.cpu_loading = 3,
+//	iot_hwdev_localident_linuxinput(uint8_t event_index, uint16_t bustype, uint16_t vendor, uint16_t product, uint16_t version, uint32_t cap_bitmap, const char* phys);
+//	iot_hwdev_localident_linuxinput(uint32_t bustypemask, uint32_t cap_bitmap, uint8_t num_specs, const spec_t (&spec)[8]);
 
-	.hwdevcontypes = NULL,
-	.init_instance = &input_drv_instance::init_instance,
-	.deinit_instance = &input_drv_instance::deinit_instance,
-	.check_device = &input_drv_instance::check_device
+
+static const iot_hwdev_localident_linuxinput devfilter1(0,0,0,{});
+static const iot_hwdev_localident* driver_devidents[]={
+	&devfilter1
+};
+
+static const iot_devifacetype_metaclass* driver_ifaces[]={
+	&iot_devifacetype_metaclass_keyboard::object,
+	&iot_devifacetype_metaclass_activatable::object,
+	&iot_devifacetype_metaclass_toneplayer::object
 };
 
 
-iot_moduleconfig_t IOT_MODULE_CONF(drv)={
-	.version = IOT_VERSION_COMPOSE(0,1,1),
+iot_driver_moduleconfig_t IOT_DRIVER_MODULE_CONF(drv)={
+	.version = IOT_VERSION_COMPOSE(0,0,1),
 	.init_module = NULL,
 	.deinit_module = NULL,
-	.iface_node = NULL,
-	.iface_device_driver = &driver_iface,
-	.iface_device_detector = NULL
+
+	.cpu_loading = 3,
+	.num_hwdev_idents = sizeof(driver_devidents)/sizeof(driver_devidents[0]),
+	.num_dev_ifaces = sizeof(driver_ifaces)/sizeof(driver_ifaces[0]),
+
+	.hwdev_idents = driver_devidents,
+	.dev_ifaces = driver_ifaces,
+	.init_instance = &input_drv_instance::init_instance,
+	.deinit_instance = &input_drv_instance::deinit_instance,
+	.check_device = &input_drv_instance::check_device
 };
 
 

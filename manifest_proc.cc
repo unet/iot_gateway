@@ -28,6 +28,7 @@
 #define BUILD_MODULES_DIR "modules"
 
 json_object* libraryref=NULL;
+bool iscore=false; //true if current processed lib is CORE
 
 struct ids_registry {
 	const char* filename;
@@ -36,7 +37,7 @@ struct ids_registry {
 	json_object *topobj=NULL;
 	json_object *ifacetypes=NULL;
 	json_object *contypes=NULL;
-	json_object *modules=NULL;
+	json_object *modules[IOT_MODTYPE_MAX+1]={};
 
 	ids_registry(const char *filename, bool is_dev) : filename(filename),is_dev(is_dev) {
 	}
@@ -48,7 +49,7 @@ struct ids_registry {
 
 	void save(void) {
 		assert(is_dev && is_mod && fd>=0 && topobj);
-		const char *s=json_object_to_json_string_ext(topobj, JSON_C_TO_STRING_PRETTY);
+		const char *s=json_object_to_json_string_ext(topobj, JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_NOSLASHESCAPE);
 		size_t len=strlen(s);
 		ftruncate(fd, 0);
 		write(fd, s, len);
@@ -82,8 +83,9 @@ struct ids_registry {
 	iot_type_id_t find_contype(const char* name) {
 		return get_uint(contypes, name);
 	}
-	iot_type_id_t find_module(const char* fullname) {
-		return get_uint(modules, fullname);
+	iot_type_id_t find_module(iot_module_type_t type, const char* fullname) {
+		if(type>IOT_MODTYPE_MAX) return 0;
+		return get_uint(modules[type], fullname);
 	}
 
 	//returns non-zero on error
@@ -101,7 +103,9 @@ struct ids_registry {
 			if(!is_dev && errno==ENOENT ) {
 				ifacetypes=json_object_new_object();
 				contypes=json_object_new_object();
-				modules=json_object_new_object();
+
+
+				for(uint8_t tp=0; tp<=IOT_MODTYPE_MAX; tp++) modules[tp]=json_object_new_object();
 				return 0; //success
 			}
 			outlog_error("Cannot open '%s': %s", namebuf, strerror_r(errno, errbuf, sizeof(errbuf)));
@@ -144,81 +148,139 @@ struct ids_registry {
 			contypes=json_object_new_object();
 			json_object_object_add(topobj, "contypes", contypes);
 		}
-		if(json_object_object_get_ex(topobj, "modules", &modules)) {
-			if(!json_object_is_type(modules,  json_type_object)) {
-				outlog_error("Invalid data in IDs registry '%s': top level 'modules' item must be a JSON-object", namebuf);
-				return 1;
+
+		char keybuf[32];
+		for(uint8_t tp=0; tp<=IOT_MODTYPE_MAX; tp++) {
+			snprintf(keybuf, sizeof(keybuf), "%s_modules", iot_modtype_name[tp]);
+
+			if(json_object_object_get_ex(topobj, keybuf, &modules[tp])) {
+				if(!json_object_is_type(modules[tp],  json_type_object)) {
+					outlog_error("Invalid data in IDs registry '%s': top level '%s' item must be a JSON-object", keybuf, namebuf);
+					return 1;
+				}
+			} else {
+				printf("No %s modules found in '%s'\n", iot_modtype_name[tp], namebuf);
+				modules[tp]=json_object_new_object();
+				json_object_object_add(topobj, keybuf, modules[tp]);
 			}
-		} else {
-			printf("No modules found in '%s'\n", namebuf);
-			modules=json_object_new_object();
-			json_object_object_add(topobj, "modules", contypes);
 		}
+
 		return 0;
 	}
 } reg_ids("reg_ids.json", false), dev_ids("dev_ids.json", true);
 
 
-int proc_module(const char* modname, iot_moduleconfig_t* modcfg, iot_regitem_lib_t* lib, json_object* data, json_object* regpart, const char* manifest_path) {
+int proc_module(iot_module_type_t type, const char* modname, void* modcfg, iot_regitem_lib_t* lib, json_object* data, json_object* regpart, const char* manifest_path) {
 	uint32_t id;
 	char fullname[256];
 	int len=snprintf(fullname, sizeof(fullname), "%s:%s", lib->name, modname);
 	if(len>=int(sizeof(fullname))) {
-		outlog_error("Buffer is too small to build full name of module '%s' in library '%s'", modname, lib->name);
+		outlog_error("Buffer is too small to build full name of %s module '%s' in library '%s'", iot_modtype_name[type], modname, lib->name);
 		return 1; //buffer is too small
 	}
 
-	id=reg_ids.find_module(fullname);
+	json_object* prev_idob=NULL;
+	uint32_t prev_id=0;
+	if(json_object_object_get_ex(data, "id", &prev_idob)) {
+		IOT_JSONPARSE_UINT(prev_idob, uint32_t, prev_id);
+		if(prev_id<1000) prev_id=0; //ignore development IDs
+	}
+
+	id=reg_ids.find_module(type, fullname);
 	if(!id) {
-		id=dev_ids.find_module(fullname);
+		id=dev_ids.find_module(type, fullname);
 		if(!id) {
-			id=dev_ids.gen_new_dev_id(dev_ids.modules);
-			if(id) { //free ID found, remember it
-				json_object_object_add(dev_ids.modules, fullname, json_object_new_int64(id));
-				dev_ids.is_mod=true;
-				outlog_debug("New id %u for module %s was generated", id, modname);
+			if(prev_id) {
+				id=prev_id;
+			} else {
+				id=dev_ids.gen_new_dev_id(dev_ids.modules[type]);
+				if(id) { //free ID found, remember it
+					json_object_object_add(dev_ids.modules[type], fullname, json_object_new_int64(id));
+					dev_ids.is_mod=true;
+					outlog_debug("New id %u for %s module %s was generated", id, iot_modtype_name[type], fullname);
+				}
 			}
 		}
 	}
 	if(id) {
-		outlog_debug("Found id %u for module %s", id, modname);
+		outlog_debug("Found id %u for %s module %s", id, iot_modtype_name[type], fullname);
+		if(prev_id && prev_id!=id) {
+			outlog_error("Previous ID=%u specified for %s module %s does not match selected ID=%u", prev_id, iot_modtype_name[type], fullname, id);
+			return 1;
+		}
 	} else {
-		outlog_error("No ID for module %s", modname);
+		outlog_error("No ID for %s module %s", iot_modtype_name[type], fullname);
 		return 1;
 	}
+
+
+	//common checks for all module types
+	//check/normalize title
+	json_object* subdata=NULL;
+	if(!json_object_object_get_ex(data, "title", &subdata)) {
+		outlog_error("No mandotory 'title' for %s module %s", iot_modtype_name[type], fullname);
+		return 1;
+	}
+	const char *str=NULL;
+	if(json_object_is_type(subdata, json_type_array)) {
+		str=json_object_to_json_string_ext(subdata, JSON_C_TO_STRING_NOSLASHESCAPE);
+	} else if(json_object_is_type(subdata, json_type_string)) {
+		str=json_object_get_string(subdata);
+	}
+	if(!str || strlen(str)>64) {
+		outlog_error("Bad 'title' for %s module %s: it must be a string or array, maximum length of stringified form is 64 chars", iot_modtype_name[type], fullname);
+		return 1;
+	}
+	if(json_object_is_type(subdata, json_type_array)) { //convert array to string
+		json_object_object_add(data, "title", json_object_new_string(str));
+	}
+
+
+	//check/normalize description
+	if(json_object_object_get_ex(data, "description", &subdata)) {
+		str=NULL;
+		if(json_object_is_type(subdata, json_type_array)) {
+			str=json_object_to_json_string_ext(subdata, JSON_C_TO_STRING_NOSLASHESCAPE);
+		} else if(json_object_is_type(subdata, json_type_string)) {
+			str=json_object_get_string(subdata);
+		}
+		if(!str || strlen(str)>64) {
+			outlog_error("Bad 'description' for %s module %s: it must be a string or array, maximum length of stringified form is 64 chars", iot_modtype_name[type], fullname);
+			return 1;
+		}
+		if(json_object_is_type(subdata, json_type_array)) { //convert array to string
+			json_object_object_add(data, "description", json_object_new_string(str));
+		}
+	} else {
+		json_object_object_add(data, "description", json_object_new_string(""));
+	}
+
+	//check/normalize params_tmpl
+	if(json_object_object_get_ex(data, "params_tmpl", &subdata)) {
+		if(!json_object_is_type(subdata, json_type_object)) {
+			outlog_error("Bad 'params_tmpl' for %s module %s: it must be an object", iot_modtype_name[type], fullname);
+			return 1;
+		}
+	} else {
+		json_object_object_add(data, "params_tmpl", json_object_new_object());
+	}
+
 
 	char verbuf[32];
-	iot_version_str(modcfg->version, verbuf, sizeof(verbuf));
-	char idbuf[16];
-	snprintf(idbuf, sizeof(idbuf), "%u", id);
-	json_object* arr=json_object_new_array();
-	json_object_object_add(regpart, idbuf, arr);
-	json_object_array_add(arr, json_object_new_string(modname));
-	json_object_array_add(arr, libraryref);
-	json_object_array_add(arr, json_object_new_string(verbuf));
 
-	json_object_object_add(data, "id", json_object_new_int64(id));
-	json_object_object_add(data, "version", json_object_new_string(verbuf));
-	//check provided role(s)
-	json_object* provides=NULL;
-	if(!json_object_object_get_ex(data, "provides", &provides) || !json_object_is_type(provides,  json_type_object)) {
-		outlog_error("No 'provides' sub-object for module '%s' in library '%s'", modname, lib->name);
-		return 1;
-	}
-
-	int num_roles=0;
-	json_object_object_foreach(provides, role, roledata) {
-		if(strcmp(role, "node")==0) {
-			if(!modcfg->iface_node) {
-				outlog_error("Unrealized role '%s' provided for module '%s' in library '%s'", role, modname, lib->name);
-				return 1;
-			}
-			num_roles++;
+	switch(type) {
+		case IOT_MODTYPE_NODE: {
+			iot_node_moduleconfig_t *modcfg_=(iot_node_moduleconfig_t *)modcfg;
+			iot_version_str(modcfg_->version, verbuf, sizeof(verbuf));
+			
 			//process device connections
-			json_object* subdata=NULL;
-			if(json_object_object_get_ex(roledata, "device_connections", &subdata) && json_object_is_type(subdata, json_type_object)) {
-				for(unsigned i=0;i<modcfg->iface_node->num_devices;i++) {
-					const iot_deviceconn_filter_t *cfg=&modcfg->iface_node->devcfg[i];
+			if(json_object_object_get_ex(data, "device_connections", &subdata)) {
+				if(!json_object_is_type(subdata, json_type_object)) {
+					outlog_error("'device_connections' must be an object for node module '%s' in library '%s' described in manifest", modname, lib->name);
+					return 1;
+				}
+				for(unsigned i=0;i<modcfg_->num_devices;i++) {
+					const iot_deviceconn_filter_t *cfg=&modcfg_->devcfg[i];
 					assert(cfg->label!=NULL);
 					json_object* devcfg=NULL;
 					if(!json_object_object_get_ex(subdata, cfg->label, &devcfg) || !json_object_is_type(devcfg,  json_type_object)) {
@@ -244,73 +306,193 @@ int proc_module(const char* modname, iot_moduleconfig_t* modcfg, iot_regitem_lib
 						json_object_array_add(ifaces, json);
 					}
 				}
-			} else if(modcfg->iface_node->num_devices>0) {
+			} else if(modcfg_->num_devices>0) {
 				outlog_error("No device connections of node module '%s' in library '%s' described in manifest", modname, lib->name);
 				return 1;
+			} else { //normalize
+				json_object_object_add(data, "device_connections", json_object_new_object());
 			}
 
-			//process value inputs
-			if(json_object_object_get_ex(roledata, "value_inputs", &subdata) && json_object_is_type(subdata, json_type_object)) {
-				for(unsigned i=0;i<modcfg->iface_node->num_valueinputs;i++) {
-					const iot_node_valuelinkcfg_t *cfg=&modcfg->iface_node->valueinput[i];
-					assert(cfg->label!=NULL);
-					json_object* cfgob=NULL;
-					if(!json_object_object_get_ex(subdata, cfg->label, &cfgob) || !json_object_is_type(cfgob,  json_type_object)) {
-						outlog_error("No value input '%s' of node module '%s' in library '%s' described in manifest", cfg->label, modname, lib->name);
+			//process links
+			if(json_object_object_get_ex(data, "links", &subdata)) {
+				if(!json_object_is_type(subdata, json_type_object)) {
+					outlog_error("'links' must be an object for node module '%s' in library '%s' described in manifest", modname, lib->name);
+					return 1;
+				}
+				json_object* linkssubdata=NULL;
+				//process value inputs
+				if(json_object_object_get_ex(subdata, "value_inputs", &linkssubdata) && json_object_is_type(linkssubdata, json_type_object)) {
+					for(unsigned i=0;i<modcfg_->num_valueinputs;i++) {
+						const iot_node_valuelinkcfg_t *cfg=&modcfg_->valueinput[i];
+						assert(cfg->label!=NULL);
+						json_object* cfgob=NULL;
+						if(!json_object_object_get_ex(linkssubdata, cfg->label, &cfgob) || !json_object_is_type(cfgob,  json_type_object)) {
+							outlog_error("No value input '%s' of node module '%s' in library '%s' described in manifest", cfg->label, modname, lib->name);
+							return 1;
+						}
+						if(json_object_object_get_ex(cfgob, "datatype_id", NULL)) {
+							outlog_error("Duplicated value input '%s' of node module '%s' in library '%s' or 'datatype_id' field assigned in manifest", cfg->label, modname, lib->name);
+							return 1;
+						}
+						if(cfg->notion_id) json_object_object_add(cfgob, "notion_id", json_object_new_int64(cfg->notion_id));
+							else json_object_object_del(cfgob, "notion_id");
+						json_object_object_add(cfgob, "datatype_id", json_object_new_int64(cfg->valuetype_id));
+					}
+					if(json_object_object_length(linkssubdata) > int(modcfg_->num_valueinputs)) {
+						outlog_error("%d excess value inputs specified in manifest for node module '%s' in library '%s'", json_object_object_length(linkssubdata) - int(modcfg_->num_valueinputs) ,modname, lib->name);
 						return 1;
 					}
-					if(cfg->notion_id) json_object_object_add(cfgob, "notion_id", json_object_new_int64(cfg->notion_id));
-					json_object_object_add(cfgob, "datatype_id", json_object_new_int64(cfg->vclass_id));
+				} else if(modcfg_->num_valueinputs>0) {
+					outlog_error("No value inputs of node module '%s' in library '%s' described in manifest", modname, lib->name);
+					return 1;
 				}
-			} else if(modcfg->iface_node->num_valueinputs>0) {
-				outlog_error("No value inputs of node module '%s' in library '%s' described in manifest", modname, lib->name);
-				return 1;
-			}
 
-			//process value outputs
-			if(json_object_object_get_ex(roledata, "value_outputs", &subdata) && json_object_is_type(subdata, json_type_object)) {
-				for(unsigned i=0;i<modcfg->iface_node->num_valueoutputs;i++) {
-					const iot_node_valuelinkcfg_t *cfg=&modcfg->iface_node->valueoutput[i];
-					assert(cfg->label!=NULL);
-					json_object* cfgob=NULL;
-					if(!json_object_object_get_ex(subdata, cfg->label, &cfgob) || !json_object_is_type(cfgob,  json_type_object)) {
-						outlog_error("No value output '%s' of node module '%s' in library '%s' described in manifest", cfg->label, modname, lib->name);
+				//process value outputs
+				if(json_object_object_get_ex(subdata, "value_outputs", &linkssubdata) && json_object_is_type(linkssubdata, json_type_object)) {
+					for(unsigned i=0;i<modcfg_->num_valueoutputs;i++) {
+						const iot_node_valuelinkcfg_t *cfg=&modcfg_->valueoutput[i];
+						assert(cfg->label!=NULL);
+						json_object* cfgob=NULL;
+						if(!json_object_object_get_ex(linkssubdata, cfg->label, &cfgob) || !json_object_is_type(cfgob,  json_type_object)) {
+							outlog_error("No value output '%s' of node module '%s' in library '%s' described in manifest", cfg->label, modname, lib->name);
+							return 1;
+						}
+						if(json_object_object_get_ex(cfgob, "datatype_id", NULL)) {
+							outlog_error("Duplicated value output '%s' of node module '%s' in library '%s' or 'datatype_id' field assigned in manifest", cfg->label, modname, lib->name);
+							return 1;
+						}
+						if(cfg->notion_id) json_object_object_add(cfgob, "notion_id", json_object_new_int64(cfg->notion_id));
+							else json_object_object_del(cfgob, "notion_id");
+						json_object_object_add(cfgob, "datatype_id", json_object_new_int64(cfg->valuetype_id));
+					}
+					if(json_object_object_length(linkssubdata) > int(modcfg_->num_valueoutputs)) {
+						outlog_error("%d excess value outputs specified in manifest for node module '%s' in library '%s'", json_object_object_length(linkssubdata) - int(modcfg_->num_valueoutputs) ,modname, lib->name);
 						return 1;
 					}
-					if(cfg->notion_id) json_object_object_add(cfgob, "notion_id", json_object_new_int64(cfg->notion_id));
-					json_object_object_add(cfgob, "datatype_id", json_object_new_int64(cfg->vclass_id));
+				} else if(modcfg_->num_valueoutputs>0) {
+					outlog_error("No value outputs of node module '%s' in library '%s' described in manifest", modname, lib->name);
+					return 1;
 				}
-			} else if(modcfg->iface_node->num_valueoutputs>0) {
-				outlog_error("No value outputs of node module '%s' in library '%s' described in manifest", modname, lib->name);
+
+				//process msg inputs
+				if(json_object_object_get_ex(subdata, "msg_inputs", &linkssubdata) && json_object_is_type(linkssubdata, json_type_object)) {
+					for(unsigned i=0;i<modcfg_->num_msginputs;i++) {
+						const iot_node_msglinkcfg_t *cfg=&modcfg_->msginput[i];
+						assert(cfg->label!=NULL);
+						if(cfg->num_msgtype_ids==0) {
+							outlog_error("No data types listed in module code for msg input '%s' of node module '%s' in library '%s'", cfg->label, modname, lib->name);
+							return 1;
+						}
+						json_object* cfgob=NULL;
+						if(!json_object_object_get_ex(linkssubdata, cfg->label, &cfgob) || !json_object_is_type(cfgob,  json_type_object)) {
+							outlog_error("No msg input '%s' of node module '%s' in library '%s' described in manifest", cfg->label, modname, lib->name);
+							return 1;
+						}
+						if(json_object_object_get_ex(cfgob, "datatype_ids", NULL)) {
+							outlog_error("Duplicated msg input '%s' of node module '%s' in library '%s' or 'datatype_ids' field assigned in manifest", cfg->label, modname, lib->name);
+							return 1;
+						}
+						json_object* idlist=json_object_new_array();
+						for(unsigned j=0;j<cfg->num_msgtype_ids;j++) {
+							json_object_array_add(idlist, json_object_new_int64(cfg->msgtype_ids[j]));
+						}
+						json_object_object_add(cfgob, "datatype_ids", idlist);
+					}
+					if(json_object_object_length(linkssubdata) > int(modcfg_->num_msginputs)) {
+						outlog_error("%d excess msg inputs specified in manifest for node module '%s' in library '%s'", json_object_object_length(linkssubdata) - int(modcfg_->num_msginputs) ,modname, lib->name);
+						return 1;
+					}
+				} else if(modcfg_->num_msginputs>0) {
+					outlog_error("No msg inputs of node module '%s' in library '%s' described in manifest", modname, lib->name);
+					return 1;
+				}
+
+				//process msg outputs
+				if(json_object_object_get_ex(subdata, "msg_outputs", &linkssubdata) && json_object_is_type(linkssubdata, json_type_object)) {
+					for(unsigned i=0;i<modcfg_->num_msgoutputs;i++) {
+						const iot_node_msglinkcfg_t *cfg=&modcfg_->msgoutput[i];
+						assert(cfg->label!=NULL);
+						if(cfg->num_msgtype_ids==0) {
+							outlog_error("No data types listed in module code for msg output '%s' of node module '%s' in library '%s'", cfg->label, modname, lib->name);
+							return 1;
+						}
+						json_object* cfgob=NULL;
+						if(!json_object_object_get_ex(linkssubdata, cfg->label, &cfgob) || !json_object_is_type(cfgob,  json_type_object)) {
+							outlog_error("No msg output '%s' of node module '%s' in library '%s' described in manifest", cfg->label, modname, lib->name);
+							return 1;
+						}
+						if(json_object_object_get_ex(cfgob, "datatype_ids", NULL)) {
+							outlog_error("Duplicated msg output '%s' of node module '%s' in library '%s' or 'datatype_ids' field assigned in manifest", cfg->label, modname, lib->name);
+							return 1;
+						}
+						json_object* idlist=json_object_new_array();
+						for(unsigned j=0;j<cfg->num_msgtype_ids;j++) {
+							json_object_array_add(idlist, json_object_new_int64(cfg->msgtype_ids[j]));
+						}
+						json_object_object_add(cfgob, "datatype_ids", idlist);
+					}
+					if(json_object_object_length(linkssubdata) > int(modcfg_->num_msgoutputs)) {
+						outlog_error("%d excess msg outputs specified in manifest for node module '%s' in library '%s'", json_object_object_length(linkssubdata) - int(modcfg_->num_msgoutputs) ,modname, lib->name);
+						return 1;
+					}
+				} else if(modcfg_->num_msgoutputs>0) {
+					outlog_error("No msg outputs of node module '%s' in library '%s' described in manifest", modname, lib->name);
+					return 1;
+				}
+
+			} else if(int(modcfg_->num_valueinputs) + modcfg_->num_valueoutputs + modcfg_->num_msginputs + modcfg_->num_msgoutputs>0) {
+				outlog_error("No links of node module '%s' in library '%s' described in manifest", modname, lib->name);
 				return 1;
+			} else { //normalize
+				json_object_object_add(data, "links", json_object_new_object());
 			}
 
+			break;
+		}
+		case IOT_MODTYPE_DRIVER: {
+			iot_driver_moduleconfig_t *modcfg_=(iot_driver_moduleconfig_t *)modcfg;
+			iot_version_str(modcfg_->version, verbuf, sizeof(verbuf));
 
-		} else if(strcmp(role, "driver")==0) {
-			if(!modcfg->iface_device_driver) {
-				outlog_error("Unrealized role '%s' provided for module '%s' in library '%s'", role, modname, lib->name);
-				return 1;
+			json_object* list=json_object_new_array();
+			json_object_object_add(data, "ifacetype_ids", list);
+			for(unsigned i=0;i<modcfg_->num_dev_ifaces;i++) { //driver lists possible interfaces
+				const iot_devifacetype_metaclass* meta=modcfg_->dev_ifaces[i];
+				if(!meta || !meta->get_id()) {
+					outlog_notice("Invalid device interface specified for driver module '%s' in library '%s' at index %u (%s). Check dependencies.", modname, lib->name, i, meta ? meta->get_name() : "NULL");
+					continue;
+				}
+				json_object_array_add(list, json_object_new_int64(meta->get_id()));
 			}
-			num_roles++;
-		} else if(strcmp(role, "detector")==0) {
-			if(!modcfg->iface_device_detector) {
-				outlog_error("Unrealized role '%s' provided for module '%s' in library '%s'", role, modname, lib->name);
-				return 1;
+			break;
+		}
+		case IOT_MODTYPE_DETECTOR: {
+			iot_detector_moduleconfig_t *modcfg_=(iot_detector_moduleconfig_t *)modcfg;
+			iot_version_str(modcfg_->version, verbuf, sizeof(verbuf));
+
+			if(json_object_object_get_ex(data, "manual_devices", &subdata)) {
+				if(!json_object_is_type(subdata, json_type_object)) {
+					outlog_error("'manual_devices' must be an object for detector module '%s' in library '%s' described in manifest", modname, lib->name);
+					return 1;
+				}
+			} else { //normalize
+				json_object_object_add(data, "manual_devices", json_object_new_object());
 			}
-			num_roles++;
-		} else {
-			outlog_error("Invalid role '%s' provided for module '%s' in library '%s'", role, modname, lib->name);
-			return 1;
+
+			break;
 		}
 	}
-	//check if all roles were described
-	if(modcfg->iface_node) num_roles--;
-	if(modcfg->iface_device_driver) num_roles--;
-	if(modcfg->iface_device_detector) num_roles--;
-	if(num_roles<0) {
-		outlog_error("Not all roles of module '%s' in library '%s' were described in manifest", modname, lib->name);
-		return 1;
-	}
+
+	char idbuf[16];
+	snprintf(idbuf, sizeof(idbuf), "%u", id);
+	json_object* arr=json_object_new_array();
+	json_object_object_add(regpart, idbuf, arr);
+	json_object_array_add(arr, json_object_new_string(modname));
+	json_object_array_add(arr, libraryref);
+	json_object_array_add(arr, json_object_new_string(verbuf));
+
+	json_object_object_add(data, "id", json_object_new_int64(id));
+	json_object_object_add(data, "version", json_object_new_string(verbuf));
+
 	return 0;
 }
 
@@ -339,6 +521,10 @@ int proc_contype(const iot_hwdevcontype_metaclass* meta, json_object* data, json
 	} else { //id is built into declaration, so must be present in reg_ids
 		if(reg_ids.find_contype(meta->get_name())!=id) {
 			outlog_error("connection type '%s' has incorporated ID=%u which is not registered", meta->get_name(), id);
+			return 1;
+		}
+		if(!iscore && id<2000) {
+			outlog_error("connection type '%s' has incorporated ID=%u which can be used in CORE only (>=2000)", meta->get_name(), id);
 			return 1;
 		}
 	}
@@ -384,6 +570,10 @@ int proc_ifacetype(const iot_devifacetype_metaclass* meta, json_object* data, js
 			outlog_error("iface type '%s' has incorporated ID=%u which is not registered", meta->get_name(), id);
 			return 1;
 		}
+		if(!iscore && id<2000) {
+			outlog_error("iface type '%s' has incorporated ID=%u which can be used in CORE only (>=2000)", meta->get_name(), id);
+			return 1;
+		}
 	}
 	json_object_object_add(data, "id", json_object_new_int64(id));
 	char verbuf[32];
@@ -400,8 +590,8 @@ int proc_ifacetype(const iot_devifacetype_metaclass* meta, json_object* data, js
 	return 0;
 }
 
-#define NUM_SECTS 4
-const char* registry_sections[NUM_SECTS]={"libs","ifacetypes","contypes","modules"};
+#define NUM_SECTS 6
+const char* registry_sections[NUM_SECTS]={"libs","ifacetypes","contypes","node_modules","driver_modules","detector_modules"};
 
 
 //Merges data from provided partpath into provided sections in reg_sect array (must have NUM_SECTS elems).
@@ -494,7 +684,9 @@ int main(int argn, char **arg) {
 	json_object* regpart=json_object_new_object();
 	json_object* regpart_ifacetypes=NULL;
 	json_object* regpart_contypes=NULL;
-	json_object* regpart_modules=NULL;
+	json_object* regpart_node_modules=NULL;
+	json_object* regpart_driver_modules=NULL;
+	json_object* regpart_detector_modules=NULL;
 	json_object* regpart_libs=json_object_new_object();
 	json_object_object_add(regpart, "libs", regpart_libs);
 	json_object* libprops=json_object_new_array();
@@ -510,11 +702,12 @@ int main(int argn, char **arg) {
 		snprintf(registry_path, sizeof(registry_path), "%s/%s", bin_dir, REGISTRY_PART_OUT);
 		bundle=NULL;
 		libraryref=json_object_new_string("CORE");
+		iscore=true;
 		json_object_object_add(regpart_libs, "CORE", libprops);
 		version=iot_kernel_version;
-		json_object_array_add(libprops, json_object_new_boolean(1));
+		json_object_array_add(libprops, json_object_new_boolean(1)); //is linked
 	} else {
-		bundle=libregistry->find_lib_item(arg[1]);
+		bundle=iot_regitem_lib_t::find_item(arg[1]);
 		if(!bundle) {
 			outlog_error("No bundle with spec '%s' enabled for build", arg[1]);
 			return 1;
@@ -531,9 +724,16 @@ int main(int argn, char **arg) {
 		if(merge_registry_part(tmpreg_sect, registry_path)) return 1;
 		//include other dependency libs
 		if(argn>2) {
-			libdeps=json_object_new_array();
+			libdeps=json_object_new_object();
 			for(int argi=2; argi<argn; argi++) {
-				json_object_array_add(libdeps, json_object_new_string(arg[argi]));
+				char* comma=strchr(arg[argi], ',');
+				if(comma) { //there is version spec
+					*comma='\0';
+					json_object_object_add(libdeps, arg[argi], json_object_new_string(comma+1));
+					*comma=',';
+				} else {
+					json_object_object_add(libdeps, arg[argi], NULL);
+				}
 
 				snprintf(registry_path, sizeof(registry_path), "%s/%s/%s/%s", bin_dir, BUILD_MODULES_DIR, arg[argi], REGISTRY_PART_OUT);
 				if(merge_registry_part(tmpreg_sect, registry_path)) return 1;
@@ -567,21 +767,53 @@ int main(int argn, char **arg) {
 
 
 	json_object_object_foreach(json, subkey, subval) {
-		if(strcmp(subkey, "modules")==0 && bundle) {
+		if(strcmp(subkey, "node_modules")==0 && bundle) {
 			if(!json_object_is_type(subval, json_type_object)) {
 				outlog_error("'%s' sub-field of manifest '%s' must be JSON object", subkey, manifest_path);
 				return 1;
 			}
 			json_object_object_foreach(subval, modname, moddata) {
-				iot_moduleconfig_t* modcfg=NULL;
-				if(libregistry->find_module_config(modname, bundle, modcfg)) {
-					outlog_error("Module '%s' mentioned in manifest '%s' not found", modname, manifest_path);
+				void* modcfg=NULL;
+				if(libregistry->find_module_config(IOT_MODTYPE_NODE, modname, bundle, modcfg)) {
+					outlog_error("Node module '%s' mentioned in manifest '%s' not found", modname, manifest_path);
 					return 1;
 				}
-				if(!regpart_modules) {
-					regpart_modules=json_object_new_object();
+				if(!regpart_node_modules) {
+					regpart_node_modules=json_object_new_object();
 				}
-				if(proc_module(modname, modcfg, bundle, moddata, regpart_modules, manifest_path)) return 1;
+				if(proc_module(IOT_MODTYPE_NODE, modname, modcfg, bundle, moddata, regpart_node_modules, manifest_path)) return 1;
+			}
+		} else if(strcmp(subkey, "driver_modules")==0 && bundle) {
+			if(!json_object_is_type(subval, json_type_object)) {
+				outlog_error("'%s' sub-field of manifest '%s' must be JSON object", subkey, manifest_path);
+				return 1;
+			}
+			json_object_object_foreach(subval, modname, moddata) {
+				void* modcfg=NULL;
+				if(libregistry->find_module_config(IOT_MODTYPE_DRIVER, modname, bundle, modcfg)) {
+					outlog_error("Driver module '%s' mentioned in manifest '%s' not found", modname, manifest_path);
+					return 1;
+				}
+				if(!regpart_driver_modules) {
+					regpart_driver_modules=json_object_new_object();
+				}
+				if(proc_module(IOT_MODTYPE_DRIVER, modname, modcfg, bundle, moddata, regpart_driver_modules, manifest_path)) return 1;
+			}
+		} else if(strcmp(subkey, "detector_modules")==0 && bundle) {
+			if(!json_object_is_type(subval, json_type_object)) {
+				outlog_error("'%s' sub-field of manifest '%s' must be JSON object", subkey, manifest_path);
+				return 1;
+			}
+			json_object_object_foreach(subval, modname, moddata) {
+				void* modcfg=NULL;
+				if(libregistry->find_module_config(IOT_MODTYPE_DETECTOR, modname, bundle, modcfg)) {
+					outlog_error("Detector module '%s' mentioned in manifest '%s' not found", modname, manifest_path);
+					return 1;
+				}
+				if(!regpart_detector_modules) {
+					regpart_detector_modules=json_object_new_object();
+				}
+				if(proc_module(IOT_MODTYPE_DETECTOR, modname, modcfg, bundle, moddata, regpart_detector_modules, manifest_path)) return 1;
 			}
 		} else if(strcmp(subkey, "ifacetypes")==0) {
 			if(!json_object_is_type(subval, json_type_object)) {
@@ -623,6 +855,16 @@ int main(int argn, char **arg) {
 				}
 				if(proc_contype(meta, contypedata, regpart_contypes, manifest_path)) return 1;
 			}
+		} else if(strcmp(subkey, "platforms")==0) {
+			if(!json_object_is_type(subval, json_type_array)) {
+				outlog_error("'%s' sub-field of manifest '%s' must be JSON array", subkey, manifest_path);
+				return 1;
+			}
+		} else if(strcmp(subkey, "description")==0) {
+			if(!json_object_is_type(subval, json_type_string)) {
+				outlog_error("'%s' sub-field of manifest '%s' must be a string", subkey, manifest_path);
+				return 1;
+			}
 		} else {
 			outlog_error("Unknown sub-field '%s' in manifest '%s'", subkey, manifest_path);
 			return 1;
@@ -630,10 +872,13 @@ int main(int argn, char **arg) {
 	}
 
 	json_object_object_add(json, "version", json_object_new_string(verbuf));
+	if(libdeps) json_object_object_add(json, "dependency_libs", json_object_get(libdeps));
 
 	if(regpart_ifacetypes) json_object_object_add(regpart, "ifacetypes", regpart_ifacetypes);
 	if(regpart_contypes) json_object_object_add(regpart, "contypes", regpart_contypes);
-	if(regpart_modules) json_object_object_add(regpart, "modules", regpart_modules);
+	if(regpart_node_modules) json_object_object_add(regpart, "node_modules", regpart_node_modules);
+	if(regpart_driver_modules) json_object_object_add(regpart, "driver_modules", regpart_driver_modules);
+	if(regpart_detector_modules) json_object_object_add(regpart, "detector_modules", regpart_detector_modules);
 
 	//OK. save resulting files
 	const char *result_json=json_object_to_json_string_ext(json, JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_NOSLASHESCAPE);

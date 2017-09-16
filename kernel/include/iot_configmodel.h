@@ -110,8 +110,8 @@ struct iot_notify_inputsupdate : public iot_releasable {
 
 //models node with several inputs and several outputs. each input/output is iot_nodelinkmodel object, which is instanciated by some node output
 struct iot_nodemodel {
-	const iot_iface_node_t *node_iface;  //will be NULL if module is not loaded
-	iot_module_item_t *module;     //will be NULL if module is not loaded
+	const iot_node_moduleconfig_t *node_iface;  //will be NULL if module is not loaded
+	iot_node_module_item_t *module;     //will be NULL if module is not loaded
 
 	enum : uint8_t {
 		NODESTATE_NOMODULE, //model started and is in degenerated state, no required code module found (module==NULL)

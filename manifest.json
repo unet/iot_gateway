@@ -1,4 +1,7 @@
-{ //description of built-in types
+{
+	"platforms" : ["all"],
+	"description": "IOT Software CORE",
+//description of built-in types
 	"ifacetypes": {
 		"keyboard" : {
 			"title": "Keyboard",

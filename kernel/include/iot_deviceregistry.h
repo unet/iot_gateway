@@ -99,7 +99,7 @@ public:
 		free(it);
 	}
 
-	void try_find_hwdev_for_driver(iot_module_item_t* module); //main thread
+	void try_find_hwdev_for_driver(iot_driver_module_item_t* module); //main thread
 	int try_connect_local_driver(iot_device_connection_t* conn);
 
 	iot_hwdevregistry_item_t* find_item_byaddr(iot_hwdev_localident* ident) { //looks for device item by contype and address

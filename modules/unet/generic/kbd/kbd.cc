@@ -178,22 +178,22 @@ static const iot_deviface_params* eventsrc_devifaces[]={
 };
 
 
-static iot_iface_node_t eventsrc_iface_node = {
-//	.descr = NULL,
-//	.params_tmpl = NULL,
+iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(eventsrc)={
+	.version = IOT_VERSION_COMPOSE(0,0,1),
+	.init_module = NULL,
+	.deinit_module = NULL,
+	.cpu_loading = 0,
 	.num_devices = 3,
 	.num_valueoutputs = 1,
 	.num_valueinputs = 0,
 	.num_msgoutputs = 0,
 	.num_msginputs = 0,
-	.cpu_loading = 0,
 	.is_persistent = 1,
 	.is_sync = 0,
 
 	.devcfg={
 		{
 			.label = "input1",
-//			.descr = "Any device with Keyboard interface",
 			.num_devifaces = sizeof(eventsrc_devifaces)/sizeof(eventsrc_devifaces[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
@@ -201,7 +201,6 @@ static iot_iface_node_t eventsrc_iface_node = {
 		},
 		{
 			.label = "input2",
-//			.descr = "Any device with Keyboard interface",
 			.num_devifaces = sizeof(eventsrc_devifaces)/sizeof(eventsrc_devifaces[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
@@ -209,7 +208,6 @@ static iot_iface_node_t eventsrc_iface_node = {
 		},
 		{
 			.label = "input3",
-//			.descr = "Any device with Keyboard interface",
 			.num_devifaces = sizeof(eventsrc_devifaces)/sizeof(eventsrc_devifaces[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
@@ -219,9 +217,8 @@ static iot_iface_node_t eventsrc_iface_node = {
 	.valueoutput={
 		{
 			.label = "state",
-//			.descr = "State of all keys",
 			.notion_id = IOT_VALUENOTION_KEYCODE,
-			.vclass_id = IOT_VALUECLASSID_BITMAP
+			.valuetype_id = IOT_VALUECLASSID_BITMAP
 		}
 	},
 	.valueinput={
@@ -236,21 +233,6 @@ static iot_iface_node_t eventsrc_iface_node = {
 	.deinit_instance = &eventsrc_instance::deinit_instance
 
 //	.get_state = [](void* instance, iot_srcstate_t* statebuf, size_t bufsize)->int{return ((keys_instance*)instance)->get_state(statebuf, bufsize);},
-};
-
-iot_moduleconfig_t IOT_MODULE_CONF(eventsrc)={
-//	.module_id = MODULEID_eventsrc, //Registered ID of this module. Must correspond to its full name in registry
-	.version = IOT_VERSION_COMPOSE(0,1,1),
-//	.config_version = 0,
-//	.num_devifaces = 0,
-//	.num_devcontypes = 0,
-	.init_module = NULL,
-	.deinit_module = NULL,
-//	.deviface_config = NULL,
-//	.devcontype_config = NULL,
-	.iface_node = &eventsrc_iface_node,
-	.iface_device_driver = NULL,
-	.iface_device_detector = NULL
 };
 
 //end of kbdlinux:keys event source  module
@@ -417,15 +399,16 @@ private:
 //};
 
 
-static iot_iface_node_t oper_keystate_iface_node = {
-//	.descr = NULL,
-//	.params_tmpl =  NULL,
+iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(oper_keystate)={
+	.version = IOT_VERSION_COMPOSE(0,0,1),
+	.init_module = NULL,
+	.deinit_module = NULL,
+	.cpu_loading = 0,
 	.num_devices = 0,
 	.num_valueoutputs = 1,
 	.num_valueinputs = 1,
 	.num_msgoutputs = 0,
 	.num_msginputs = 0,
-	.cpu_loading = 0,
 	.is_persistent = 0,
 	.is_sync = 1,
 
@@ -433,17 +416,15 @@ static iot_iface_node_t oper_keystate_iface_node = {
 	.valueoutput={
 		{
 			.label = "out",
-//			.descr = "Logical result of state comparison",
 			.notion_id = 0,
-			.vclass_id = IOT_VALUECLASSID_BOOLEAN
+			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
 		}
 	},
 	.valueinput={
 		{
 			.label = "in",
-//			.descr = "Input for keyboard state",
 			.notion_id = IOT_VALUENOTION_KEYCODE,
-			.vclass_id = IOT_VALUECLASSID_BITMAP
+			.valuetype_id = IOT_VALUECLASSID_BITMAP
 		}
 	},
 	.msgoutput={},
@@ -454,23 +435,6 @@ static iot_iface_node_t oper_keystate_iface_node = {
 	.deinit_instance = &oper_keystate_instance::deinit_instance
 
 //	.get_state = [](void* instance, iot_srcstate_t* statebuf, size_t bufsize)->int{return ((keys_instance*)instance)->get_state(statebuf, bufsize);},
-};
-
-iot_moduleconfig_t IOT_MODULE_CONF(oper_keystate)={
-//	.title = "Operator to check keyboard state",
-//	.descr = "Checks if specific keys are depressed",
-//	.module_id = MODULEID_oper_keystate, //Registered ID of this module. Must correspond to its full name in registry
-	.version = IOT_VERSION_COMPOSE(0,1,1),
-//	.config_version = 0,
-//	.num_devifaces = 0,
-//	.num_devcontypes = 0,
-	.init_module = NULL,
-	.deinit_module = NULL,
-//	.deviface_config = NULL,
-//	.devcontype_config = NULL,
-	.iface_node = &oper_keystate_iface_node,
-	.iface_device_driver = NULL,
-	.iface_device_detector = NULL
 };
 
 
@@ -638,22 +602,23 @@ static const iot_deviface_params* leds_devifaces[]={
 };
 
 
-static iot_iface_node_t leds_iface_node = {
-//	.descr = NULL,
-//	.params_tmpl = NULL,
+iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(leds)={
+	.version = IOT_VERSION_COMPOSE(0,0,1),
+	.init_module = leds_instance::init_module,
+	.deinit_module = leds_instance::deinit_module,
+
+	.cpu_loading = 0,
 	.num_devices = 1,
 	.num_valueoutputs = 0,
 	.num_valueinputs = 3,
 	.num_msgoutputs = 0,
 	.num_msginputs = 0,
-	.cpu_loading = 0,
 	.is_persistent = 1,
 	.is_sync = 0,
 
 	.devcfg={
 		{
 			.label = "dev",
-//			.descr = "Any device with Activatable interface",
 			.num_devifaces = sizeof(leds_devifaces)/sizeof(leds_devifaces[0]),
 			.flag_canauto = 1,
 			.flag_localonly = 1,
@@ -664,21 +629,18 @@ static iot_iface_node_t leds_iface_node = {
 	.valueinput={
 		{
 			.label = "numlk",
-//			.descr = "NumLock LED state input",
 			.notion_id = 0,
-			.vclass_id = IOT_VALUECLASSID_BOOLEAN
+			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
 		},
 		{
 			.label = "capslk",
-//			.descr = "CapsLock LED state input",
 			.notion_id = 0,
-			.vclass_id = IOT_VALUECLASSID_BOOLEAN
+			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
 		},
 		{
 			.label = "scrlk",
-//			.descr = "ScrollLock LED state input",
 			.notion_id = 0,
-			.vclass_id = IOT_VALUECLASSID_BOOLEAN
+			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
 		}
 	},
 	.msgoutput={},
@@ -689,23 +651,6 @@ static iot_iface_node_t leds_iface_node = {
 	.deinit_instance = &leds_instance::deinit_instance
 
 //	.get_state = [](void* instance, iot_srcstate_t* statebuf, size_t bufsize)->int{return ((keys_instance*)instance)->get_state(statebuf, bufsize);},
-};
-
-iot_moduleconfig_t IOT_MODULE_CONF(leds)={
-//	.title = "Keyboard LEDs control",
-//	.descr = "Module to control 3 LEDs of typical PC keyboards: Caps Lock, Num Lock and Scroll Lock",
-//	.module_id = MODULEID_leds, //Registered ID of this module. Must correspond to its full name in registry
-	.version = IOT_VERSION_COMPOSE(0,1,1),
-//	.config_version = 0,
-//	.num_devifaces = 0,
-//	.num_devcontypes = 0,
-	.init_module = leds_instance::init_module,
-	.deinit_module = leds_instance::deinit_module,
-//	.deviface_config = NULL,
-//	.devcontype_config = NULL,
-	.iface_node = &leds_iface_node,
-	.iface_device_driver = NULL,
-	.iface_device_detector = NULL
 };
 
 

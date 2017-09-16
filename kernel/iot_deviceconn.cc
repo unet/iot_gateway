@@ -129,8 +129,8 @@ void iot_device_connection_t::init_local(iot_connsid_t id, iot_modinstance_item_
 		};
 
 		switch(client_inst->type) {
-			case IOT_MODINSTTYPE_NODE: {
-				auto iface=client_inst->module->config->iface_node;
+			case IOT_MODTYPE_NODE: {
+				auto iface=static_cast<iot_node_module_item_t*>(client_inst->module)->config;
 				assert(idx<IOT_CONFIG_MAX_NODE_DEVICES);
 				client.local.conndata=&client_inst->data.node.dev[idx];
 				client_devifaceclassfilter=&iface->devcfg[idx];
@@ -146,8 +146,8 @@ void iot_device_connection_t::init_local(iot_connsid_t id, iot_modinstance_item_
 				}
 				break;
 			}
-			case IOT_MODINSTTYPE_DRIVER:
-			case IOT_MODINSTTYPE_DETECTOR:
+			case IOT_MODTYPE_DRIVER:
+			case IOT_MODTYPE_DETECTOR:
 				//list illegal values
 				assert(false);
 				return;
@@ -346,7 +346,7 @@ int iot_device_connection_t::connect_remote(iot_miid_t& driver_inst) {//, const 
 int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) {
 		assert(uv_thread_self()==main_thread);
 		assert(state==IOT_DEVCONN_INIT);
-		assert(driver_inst->type==IOT_MODINSTTYPE_DRIVER);
+		assert(driver_inst->type==IOT_MODTYPE_DRIVER);
 		if(!driver_inst->is_working()) {
 			assert(false);
 			return IOT_ERROR_DEVICE_NOT_SUPPORTED;
@@ -548,9 +548,9 @@ int iot_device_connection_t::on_drvconnect_status(int err, bool isasync) {
 	driver_host=0;
 
 	if(err==IOT_ERROR_CRITICAL_BUG) { //must stop all module's driver instance
-		if(drvinst->module->state[IOT_MODINSTTYPE_DRIVER]!=IOT_MODULESTATE_DISABLED) {
-			drvinst->module->state[IOT_MODINSTTYPE_DRIVER]=IOT_MODULESTATE_DISABLED;
-			drvinst->module->stop_all_drivers(true);
+		if(drvinst->module->state!=IOT_MODULESTATE_DISABLED) {
+			drvinst->module->state=IOT_MODULESTATE_DISABLED;
+			static_cast<iot_driver_module_item_t*>(drvinst->module)->stop_all_drivers(true);
 		}
 		err=IOT_ERROR_DEVICE_NOT_SUPPORTED;
 	}
@@ -580,7 +580,7 @@ int iot_device_connection_t::process_connect_local(bool isasync) { //called in w
 	assert(state==IOT_DEVCONN_PENDING && driver_host==iot_current_hostid);
 
 	iot_modinstance_item_t *drvinst=driver.local.modinstlk.modinst;
-	assert(drvinst!=NULL && drvinst->type==IOT_MODINSTTYPE_DRIVER);
+	assert(drvinst!=NULL && drvinst->type==IOT_MODTYPE_DRIVER);
 
 	int err;
 	iot_threadmsg_t *msg;
@@ -734,7 +734,7 @@ void iot_device_connection_t::process_driver_ready(void) { //runs in client thre
 	assert(state==IOT_DEVCONN_READYDRV && client_host==iot_current_hostid);
 
 	iot_modinstance_item_t *modinst=client.local.modinstlk.modinst;
-	assert(modinst!=NULL && modinst->type!=IOT_MODINSTTYPE_DRIVER);
+	assert(modinst!=NULL && modinst->type!=IOT_MODTYPE_DRIVER);
 
 	assert(uv_thread_self()==modinst->thread->thread);
 
@@ -762,14 +762,14 @@ void iot_device_connection_t::process_driver_ready(void) { //runs in client thre
 		};
 	}
 	switch(modinst->type) {
-		case IOT_MODINSTTYPE_NODE: {
+		case IOT_MODTYPE_NODE: {
 			outlog_debug("Device input %d of node id=%" IOT_PRIiotid " attached to driver instance %u", 
 				int(clientview.index), modinst->data.node.model->node_id, unsigned(clientview.driver.miid.iid));
 			static_cast<iot_node_base*>(modinst->instance)->device_attached(&clientview);
 			break;
 		}
-		case IOT_MODINSTTYPE_DRIVER: //list all illegal types
-		case IOT_MODINSTTYPE_DETECTOR:
+		case IOT_MODTYPE_DRIVER: //list all illegal types
+		case IOT_MODTYPE_DETECTOR:
 			assert(false);
 			return;
 	}
@@ -796,13 +796,13 @@ void iot_device_connection_t::process_close_client(iot_threadmsg_t* msg) { //cli
 	assert(!d2c.reader_closed);
 
 	switch(modinst->type) {
-		case IOT_MODINSTTYPE_NODE: {
+		case IOT_MODTYPE_NODE: {
 			outlog_debug("Device input %d of node module %u detached", int(clientview.index), modinst->module->dbitem->module_id);
 			static_cast<iot_node_base*>(modinst->instance)->device_detached(&clientview);
 			break;
 		}
-		case IOT_MODINSTTYPE_DRIVER: //list all illegal types
-		case IOT_MODINSTTYPE_DETECTOR:
+		case IOT_MODTYPE_DRIVER: //list all illegal types
+		case IOT_MODTYPE_DETECTOR:
 			assert(false);
 			iot_release_msg(msg);
 			return;

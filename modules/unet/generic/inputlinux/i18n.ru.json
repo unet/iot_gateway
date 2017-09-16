@@ -1,0 +1,7 @@
+{
+	"det_title": "Linux input devices detector",
+	"det_descr": "Allows to utilize devices provided by Linux 'input' abstraction layer. Requires 'evdev' kernel module. Periodically scans list of available input devices.",
+
+	"drv_title": "Linux input devices driver",
+	"drv_descr": "Provides support for arbitrary hardware devices through Linux 'input' abstraction layer. Supported input event types: KEY (allows to process key presses from any keyboard, mouse pointer, joystick, motherboard keys etc), LED (allows to control state of LEDs on keyboard, motherboard etc), SND (allows to play sound using system speaker)."
+}

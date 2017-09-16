@@ -17,6 +17,8 @@
 extern uv_loop_t *main_loop;
 
 const uint32_t iot_kernel_version=IOT_KERNEL_VERSION;
+uint32_t IOT_ABI_TOKEN_NAME=IOT_KERNEL_VERSION;
+
 
 uint32_t iot_parse_version(const char* s) {
 	uint32_t vers, patch, rev;
@@ -206,7 +208,7 @@ int iot_hwdevcontype_metaclass::from_json(json_object* json, char* buf, size_t b
 	}
 	if(!contype) return IOT_ERROR_BAD_DATA;
 
-	const iot_hwdevcontype_metaclass* metaclass=iot_hwdevcontype_metaclass::findby_contype_id(contype);
+	const iot_hwdevcontype_metaclass* metaclass=iot_hwdevcontype_metaclass::findby_id(contype);
 	if(!metaclass) return IOT_ERROR_NOT_FOUND;
 
 	val=NULL;
@@ -215,7 +217,7 @@ int iot_hwdevcontype_metaclass::from_json(json_object* json, char* buf, size_t b
 	return metaclass->p_from_json(val, buf, bufsize, obj);
 }
 
-const iot_hwdevcontype_metaclass* iot_hwdevcontype_metaclass::findby_contype_id(iot_type_id_t contype_id, bool try_load) {
+const iot_hwdevcontype_metaclass* iot_hwdevcontype_metaclass::findby_id(iot_type_id_t contype_id, bool try_load) {
 	return libregistry->find_devcontype(contype_id, try_load);
 }
 
@@ -297,7 +299,7 @@ iot_devifacetype_metaclass::iot_devifacetype_metaclass(iot_type_id_t id, /*const
 	ver=ver_;
 	parentlib=parentlib_;
 }
-const iot_devifacetype_metaclass* iot_devifacetype_metaclass::findby_ifacetype_id(iot_type_id_t ifacetype_id, bool try_load) {
+const iot_devifacetype_metaclass* iot_devifacetype_metaclass::findby_id(iot_type_id_t ifacetype_id, bool try_load) {
 	return libregistry->find_devifacetype(ifacetype_id, try_load);
 }
 
@@ -309,7 +311,7 @@ int iot_devifacetype_metaclass::from_json(json_object* json, char* buf, size_t b
 	}
 	if(!ifacetype) return IOT_ERROR_BAD_DATA;
 
-	const iot_devifacetype_metaclass* metaclass=iot_devifacetype_metaclass::findby_ifacetype_id(ifacetype);
+	const iot_devifacetype_metaclass* metaclass=iot_devifacetype_metaclass::findby_id(ifacetype);
 	if(!metaclass) return IOT_ERROR_NOT_FOUND;
 
 	val=NULL;

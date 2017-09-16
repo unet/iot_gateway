@@ -70,13 +70,14 @@ manifest_proc: $(kernel_ccobjs) manifest_proc.o static_modules modules
 
 coreregistry: manifest.part.json registry.part.json
 
-manifest.part%json registry.part%json : manifest.json $(kernel_ccobjs) manifest_proc.o
+manifest.part%json registry.part%json : manifest.json $(kernel_ccobjs) manifest_proc.o reg_ids.json dev_ids.json
 	./manifest_proc CORE
 
 registry: manifest_proc coreregistry
 	@echo Generating manifests and registry...
 	@set -e; for i in $(BUNDLELIST) $(DYNBUNDLELIST); do $(MAKE) -C $(MODULESDIR)/$$i registry; done
 	./manifest_proc REGISTRY registry.part.json $(foreach lib,$(BUNDLELIST) $(DYNBUNDLELIST),$(MODULESDIR)/$(lib)/registry.part.json)
+	@echo SUCCESS!!!
 
 kernel: $(kernel_ccobjs)
 

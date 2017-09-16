@@ -236,6 +236,6 @@ public:
 };
 
 
-void iot_process_module_bug(iot_module_item_t *module);
+void iot_process_module_bug(iot_any_module_item_t *module_item);
 
 #endif //IOT_KERNEL_H

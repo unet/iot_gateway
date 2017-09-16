@@ -42,7 +42,7 @@ struct iot_device_connection_t {
 		struct { //remote client_host
 			uint32_t module_id;
 			iot_mi_inputid_t mi_inputid;
-			iot_modinstance_type_t type;
+			iot_module_type_t type;
 		} remote;
 		struct local_client_data_t {
 			iot_modinstance_locker modinstlk; //local client_host

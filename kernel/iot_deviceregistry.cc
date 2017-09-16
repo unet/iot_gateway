@@ -105,9 +105,9 @@ void hwdev_registry_t::remove_hwdev_bydetector(const iot_miid_t &miid) {
 }
 
 //after loading new driver module tries to find suitable hw device
-void hwdev_registry_t::try_find_hwdev_for_driver(iot_module_item_t* module) {
+void hwdev_registry_t::try_find_hwdev_for_driver(iot_driver_module_item_t* module) {
 	assert(uv_thread_self()==main_thread);
-	assert(module->state[IOT_MODINSTTYPE_DRIVER]==IOT_MODULESTATE_OK);
+	assert(module->state==IOT_MODULESTATE_OK);
 
 	if(need_exit) return;
 

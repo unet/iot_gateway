@@ -1,4 +1,5 @@
 {
+	"platforms" : ["all"],
 	"ifacetypes": {
 		"toneplayer" : {
 			"title": "Music tone player",

@@ -1,16 +1,22 @@
-{ //REGISTRY OF ASSIGNED IDs. This file is updated when new module or object type is registered in unet registry. USED DURING BUILD PROCESS ONLY
-	"modules" : {
-		"unet/generic/kbd:eventsrc" : 1001,
-		"unet/generic/kbd:oper_keystate" : 1002,
-		"unet/generic/kbd:leds" : 1003,
-		"unet/generic/toneplayer:basic" : 1004,
-	},
-	"contypes": {
-//		"LinuxInput": 1001
-	},
-	"ifacetypes": {
-		"keyboard": 1000,
-		"activatable": 1001
-//		"toneplayer": 1001
-	}
+{
+   "contypes" : {
+      "linuxinput" : 2000
+   },
+   "detector_modules" : {
+      "unet/generic/inputlinux:det" : 1000
+   },
+   "driver_modules" : {
+      "unet/generic/inputlinux:drv" : 1000
+   },
+   "ifacetypes" : {
+      "activatable" : 1000,
+      "keyboard" : 1001,
+      "toneplayer" : 2000
+   },
+   "node_modules" : {
+      "unet/generic/kbd:eventsrc" : 1001,
+      "unet/generic/kbd:leds" : 1002,
+      "unet/generic/kbd:oper_keystate" : 1003,
+      "unet/generic/toneplayer:basic" : 1004
+   }
 }

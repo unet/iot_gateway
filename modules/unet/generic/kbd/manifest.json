@@ -1,32 +1,31 @@
 {
-	"modules": {
+	"platforms" : ["all"],
+	"node_modules": {
 		"eventsrc" : {
 			"title": "Keys Event Source",
 			"description": "Processes events from up to 3 keyboards",
-			"provides": {
-				"node": {
-					"params_tmpl": {
-						//"shortDescr":
-						//"longDescr":
-						//"propList":
-						//"newDialog":
-						//"editDialog":
-					},
-					"device_connections": {
-						"input1": {
-							"description":"Any device with Keyboard interface"
-						},
-						"input2": {
-							"description":"Any device with Keyboard interface"
-						},
-						"input3": {
-							"description":"Any device with Keyboard interface",
-						}
-					},
-					"value_outputs": {
-						"state": {
-							"description": "State of all keys",
-						}
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"device_connections": {
+				"input1": {
+					"description":"Any device with Keyboard interface"
+				},
+				"input2": {
+					"description":"Any device with Keyboard interface"
+				},
+				"input3": {
+					"description":"Any device with Keyboard interface",
+				}
+			},
+			"links": {
+				"value_outputs": {
+					"state": {
+						"description": "State of all keys",
 					}
 				}
 			}
@@ -34,55 +33,51 @@
 		"oper_keystate" : {
 			"title": "Keys state checker",
 			"description": "Checks if specific keys are depressed",
-			"provides": {
-				"node": {
-					"params_tmpl": {
-						//"shortDescr":
-						//"longDescr":
-						//"propList":
-						//"newDialog":
-						//"editDialog":
-					},
-					"value_inputs": {
-						"in": {
-							"description": "Input for keyboard state bitmap",
-						}
-					},
-					"value_outputs": {
-						"out": {
-							"description": "Logical result of state comparison",
-						}
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"links": {
+				"value_inputs": {
+					"in": {
+						"description": "Input for keyboard state bitmap",
+					}
+				},
+				"value_outputs": {
+					"out": {
+						"description": "Logical result of state comparison",
 					}
 				}
 			}
 		},
 		"leds" : {
 			"title": "Keyboard LEDs control",
-			"description": "Module to control 3 LEDs of typical PC keyboards: Caps Lock, Num Lock and Scroll Lock",
-			"provides": {
-				"node": {
-					"params_tmpl": {
-						//"shortDescr":
-						//"longDescr":
-						//"propList":
-						//"newDialog":
-						//"editDialog":
+			"description": ["txt", "leds_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"device_connections": {
+				"dev": {
+					"description":"Any device with Activatable interface with at least 3 lines, but PC keyboard is assumed by inputs naming."
+				},
+			},
+			"links": {
+				"value_inputs": {
+					"numlk": {
+						"description": "NumLock LED state control input (or activatable line 0).",
 					},
-					"device_connections": {
-						"dev": {
-							"description":"Any device with Activatable interface with at least 3 lines, but PC keyboard is assumed by inputs naming"
-						},
+					"capslk": {
+						"description": "CapsLock LED state control input (or activatable line 1).",
 					},
-					"value_inputs": {
-						"numlk": {
-							"description": "NumLock LED state input",
-						},
-						"capslk": {
-							"description": "CapsLock LED state input",
-						},
-						"scrlk": {
-							"description": "ScrollLock LED state input",
-						}
+					"scrlk": {
+						"description": "ScrollLock LED state control input (or activatable line 2).",
 					}
 				}
 			}

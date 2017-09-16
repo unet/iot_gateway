@@ -29,8 +29,18 @@ extern int min_loglevel;
 
 #define IOT_VERSION_COMPOSE(ver, patchlevel, revision) ((((ver)&0xFF)<<24)|(((patchlevel)&0xFF)<<16)|((revision)&0xFFFF))
 
-#define IOT_KERNEL_VERSION IOT_VERSION_COMPOSE(0, 1, 10)
+#define IOT_KERNEL_VERSIONNUM 0
+#define IOT_KERNEL_PATCHLEVEL 1
+#define IOT_KERNEL_REVISION 10
 
+#define IOT_CORE_ABI_VERSION 0
+#define IOT_CORE_ABI_VERSION_STR ECB_STRINGIFY(IOT_CORE_ABI_VERSION)
+
+
+#define IOT_KERNEL_VERSION IOT_VERSION_COMPOSE(IOT_KERNEL_VERSIONNUM, IOT_KERNEL_PATCHLEVEL, IOT_KERNEL_REVISION)
+//#define IOT_ABI_TOKEN_NAME ECB_CONCAT(iot_abi_token ## _, ECB_CONCAT(IOT_KERNEL_VERSIONNUM, ECB_CONCAT(_, IOT_KERNEL_PATCHLEVEL)))
+
+extern uint32_t IOT_ABI_TOKEN_NAME;
 
 #ifndef DAEMON_KERNEL
 ////////////////////////////////////////////////////////////////////
@@ -58,8 +68,9 @@ extern int min_loglevel;
 #define IOT_LIBSYMBOL_NAME(prefix, name) ECB_CONCAT(prefix, ECB_CONCAT(IOT_VENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLEDIR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLENAME, ECB_CONCAT(_, name)))))))
 #define IOT_LIBSYMBOL(name) ECB_CONCAT(name, ECB_CONCAT(IOT_VENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLEDIR, ECB_CONCAT(__, IOT_BUNDLENAME)))))
 
-//builds unique identifier name for exporting moduleconfig_t object from module bundle
-#define IOT_MODULE_CONF(modulename) IOT_LIBSYMBOL_NAME(iot_modconf ## _, _ ## modulename)
+#define IOT_DETECTOR_MODULE_CONF(modulename) IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _detector_modconf ## _), _ ## modulename)
+#define IOT_DRIVER_MODULE_CONF(modulename) IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _driver_modconf ## _), _ ## modulename)
+#define IOT_NODE_MODULE_CONF(modulename) IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _node_modconf ## _), _ ## modulename)
 
 //builds unique identifier name for exporting moduleconfig_t object from module bundle
 #define IOT_LIBVERSION_VAR IOT_LIBSYMBOL(iot_libversion ## _)
@@ -109,6 +120,10 @@ extern int min_loglevel;
 
 
 #define IOT_CONFIG_NODE_ERROUT_LABEL "err"			//label for implicit error output of node
+
+#define IOT_LIBNAME_MAXLEN 64
+#define IOT_MODULENAME_MAXLEN 60
+#define IOT_TYPENAME_MAXLEN 32
 
 #define IOT_MEMOBJECT_MAXPLAINSIZE 8192
 
@@ -321,7 +336,8 @@ struct iot_driver_client_base;
 struct iot_conn_clientview;
 struct iot_conn_drvview;
 
-#include "iot_hwdevreg.h"
+#include "iot_hwdevcontype.h"
+#include "iot_deviface.h"
 
 //struct with connection-type specific data about hardware device
 //struct iot_hwdev_fulldata_t {
@@ -435,39 +451,8 @@ struct iot_device_detector_base : public iot_module_instance_base {
 
 
 
-struct iot_iface_device_detector_t {
-	uint32_t //num_hwdevcontypes:2,				//number of items in hwdevcontypes array in this struct. 
-			accepts_manual:1,					//flag that detector accepts manual device specs (must conform to manifest)
-			cpu_loading:2;						//average level of cpu loading of started detector. 0 - minimal loading (unlimited such tasks can work in same working thread), 3 - very high loading (this module requires separate working thread for detector)
-
-	//Called to create single instance of detector. Must check provided device and return status telling if device is supported. Always called in main thread
-	//Return values:
-	//0 - device is supported, instance was successfully created and saved to *instance.
-	//IOT_ERROR_DEVICE_NOT_SUPPORTED - device is not supported, so next driver module should be tried
-	//IOT_ERROR_INVALID_DEVICE_DATA - provided custom_len is invalid or custom_data has invalid structure. next driver can be tried
-	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be disabled. next driver should be tried
-	//IOT_ERROR_TEMPORARY_ERROR - driver init should be retried after some time (with progressive interval). next driver should be tried immediately.
-	//other errors treated as IOT_ERROR_CRITICAL_BUG
-	int (*init_instance)(iot_device_detector_base** instance, uv_thread_t thread);
-
-	//called to deinit single instance.
-	//Return values:
-	//0 - success
-	//any other error leaves instance in hang state
-	int (*deinit_instance)(iot_device_detector_base* instance);		//always called in main thread
-
-
-	//Can be called to check if detector can work on current system. Can be called from any thread and is not connected with specific instance.
-	//Return values:
-	//0 - system is supported, instance can be created
-	//IOT_ERROR_DEVICE_NOT_SUPPORTED - device is not supported
-	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked
-	//IOT_ERROR_TEMPORARY_ERROR - check failed for temporary reason
-	//other errors treated as IOT_ERROR_CRITICAL_BUG
-	int (*check_system)(void);
-
-//	const iot_type_id_t* hwdevcontypes;			//pointer to array (with num_devcontypes items) of device connection types this module can manipulate
-};
+//struct iot_iface_device_detector_t {
+//};
 
 
 
@@ -576,45 +561,8 @@ struct iot_devifaces_list {
 };
 
 
-struct iot_iface_device_driver_t {
-	uint32_t //num_devclassids:4,					//number of classes of data in state struct and number of items in stclassids list in this struct. can be 0 if driver can only be used directly in same bundle
-			num_hwdevcontypes:4,					//number of items in hwdevcontypes array in this struct. can be zero if hwdevices with any contype must be tried
-			cpu_loading:2;						//average level of cpu loading of started driver instance. 0 - minimal loading (unlimited such tasks can work in same working thread), 3 - very high loading (this module requires separate working thread per instance)
-
-	const iot_hwdev_localident** hwdevcontypes;		//pointer to array (with num_devcontypes items) of device connection types this module can probe. i.e. module knows how to check hwdevice identity for such contypes.
-
-
-	//Called to create instance of driver. Must check provided device and return status telling if device is supported. Always called in main thread
-	//Return values:
-	//0 - device is supported, instance was successfully created and saved to *instance.
-	//IOT_ERROR_DEVICE_NOT_SUPPORTED - device is not supported, so next driver module should be tried
-	//IOT_ERROR_INVALID_DEVICE_DATA - provided custom_len is invalid or custom_data has invalid structure. next driver can be tried
-	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be disabled. next driver should be tried
-	//IOT_ERROR_TEMPORARY_ERROR - driver init should be retried after some time (with progressive interval). next driver should be tried immediately.
-	//other errors treated as IOT_ERROR_CRITICAL_BUG
-	int (*init_instance)(iot_device_driver_base**instance, uv_thread_t thread, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, iot_devifaces_list* devifaces);
-
-	//called to deinit instance.
-	//Return values:
-	//0 - success
-	//any other error leaves instance in hang state
-	int (*deinit_instance)(iot_device_driver_base* instance);		//always called in main thread
-
-
-	//Can be called to check if driver can work with specific device. Can be called from any thread and is not connected with specific instance.
-	//Return values:
-	//0 - device is supported, instance can be created
-	//IOT_ERROR_DEVICE_NOT_SUPPORTED - device is not supported
-	//IOT_ERROR_INVALID_DEVICE_DATA - provided custom_len is invalid or custom_data has invalid structure
-	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked
-	//IOT_ERROR_TEMPORARY_ERROR - check failed for temporary reason
-	//other errors treated as IOT_ERROR_CRITICAL_BUG
-	int (*check_device)(const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data);
-
-//	iot_devifacetype_id_t* devclassids;			//pointer to array (with num_devclassids items) of class ids of device interfaces which this module provides
-
-//	iot_device_operations_t* devops;			//pointer to array (with num_devclassids items) of map of supported operations for corresponding device class
-};
+//struct iot_iface_device_driver_t {
+//};
 
 
 ///////////////////////////NODE INTERFACE
@@ -679,51 +627,60 @@ struct iot_node_valuelinkcfg_t {
 	const char *label; //unique label to name input/output ('err' is reserved for implicit error output). node link in iot configuration is matched by this label plus 'v' as beginning. maximum length is IOT_CONFIG_LINKLABEL_MAXLEN.
 //	const char *descr; //text description of link. If begins with '[', then must be evaluated as template
 	iot_valuenotion_id_t notion_id;//unit for values if not 0
-	iot_valuetype_id_t vclass_id;
+	iot_valuetype_id_t valuetype_id;
 
 	bool is_compatible(iot_valuetype_id_t cls) const {
-		return vclass_id==cls;
+		return valuetype_id==cls;
 	}
 	bool is_compatible(const iot_datatype_base *val) const { //NULL means undef and is compatible with any value type
-		return val==NULL || (!val->is_msg() && vclass_id==static_cast<const iot_valuetype_BASE *>(val)->get_classid());
+		return val==NULL || (!val->is_msg() && valuetype_id==static_cast<const iot_valuetype_BASE *>(val)->get_classid());
 	}
 	bool is_compatible(const iot_node_valuelinkcfg_t *op) const {
-		return vclass_id==op->vclass_id;
+		return valuetype_id==op->valuetype_id;
 	}
 }; //describes type of value for corresponding labeled VALUE input/output
 
 struct iot_node_msglinkcfg_t {
 	const char *label; //unique label to name input (can overlap with labels of outputs but not with value inputs). node input in iot configuration is matched by this label. max length is IOT_CONFIG_LINKLABEL_MAXLEN
-	const char *descr; //text description of link. If begins with '[', then must be evaluated as template
-	uint8_t num_msgtypes; //number of items in msgtype_id[]. maximum is IOT_CONFIG_MAX_NODE_MSGLINKTYPES. value 255 means any message is accepted, msgtype_id can be NULL in such case
-	const iot_msgtype_id_t *msgtype_id; //pointer to array (with num_msgtypees items) of message class ids this link can accept/transmit
+//	const char *descr; //text description of link. If begins with '[', then must be evaluated as template
+	uint8_t num_msgtype_ids; //number of items in msgtype_id[]. maximum is IOT_CONFIG_MAX_NODE_MSGLINKTYPES. value 255 means any message is accepted, msgtype_id can be NULL in such case
+	const iot_msgtype_id_t *msgtype_ids; //pointer to array (with num_msgtypes items) of message class ids this link can accept/transmit
 
 	bool is_compatible(iot_msgtype_id_t cls) const { //checks if provided data class ID is compatible (is present in list)
-		for(uint8_t i=0;i<num_msgtypes;i++) if(msgtype_id[i]==cls) return true;
+		for(uint8_t i=0;i<num_msgtype_ids;i++) if(msgtype_ids[i]==cls) return true;
 		return false;
 	}
 	bool is_compatible(const iot_datatype_base *val) const { //NULL means undef and is compatible with any value type
 		return val!=NULL && val->is_msg() && is_compatible(static_cast<const iot_msgtype_BASE *>(val)->get_classid());
 	}
 	bool is_compatible(const iot_node_msglinkcfg_t* op) const { //checks if msgtype_id are compatible (there is at least one common class ID)
-		for(uint8_t i=0;i<num_msgtypes;i++) if(op->is_compatible(msgtype_id[i])) return true;
+		for(uint8_t i=0;i<num_msgtype_ids;i++) if(op->is_compatible(msgtype_ids[i])) return true;
 		return false;
 	}
 };
 
-struct iot_iface_node_t {
-//	const char *descr; //text description of module node functionality. If begins with '[', then must be evaluated as template
-//	const char *params_tmpl; //set of templates for showing/editing user params of node. can be NULL if module has no params
-	uint32_t num_devices:3,						//number of devices this module should be connected to. limited by IOT_CONFIG_MAX_NODE_DEVICES
-			num_valueoutputs:5,					//number of output value lines this module provides. limited by IOT_CONFIG_MAX_NODE_VALUEOUTPUTS. "error" output
+//struct iot_iface_node_t {
+//};
+/////////////////////////////
+
+
+
+struct iot_node_moduleconfig_t {
+	uint32_t version;								//module version (0xHHLLREVI = HH.LL:REVI), use macro IOT_VERSION_COMPOSE(version, patchlevel, revision)
+
+	int (*init_module)(void);						//always called in main thread. once after loading (if loaded dynamically) or during startup (if compiled in statically)
+	int (*deinit_module)(void);						//called in main thread before unloading dynamically loaded module
+
+	uint8_t cpu_loading,						//average level of cpu loading of started instance. 0 - minimal loading (unlimited number of such tasks can work
+			num_devices,						//number of devices this module should be connected to. limited by IOT_CONFIG_MAX_NODE_DEVICES
+			num_valueoutputs,					//number of output value lines this module provides. limited by IOT_CONFIG_MAX_NODE_VALUEOUTPUTS. "error" output
 												//is always present and not counted here
-			num_valueinputs:5,					//number of input value lines this module accepts. limited by IOT_CONFIG_MAX_NODE_VALUEINPUTS
-			num_msgoutputs:5,					//number of message output lines this module provides.. limited by IOT_CONFIG_MAX_NODE_MSGOUTPUTS.
-			num_msginputs:5,					//number of message input lines this module accepts. limited by IOT_CONFIG_MAX_NODE_MSGINPUTS.
-			cpu_loading:2,						//average level of cpu loading of started instance. 0 - minimal loading (unlimited number of such tasks can work
+			num_valueinputs,					//number of input value lines this module accepts. limited by IOT_CONFIG_MAX_NODE_VALUEINPUTS
+			num_msgoutputs,						//number of message output lines this module provides.. limited by IOT_CONFIG_MAX_NODE_MSGOUTPUTS.
+			num_msginputs;						//number of message input lines this module accepts. limited by IOT_CONFIG_MAX_NODE_MSGINPUTS.
 												//in same working thread), 3 - very high loading (this module requires separate working thread per instance)
-			is_persistent:1,					//flag that node is persistent (event source or executor). otherwise (when 0) it is operator
-			is_sync:1;							//flag that node (with at least one explicit output) can and promises to transform input signals into output explicitly
+	uint8_t is_persistent,						//flag that node is persistent (event source or executor). otherwise (when 0) it is operator
+			is_sync;							//flag that node (with at least one explicit output) can and promises to transform input signals into output explicitly
 												//and unambiguously. i.e. after getting notification about input signals update such node must either give corresponding
 												//output signals immediately (or say 'no change') or give promise to answer later. such nodes can generate output
 												//signals unrelated to inputs change BUT they must be ready for loosing intermediate signals (i.e. in series of
@@ -758,21 +715,87 @@ struct iot_iface_node_t {
 
 //	iot_state_classid* stclassids;				//pointer to array (with num_stclassids items) of class ids of state data which this module provides
 };
-/////////////////////////////
 
-
-
-
-struct iot_moduleconfig_t {
+struct iot_driver_moduleconfig_t {
 	uint32_t version;								//module version (0xHHLLREVI = HH.LL:REVI), use macro IOT_VERSION_COMPOSE(version, patchlevel, revision)
 
 	int (*init_module)(void);						//always called in main thread. once after loading (if loaded dynamically) or during startup (if compiled in statically)
 	int (*deinit_module)(void);						//called in main thread before unloading dynamically loaded module
 
-	//Only one interface pointer must be assigned. First found non-NULL value is used in such order:
-	const iot_iface_node_t *iface_node;
-	const iot_iface_device_driver_t* iface_device_driver;
-	const iot_iface_device_detector_t *iface_device_detector;
+	uint8_t cpu_loading;							//average level of cpu loading of started driver instance. 0 - minimal loading (unlimited such tasks can work in same working thread), 3 - very high loading (this module requires separate working thread per instance)
+	uint8_t num_hwdev_idents;						//number of items in hwdev_idents array in this struct. can be zero if hwdevices with any contype must be tried
+	uint8_t num_dev_ifaces;							//number of items in dev_ifaces array in this struct. should not be zero as this disables ability to find driver matching requirements of some node
+
+	const iot_hwdev_localident** hwdev_idents;		//pointer to array (with num_hwdev_idents items) of device idents this module can probe. i.e. module knows how to check hwdevice identity for such contypes or can filter by vendor etc.
+	const iot_devifacetype_metaclass** dev_ifaces;	//pointer to array (with num_dev_ifaces items) of device iface metaclasses this driver can provide. used for manifests only
+
+
+	//Called to create instance of driver. Must check provided device and return status telling if device is supported. Always called in main thread
+	//Return values:
+	//0 - device is supported, instance was successfully created and saved to *instance.
+	//IOT_ERROR_DEVICE_NOT_SUPPORTED - device is not supported, so next driver module should be tried
+	//IOT_ERROR_INVALID_DEVICE_DATA - provided custom_len is invalid or custom_data has invalid structure. next driver can be tried
+	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be disabled. next driver should be tried
+	//IOT_ERROR_TEMPORARY_ERROR - driver init should be retried after some time (with progressive interval). next driver should be tried immediately.
+	//other errors treated as IOT_ERROR_CRITICAL_BUG
+	int (*init_instance)(iot_device_driver_base**instance, uv_thread_t thread, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, iot_devifaces_list* devifaces);
+
+	//called to deinit instance.
+	//Return values:
+	//0 - success
+	//any other error leaves instance in hang state
+	int (*deinit_instance)(iot_device_driver_base* instance);		//always called in main thread
+
+
+	//Can be called to check if driver can work with specific device. Can be called from any thread and is not connected with specific instance.
+	//Return values:
+	//0 - device is supported, instance can be created
+	//IOT_ERROR_DEVICE_NOT_SUPPORTED - device is not supported
+	//IOT_ERROR_INVALID_DEVICE_DATA - provided custom_len is invalid or custom_data has invalid structure
+	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked
+	//IOT_ERROR_TEMPORARY_ERROR - check failed for temporary reason
+	//other errors treated as IOT_ERROR_CRITICAL_BUG
+	int (*check_device)(const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data);
+
+//	iot_device_operations_t* devops;			//pointer to array (with num_devclassids items) of map of supported operations for corresponding device class
+};
+
+struct iot_detector_moduleconfig_t {
+	uint32_t version;								//module version (0xHHLLREVI = HH.LL:REVI), use macro IOT_VERSION_COMPOSE(version, patchlevel, revision)
+
+	int (*init_module)(void);						//always called in main thread. once after loading (if loaded dynamically) or during startup (if compiled in statically)
+	int (*deinit_module)(void);						//called in main thread before unloading dynamically loaded module
+
+	uint8_t cpu_loading;						//average level of cpu loading of started detector. 0 - minimal loading (unlimited such tasks can work in same working thread), 3 - very high loading (this module requires separate working thread for detector)
+//	uint32_t //num_hwdevcontypes:2,				//number of items in hwdevcontypes array in this struct. 
+
+	//Called to create single instance of detector. Must check provided device and return status telling if device is supported. Always called in main thread
+	//Return values:
+	//0 - device is supported, instance was successfully created and saved to *instance.
+	//IOT_ERROR_DEVICE_NOT_SUPPORTED - device is not supported, so next driver module should be tried
+	//IOT_ERROR_INVALID_DEVICE_DATA - provided custom_len is invalid or custom_data has invalid structure. next driver can be tried
+	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be disabled. next driver should be tried
+	//IOT_ERROR_TEMPORARY_ERROR - driver init should be retried after some time (with progressive interval). next driver should be tried immediately.
+	//other errors treated as IOT_ERROR_CRITICAL_BUG
+	int (*init_instance)(iot_device_detector_base** instance, uv_thread_t thread, json_object *json_cfg, json_object *manual_devices);
+
+	//called to deinit single instance.
+	//Return values:
+	//0 - success
+	//any other error leaves instance in hang state
+	int (*deinit_instance)(iot_device_detector_base* instance);		//always called in main thread
+
+
+	//Can be called to check if detector can work on current system. Can be called from any thread and is not connected with specific instance.
+	//Return values:
+	//0 - system is supported, instance can be created
+	//IOT_ERROR_DEVICE_NOT_SUPPORTED - device is not supported
+	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked
+	//IOT_ERROR_TEMPORARY_ERROR - check failed for temporary reason
+	//other errors treated as IOT_ERROR_CRITICAL_BUG
+	int (*check_system)(void);
+
+//	const iot_type_id_t* hwdevcontypes;			//pointer to array (with num_devcontypes items) of device connection types this module can manipulate
 };
 
 

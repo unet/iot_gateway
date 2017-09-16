@@ -179,15 +179,15 @@ void iot_nodemodel::try_create_instance(void) {
 	int err;
 
 	if(!module) { //retry to load module first
-		iot_module_item_t *module_=NULL;
-		err=modules_registry->load_module(cfgitem->module_id, &module_);
+		iot_node_module_item_t *module_=NULL;
+		err=modules_registry->load_node_module(cfgitem->module_id, &module_);
 
 		if(err) {
 			outlog_error("Error loading module with ID %u to instantiate node_id %" IOT_PRIiotid ": %s", cfgitem->module_id, node_id, kapi_strerror(err));
 			return; //TODO retry later
 		}
 
-		node_iface=module_->config->iface_node;
+		node_iface=module_->config;
 		if(!node_iface) {
 			outlog_error("Incapable instanciation of module ID %u as NODE for node_id %" IOT_PRIiotid, cfgitem->module_id, node_id);
 			return; //TODO retry only if module is reloaded
@@ -400,7 +400,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 			}
 			//check value type is compatible
 			if(!node_iface->valueinput[j].is_compatible(item->data)) {
-				outlog_debug("New value for input %u of node %" IOT_PRIiotid " is not compatible with config (is type %u, must be type %u)", unsigned(j), node_id, item->data ? static_cast<const iot_valuetype_BASE*>(item->data)->get_classid() : 0, node_iface->valueinput[j].vclass_id);
+				outlog_debug("New value for input %u of node %" IOT_PRIiotid " is not compatible with config (is type %u, must be type %u)", unsigned(j), node_id, item->data ? static_cast<const iot_valuetype_BASE*>(item->data)->get_classid() : 0, node_iface->valueinput[j].valuetype_id);
 				continue;
 			}
 			if(item->data==valuesignals[j].prev_value || (item->data && valuesignals[j].prev_value && *(item->data)==*(valuesignals[j].prev_value))) continue; //value unchanged

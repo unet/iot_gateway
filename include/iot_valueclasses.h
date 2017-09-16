@@ -11,12 +11,98 @@
 ///////////////////////////Specific declarations for external modules
 ////////////////////////////////////////////////////////////////////
 //macro for generating ID of custom module specific class of state data
-#define IOT_VALUECLASS_CUSTOM(module_id, index) (((module_id)<<8)+((index) & 0x7f)*2)
+//#define IOT_VALUECLASS_CUSTOM(module_id, index) (((module_id)<<8)+((index) & 0x7f)*2)
 
-#define IOT_MSGCLASS_CUSTOM(module_id, index) (((module_id)<<8)+((index) & 0x7f)*2+1)
+//#define IOT_MSGCLASS_CUSTOM(module_id, index) (((module_id)<<8)+((index) & 0x7f)*2+1)
 
 #endif
+/*
+class iot_datatype_metaclass {
+	iot_type_id_t datatype_id;
+	uint32_t ver; //version of realization of metaclass and all its child classes
+	const char *type_name;
+	const char *parentlib;
 
+	PACKED(
+		struct serialize_base_t {
+			iot_type_id_t datatype_id;
+		}
+	);
+public:
+	iot_datatype_metaclass* next, *prev; //non-NULL prev means that class is registered and both next and prev are used. otherwise only next is used
+													//for position in pending registration list
+
+protected:
+	iot_datatype_metaclass(iot_type_id_t id, const char* type, uint32_t ver, const char* parentlib=IOT_CURLIBRARY); //id must be zero for non-builtin types. type cannot be NULL
+
+public:
+	iot_datatype_metaclass(const iot_datatype_metaclass&) = delete; //block copy-construtors and default assignments
+
+	iot_type_id_t get_id(void) const {
+		return datatype_id;
+	}
+	uint32_t get_version(void) const {
+		return ver;
+	}
+	const char* get_name(void) const {
+		return type_name;
+	}
+	const char* get_library(void) const {
+		return parentlib;
+	}
+	void set_id(iot_type_id_t id) {
+		if(datatype_id>0 || !id) {
+			assert(false);
+			return;
+		}
+		datatype_id=id;
+	}
+
+	char* get_fullname(char *buf, size_t bufsize, int *doff=NULL) const { //doff - delta offset. will be incremented on number of written chars
+	//returns buf value
+		if(!bufsize) return buf;
+		int len=snprintf(buf, bufsize, "DATATYPE:%s", type_name);
+		if(doff) *doff += len>=int(bufsize-1) ? int(bufsize-1) : len;
+		return buf;
+	}
+	static const iot_datatype_metaclass* findby_id(iot_type_id_t datatype_id, bool try_load=true);
+
+	int serialized_size(const iot_datavalue* obj) const {
+		int res=p_serialized_size(obj);
+		if(res<0) return res;
+		return sizeof(serialize_base_t)+res;
+	}
+	int serialize(const iot_datavalue* obj, char* buf, size_t bufsize) const; //returns error code or 0 on success
+	static int deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_datavalue*& obj) {
+		//returns negative error code OR number of bytes written to provided buffer OR required buffer size when buf is NULL
+		//returned value can be zero (regardless buf was NULL or not) to indicate that buffer was not used (or is not necessary) and that obj was assigned to
+		//correct precreated object (may be statically allocated)
+		if(datasize<sizeof(serialize_base_t)) return IOT_ERROR_BAD_DATA;
+		serialize_base_t *p=(serialize_base_t*)data;
+		iot_type_id_t datatype_id=repack_type_id(p->datatype_id);
+		if(!datatype_id) return IOT_ERROR_BAD_DATA;
+		const iot_datatype_metaclass* metaclass=iot_datatype_metaclass::findby_id(datatype_id);
+		if(!metaclass) return IOT_ERROR_NOT_FOUND;
+		obj=NULL;
+		return metaclass->p_deserialize(data+sizeof(serialize_base_t), datasize-sizeof(serialize_base_t), buf, bufsize, obj);
+	}
+	//returns negative error code OR number of bytes written to provided buffer OR required buffer size when buf is NULL
+	//returned value can be zero (regardless buf was NULL or not) to indicate that buffer was not used (or is not necessary) and that obj was assigned to
+	//correct precreated object (may be statically allocated)
+	//default_datatype is used when no "datatype_id" property in provided json or it is incorrect. Thus if it is 0, then required.
+	static int from_json(json_object* json, char* buf, size_t bufsize, const iot_datavalue*& obj, iot_type_id_t default_datatype=0);
+
+	//returns negative error code (IOT_ERROR_NO_MEMORY) or zero on success
+	int to_json(const iot_datavalue* obj, json_object* &dst) const;
+
+private:
+	virtual int p_serialized_size(const iot_datavalue* obj) const = 0;
+	virtual int p_serialize(const iot_datavalue* obj, char* buf, size_t bufsize) const = 0; //returns error code or 0 on success
+	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_datavalue*& obj) const = 0;
+	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_datavalue*& obj) const = 0;
+	virtual int p_to_json(const iot_datavalue* obj, json_object* &dst) const = 0;
+};
+*/
 
 typedef iot_datatype_id_t iot_valuetype_id_t;	//type for class ID of value for node input/output. MUST HAVE 0 in lower bit
 
