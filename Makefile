@@ -12,8 +12,8 @@ endif
 
 APPNAME := iotdaemon$(APPEXT)
 
-KERNELDIR := kernel
-KERNELINCLUDEDIR := kernel/include
+COREDIR := core
+COREINCLUDEDIR := core/include
 
 #BUNDLELIST := unet/generic/inputlinux unet/generic/kbd unet/generic/toneplayer
 BUNDLELIST := $(shell sed -n -r 's,^\s*([a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*y\s*$$,\1,p' bundles.cfg | tr '\n' ' ')
@@ -21,23 +21,23 @@ BUNDLELIST := $(shell sed -n -r 's,^\s*([a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a
 DYNBUNDLELIST := $(shell sed -n -r 's,^\s*([a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*m\s*$$,\1,p' bundles.cfg | tr '\n' ' ')
 
 common_hdr := $(wildcard $(INCLUDEDIR)/*.h)
-kernel_hdr := $(common_hdr) $(wildcard $(KERNELINCLUDEDIR)/*.h)
-kernel_autohdr := 
-kernel_ccsrc := $(wildcard $(KERNELDIR)/*.cc)
-kernel_ccobjs := $(patsubst %.cc,%.o,$(kernel_ccsrc))
+core_hdr := $(common_hdr) $(wildcard $(COREINCLUDEDIR)/*.h)
+core_autohdr := 
+core_ccsrc := $(wildcard $(COREDIR)/*.cc)
+core_ccobjs := $(patsubst %.cc,%.o,$(core_ccsrc))
 
 
-KERNELCFLAGS := -I$(KERNELINCLUDEDIR) -Iauto -DDAEMON_KERNEL
+CORECFLAGS := -I$(COREINCLUDEDIR) -Iauto -DDAEMON_CORE
 
 
 mod-objs :=
 
-PHONY := all kernel static_modules modules clean registry coreregistry
+PHONY := all core static_modules modules clean registry coreregistry
 
 all: $(APPNAME) modules registry
 
 clean:
-	$(RM) $(KERNELDIR)/*.o *.o $(APPNAME) manifest_proc auto/iot_linkedlibs.cc auto/iot_dynlibs.cc auto/iot_modulesdb.h auto/bundles.cmd registry.part.json manifest.part.json dev_ids.json
+	$(RM) $(COREDIR)/*.o *.o $(APPNAME) manifest_proc auto/iot_linkedlibs.cc auto/iot_dynlibs.cc auto/iot_modulesdb.h auto/bundles.cmd registry.part.json manifest.part.json dev_ids.json
 	@echo Cleaning modules...
 	@for i in $(BUNDLELIST) $(DYNBUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i clean; done
 
@@ -58,20 +58,26 @@ auto/iot_dynlibs.cc: bundles.cfg
 #	@sed -n -r 's~^\s*([a-zA-Z0-9_]*[a-zA-Z0-9])/([a-zA-Z0-9_]*[a-zA-Z0-9])/([a-zA-Z0-9_]*[a-zA-Z0-9]):([a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*(.*)~#ifdef IOT_MODULESDB_BUNDLE_\1__\2__\3\niot_regitem_module_t("\4", \&iot_moddb_bundle_\1__\2__\3, \5),\n#else\niot_regitem_module_t("\1/\2/\3:\4", NULL, \5),\n#endif~p' $< >$@
 
 
-$(APPNAME): $(kernel_ccobjs) main.o static_modules
+$(APPNAME): $(core_ccobjs) main.o static_modules
 	@# $(eval mod-objs :=)
-	@# $(foreach mod,$(BUNDLELIST),$(eval $(call readfileval,$(MODULESDIR)/$(mod)/$(KERNELDEPSFILE))))
-	$(CXX) $(LDFLAGS) $(kernel_ccobjs) main.o $(mod-objs) -o $@  $(LDLIBS)
+	@# $(foreach mod,$(BUNDLELIST),$(eval $(call readfileval,$(MODULESDIR)/$(mod)/$(COREDEPSFILE))))
+	$(CXX) $(LDFLAGS) $(core_ccobjs) main.o $(mod-objs) -o $@  $(LDLIBS)
 
-manifest_proc: $(kernel_ccobjs) manifest_proc.o static_modules modules
+manifest_proc: $(core_ccobjs) manifest_proc.o static_modules modules
 	@# $(eval mod-objs :=)
-	@# $(foreach mod,$(BUNDLELIST),$(eval $(call readfileval,$(MODULESDIR)/$(mod)/$(KERNELDEPSFILE))))
-	$(CXX) $(LDFLAGS) $(kernel_ccobjs) manifest_proc.o $(mod-objs) -o $@  $(LDLIBS)
+	@# $(foreach mod,$(BUNDLELIST),$(eval $(call readfileval,$(MODULESDIR)/$(mod)/$(COREDEPSFILE))))
+	$(CXX) $(LDFLAGS) $(core_ccobjs) manifest_proc.o $(mod-objs) -o $@  $(LDLIBS)
 
 coreregistry: manifest.part.json registry.part.json
 
-manifest.part%json registry.part%json : manifest.json $(kernel_ccobjs) manifest_proc.o reg_ids.json dev_ids.json
+manifest.part%json registry.part%json : manifest.json $(core_ccobjs) manifest_proc.o reg_ids.json dev_ids.json
 	./manifest_proc CORE
+
+dev_ids.json:;
+
+#manifest.part%json : manifest.json
+#	./manifest_proc CORE
+
 
 registry: manifest_proc coreregistry
 	@echo Generating manifests and registry...
@@ -79,15 +85,15 @@ registry: manifest_proc coreregistry
 	./manifest_proc REGISTRY registry.part.json $(foreach lib,$(BUNDLELIST) $(DYNBUNDLELIST),$(MODULESDIR)/$(lib)/registry.part.json)
 	@echo SUCCESS!!!
 
-kernel: $(kernel_ccobjs)
+core: $(core_ccobjs)
 
-$(KERNELDIR)/iot_libregistry.o: auto/iot_linkedlibs.cc
+$(COREDIR)/iot_libregistry.o: auto/iot_linkedlibs.cc
 
 
-$(kernel_ccobjs) main.o manifest_proc.o: $(kernel_autohdr) $(kernel_hdr)
+$(core_ccobjs) main.o manifest_proc.o: $(core_autohdr) $(core_hdr)
 
-$(kernel_ccobjs) main.o manifest_proc.o: %.o : %.cc
-	$(CXX) $(KERNELCFLAGS) $(CXXFLAGS) -o $@ -c $<
+$(core_ccobjs) main.o manifest_proc.o: %.o : %.cc
+	$(CXX) $(CORECFLAGS) $(CXXFLAGS) -o $@ -c $<
 
 manifest_proc.o: auto/iot_dynlibs.cc
 

@@ -41,15 +41,13 @@ public:
 		if(!bufsize) return buf;
 
 		int len=0;
-		get_fullname(buf, bufsize, &len);
-		if(int(bufsize)-len>2) {
-			int len1;
+		get_fulltypename(buf, bufsize, &len);
+		if(len<int(bufsize)-2) {
 			if(istmpl)
-				len1=snprintf(buf+len, bufsize-len, "{TMPL: sublines from %u to %u}", unsigned(tmpl.min_sublines), unsigned(tmpl.max_sublines));
+				len+=snprintf(buf+len, bufsize-len, "{TMPL: sublines from %u to %u}", unsigned(tmpl.min_sublines), unsigned(tmpl.max_sublines));
 			else
-				len1=snprintf(buf+len, bufsize-len, "{sublines=%u}",unsigned(spec.num_sublines));
-			if(len1>=int(bufsize)-len) len=bufsize-1;
-				else len+=len1;
+				len+=snprintf(buf+len, bufsize-len, "{sublines=%u}",unsigned(spec.num_sublines));
+			if(len>=int(bufsize)) len=int(bufsize)-1;
 		}
 		if(doff) *doff+=len;
 		return buf;
@@ -105,12 +103,14 @@ private:
 
 		serialize_header_t *h=(serialize_header_t*)buf;
 		if(obj->istmpl) {
+			if(bufsize<sizeof(serialize_tmpl_t)) return IOT_ERROR_NO_BUFSPACE;
 			h->format=repack_uint32(uint32_t(1));
 			h->istmpl=1;
 			serialize_tmpl_t *t=(serialize_tmpl_t*)(h+1);
 			t->min_sublines=repack_uint16(obj->tmpl.min_sublines);
 			t->max_sublines=repack_uint16(obj->tmpl.max_sublines);
 		} else {
+			if(bufsize<sizeof(serialize_spec_t)) return IOT_ERROR_NO_BUFSPACE;
 			h->format=repack_uint32(uint32_t(1));
 			h->istmpl=0;
 			serialize_spec_t *s=(serialize_spec_t*)(h+1);

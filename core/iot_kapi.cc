@@ -16,8 +16,8 @@
 
 extern uv_loop_t *main_loop;
 
-const uint32_t iot_kernel_version=IOT_KERNEL_VERSION;
-uint32_t IOT_ABI_TOKEN_NAME=IOT_KERNEL_VERSION;
+const uint32_t iot_core_version=IOT_CORE_VERSION;
+uint32_t IOT_ABI_TOKEN_NAME=IOT_CORE_VERSION;
 
 
 uint32_t iot_parse_version(const char* s) {
@@ -119,7 +119,7 @@ int iot_module_instance_base::kapi_self_abort(int errcode) { //can be called in 
 	return modinst->stop(false, true);
 }
 
-int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valuetype_BASE** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_msgtype_BASE** msgs) {
+int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_datavalue** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_datavalue** msgs) {
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk || modinstlk.modinst->instance!=this) {
 		assert(false);
@@ -135,7 +135,7 @@ int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uin
 	return model->do_update_outputs(reason_eventid, num_values, valueout_indexes, values, num_msgs, msgout_indexes, msgs);
 }
 
-const iot_valuetype_BASE* iot_node_base::kapi_get_outputvalue(uint8_t index) {
+const iot_datavalue* iot_node_base::kapi_get_outputvalue(uint8_t index) {
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk || modinstlk.modinst->instance!=this) {
 		assert(false);
@@ -174,7 +174,8 @@ const char* kapi_err_name(int err) {
 	return "UNKNOWN";
 }
 
-iot_hwdevcontype_metaclass::iot_hwdevcontype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver_, const char* parentlib_) {
+iot_hwdevcontype_metaclass::iot_hwdevcontype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver_, const char* parentlib_) :
+				version(ver_), type_name(type), parentlib(parentlib_) {
 	assert(type!=NULL && parentlib_!=NULL);
 
 	iot_hwdevcontype_metaclass* &head=iot_libregistry_t::devcontype_pendingreg_head(), *cur;
@@ -193,9 +194,9 @@ iot_hwdevcontype_metaclass::iot_hwdevcontype_metaclass(iot_type_id_t id, /*const
 	prev=NULL;
 	contype_id=id;
 //	vendor_name=vendor;
-	type_name=type;
-	ver=ver_;
-	parentlib=parentlib_;
+//	type_name=type;
+//	ver=ver_;
+//	parentlib=parentlib_;
 }
 
 
@@ -276,7 +277,8 @@ int iot_hwdev_ident::from_json(json_object* json, iot_hwdev_ident* obj, char* id
 
 
 
-iot_devifacetype_metaclass::iot_devifacetype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver_, const char* parentlib_) {
+iot_devifacetype_metaclass::iot_devifacetype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver_, const char* parentlib_) : 
+				version(ver_), type_name(type), parentlib(parentlib_) {
 	assert(type!=NULL && parentlib_!=NULL);
 
 	iot_devifacetype_metaclass* &head=iot_libregistry_t::devifacetype_pendingreg_head(), *cur;
@@ -295,9 +297,9 @@ iot_devifacetype_metaclass::iot_devifacetype_metaclass(iot_type_id_t id, /*const
 	prev=NULL;
 	ifacetype_id=id;
 //	vendor_name=vendor;
-	type_name=type;
-	ver=ver_;
-	parentlib=parentlib_;
+//	type_name=type;
+//	ver=ver_;
+//	parentlib=parentlib_;
 }
 const iot_devifacetype_metaclass* iot_devifacetype_metaclass::findby_id(iot_type_id_t ifacetype_id, bool try_load) {
 	return libregistry->find_devifacetype(ifacetype_id, try_load);
@@ -354,6 +356,9 @@ int iot_devifacetype_metaclass::serialize(const iot_deviface_params* obj, char* 
 
 const iot_devifacetype_metaclass_keyboard iot_devifacetype_metaclass_keyboard::object;
 const iot_devifacetype_metaclass_activatable iot_devifacetype_metaclass_activatable::object;
+const iot_datatype_metaclass_boolean iot_datatype_metaclass_boolean::object;
+const iot_datatype_metaclass_nodeerrorstate iot_datatype_metaclass_nodeerrorstate::object;
+const iot_datatype_metaclass_bitmap iot_datatype_metaclass_bitmap::object;
 //iot_devifacetype_toneplayer iot_devifacetype_toneplayer::object;
 
 uint32_t iot_deviface_params_keyboard::get_d2c_maxmsgsize(void) const {
@@ -373,6 +378,7 @@ uint32_t iot_deviface_params_activatable::get_d2c_maxmsgsize(void) const {
 	assert(!istmpl);
 	return iot_deviface__activatable_BASE::get_maxmsgsize();
 }
+
 /*
 uint32_t iot_devifacetype_toneplayer::get_c2d_maxmsgsize(const char* cls_data) const {
 	return iot_deviface__toneplayer_BASE::get_maxmsgsize();
@@ -381,16 +387,76 @@ uint32_t iot_devifacetype_toneplayer::get_d2c_maxmsgsize(const char* cls_data) c
 	return iot_deviface__toneplayer_BASE::get_maxmsgsize();
 }
 */
+
+
+iot_datatype_metaclass::iot_datatype_metaclass(iot_type_id_t id, const char* type, uint32_t ver_, bool static_values, bool fixedsize_values, const char* parentlib_) : 
+				version(ver_), type_name(type), parentlib(parentlib_), fixedsize_values(fixedsize_values), static_values(static_values) {
+	assert(type!=NULL && parentlib_!=NULL);
+
+	iot_datatype_metaclass* &head=iot_libregistry_t::datatype_pendingreg_head(), *cur;
+	cur=head;
+	while(cur) {
+		if(cur==this) {
+			outlog_error("Double instanciation of Data Type %s!", type);
+			assert(false);
+			return;
+		}
+		cur=cur->next;
+	}
+	next=head;
+	head=this;
+
+	prev=NULL;
+	datatype_id=id;
+//	vendor_name=vendor;
+//	type_name=type;
+//	ver=ver_;
+//	parentlib=parentlib_;
+}
+
+iot_valuenotion::iot_valuenotion(iot_type_id_t id, const char* type, uint32_t ver_, const char* parentlib_) : 
+				version(ver_), type_name(type), parentlib(parentlib_) {
+	assert(type!=NULL && parentlib_!=NULL);
+
+	iot_valuenotion* &head=iot_libregistry_t::notiontype_pendingreg_head(), *cur;
+	cur=head;
+	while(cur) {
+		if(cur==this) {
+			outlog_error("Double instanciation of Value Notion %s!", type);
+			assert(false);
+			return;
+		}
+		cur=cur->next;
+	}
+	next=head;
+	head=this;
+
+	prev=NULL;
+	notion_id=id;
+//	vendor_name=vendor;
+//	type_name=type;
+//	ver=ver_;
+//	parentlib=parentlib_;
+}
+
+
 //use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created
-constexpr iot_valuetype_nodeerrorstate iot_valuetype_nodeerrorstate::const_noinst(iot_valuetype_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
+//const iot_valuetype_nodeerrorstate iot_valuetype_nodeerrorstate::const_noinst(iot_valuetype_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
 
-constexpr iot_valuetype_boolean iot_valuetype_boolean::const_true(true);
-constexpr iot_valuetype_boolean iot_valuetype_boolean::const_false(false);
+//const iot_valuetype_boolean iot_valuetype_boolean::const_true(true);
+//const iot_valuetype_boolean iot_valuetype_boolean::const_false(false);
 
-constexpr iot_valuenotion_keycode iot_valuenotion_keycode::iface;
-constexpr iot_valuenotion_degcelcius iot_valuenotion_degcelcius::iface;
-constexpr iot_valuenotion_degfahrenheit iot_valuenotion_degfahrenheit::iface;
+const iot_valuenotion_keycode iot_valuenotion_keycode::object;
+const iot_valuenotion_degcelcius iot_valuenotion_degcelcius::object;
+const iot_valuenotion_degfahrenheit iot_valuenotion_degfahrenheit::object;
 
+
+
+const/*expr*/ iot_datavalue_boolean iot_datavalue_boolean::const_true(true);
+const/*expr*/ iot_datavalue_boolean iot_datavalue_boolean::const_false(false);
+
+//use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created
+const/*expr*/ iot_datavalue_nodeerrorstate iot_datavalue_nodeerrorstate::const_noinst(iot_datavalue_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
 
 
 

@@ -20,10 +20,6 @@ class iot_hwdev_details;
 
 class iot_hwdevcontype_metaclass { //base abstract class for specifc device contype metaclass singleton objects 
 	iot_type_id_t contype_id;
-	uint32_t ver; //version of realization of metaclass and all its child classes
-//	const char *vendor_name; //is NULL for built-in types
-	const char *type_name;
-	const char *parentlib;
 
 	PACKED(
 		struct serialize_base_t {
@@ -31,6 +27,11 @@ class iot_hwdevcontype_metaclass { //base abstract class for specifc device cont
 		}
 	);
 public:
+	const uint32_t version; //version of realization of metaclass and all its child classes
+//	const char *vendor_name; //is NULL for built-in types
+	const char *const type_name;
+	const char *const parentlib;
+
 	iot_hwdevcontype_metaclass* next, *prev; //non-NULL prev means that class is registered and both next and prev are used. otherwise only next is used
 													//for position in pending registration list
 
@@ -43,18 +44,6 @@ public:
 	iot_type_id_t get_id(void) const {
 		return contype_id;
 	}
-	const char* get_name(void) const {
-		return type_name;
-	}
-	const char* get_library(void) const {
-		return parentlib;
-	}
-	uint32_t get_version(void) const {
-		return ver;
-	}
-//	const char* get_vendor(void) const {
-//		return vendor_name;
-//	}
 	void set_id(iot_type_id_t id) {
 		if(contype_id>0 || !id) {
 			assert(false);
@@ -62,6 +51,18 @@ public:
 		}
 		contype_id=id;
 	}
+//	const char* get_name(void) const {
+//		return type_name;
+//	}
+//	const char* get_library(void) const {
+//		return parentlib;
+//	}
+//	uint32_t get_version(void) const {
+//		return ver;
+//	}
+//	const char* get_vendor(void) const {
+//		return vendor_name;
+//	}
 	char* get_fullname(char *buf, size_t bufsize, int *doff=NULL) const { //doff - delta offset. will be incremented on number of written chars
 	//returns buf value
 		if(!bufsize) return buf;
@@ -158,7 +159,7 @@ public:
 	void invalidate(void) { //can be used on allocated objects of derived classes or on internal buffer of iot_hwdev_ident_buffered
 		meta=NULL;
 	}
-	char* get_fullname(char *buf, size_t bufsize, int* doff=NULL) const {
+	char* get_fulltypename(char *buf, size_t bufsize, int* doff=NULL) const {
 		if(meta) return meta->get_fullname(buf, bufsize, doff);
 
 		if(!bufsize) return buf;
@@ -166,8 +167,8 @@ public:
 		if(doff) *doff += len>=int(bufsize-1) ? int(bufsize-1) : len;
 		return buf;
 	}
-	const char* get_name(void) const {
-		if(meta) return meta->get_name();
+	const char* get_typename(void) const {
+		if(meta) return meta->type_name;
 		return "INVALID";
 	}
 
@@ -204,7 +205,7 @@ public:
 		if(!bufsize) return buf;
 
 		int len=0;
-		get_fullname(buf, bufsize, &len);
+		get_fulltypename(buf, bufsize, &len);
 		if(int(bufsize)-len>2) {
 			buf[len++]='{';
 			sprint_addr(buf+len, bufsize-len, &len);
@@ -468,4 +469,4 @@ struct iot_hwdev_ident_buffered : public iot_hwdev_ident { //same as iot_hwdev_i
 
 
 
-#endif //IOT_HWDEVREG_H
+#endif //IOT_HWDEVCONTYPE_H

@@ -9,7 +9,7 @@
 #include "iot_daemonlib.h"
 #include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 #include "iot_configregistry.h"
 
 
@@ -1068,7 +1068,7 @@ void iot_config_item_node_t::execute(bool forceasync) {
 			if(in->is_msg()) { //msg
 				if(in->inject_msg) {
 					assert(num_insignals<notifyupdate->numalloced);
-					notifyupdate->item[num_insignals++]={in->real_index, in->inject_msg}; //incref unchanged because we MOVE value
+					notifyupdate->item[num_insignals++]={in->real_index, true, in->inject_msg}; //incref unchanged because we MOVE value
 					in->inject_msg=NULL;
 				}
 				for(iot_config_item_link_t* link=in->outs_head; link; link=link->next_output) { //loop by all valid outputs connected to current input
@@ -1076,18 +1076,18 @@ void iot_config_item_node_t::execute(bool forceasync) {
 					link->is_undelivered=false;
 					if(link->prev_msg) {
 						assert(num_insignals<notifyupdate->numalloced);
-						notifyupdate->item[num_insignals++]={in->real_index, link->prev_msg};
+						notifyupdate->item[num_insignals++]={in->real_index, true, link->prev_msg};
 						link->prev_msg=NULL; //incref unchanged because we MOVE value
 					}
 					if(link->current_msg) {
 						assert(num_insignals<notifyupdate->numalloced);
-						notifyupdate->item[num_insignals++]={in->real_index, link->current_msg};
+						notifyupdate->item[num_insignals++]={in->real_index, true, link->current_msg};
 						link->current_msg=NULL; //incref unchanged because we MOVE value
 					}
 				}
 			} else {
 				assert(num_insignals<notifyupdate->numalloced);
-				notifyupdate->item[num_insignals++]={in->real_index, in->current_value}; //COPY value
+				notifyupdate->item[num_insignals++]={in->real_index, false, in->current_value}; //COPY value
 				if(in->current_value) in->current_value->incref(); //incref
 			}
 		}

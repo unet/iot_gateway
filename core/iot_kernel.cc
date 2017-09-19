@@ -7,7 +7,7 @@
 #include "uv.h"
 #include "iot_module.h"
 #include "iot_daemonlib.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 
 //correspondence between cpu_loading indexes and points which every modinstance adds to thread total loading estimation
 static const uint16_t iot_thread_loading[4] = {
@@ -301,7 +301,7 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 			iot_modinstance_locker modinstlk=modules_registry->get_modinstance(msg->miid);
 			iot_modinstance_item_t* modinst=modinstlk.modinst;
 
-			if(msg->is_kernel) { //msg for kernel
+			if(msg->is_core) { //msg for core
 				switch(msg->code) {
 					case IOT_MSG_THREAD_SHUTDOWN: //request to current thread to stop
 						assert(uv_thread_self()!=main_thread);
@@ -549,7 +549,7 @@ printf("Got empty update from node %" IOT_PRIiotid " for event %" PRIu64 "\n", m
 						break;
 					}
 					default:
-outlog_debug("got unprocessed non-kernel message %u", unsigned(msg->code));
+outlog_debug("got unprocessed non-core message %u", unsigned(msg->code));
 						break;
 				}
 			}
@@ -563,7 +563,7 @@ outlog_debug("got unprocessed non-kernel message %u", unsigned(msg->code));
 //IOT_ERROR_CRITICAL_BUG - in release mode assertion failed
 //IOT_ERROR_NO_MEMORY
 int iot_prepare_msg(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_item_t* modinst, uint8_t bytearg, void* data, size_t datasize, 
-		iot_threadmsg_datamem_t datamem, bool is_kernel, iot_memallocator* allocator) {
+		iot_threadmsg_datamem_t datamem, bool is_core, iot_memallocator* allocator) {
 		
 		if(!data) {
 			assert(datasize==0);
@@ -669,7 +669,7 @@ int iot_prepare_msg(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_i
 		if(modinst) msg->miid=modinst->get_miid();
 			else msg->miid.clear();
 		msg->datasize=datasize;
-		if(is_kernel) msg->is_kernel=1;
+		if(is_core) msg->is_core=1;
 
 		return 0;
 errexit:
@@ -702,7 +702,7 @@ void iot_release_msg(iot_threadmsg_t *&msg, bool nofree_msgmemblock) { //nofree_
 		msg->intarg=0;
 //		if(!msg->is_msginstreserv) msg->miid.clear();
 		msg->datasize=0;
-		msg->is_kernel=0;
+		msg->is_core=0;
 		msg->code=IOT_MSG_INVALID;
 	}
 	if(msg->is_msgmemblock) {

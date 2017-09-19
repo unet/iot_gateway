@@ -2,6 +2,11 @@
    "contypes" : {
       "linuxinput" : 2000
    },
+   "datatypes" : {
+      "bitmap" : 1002,
+      "boolean" : 1001,
+      "nodeerrorstate" : 1000
+   },
    "detector_modules" : {
       "unet/generic/inputlinux:det" : 1000
    },
@@ -14,9 +19,14 @@
       "toneplayer" : 2000
    },
    "node_modules" : {
-      "unet/generic/kbd:eventsrc" : 1001,
-      "unet/generic/kbd:leds" : 1002,
-      "unet/generic/kbd:oper_keystate" : 1003,
-      "unet/generic/toneplayer:basic" : 1004
+      "unet/generic/kbd:eventsrc" : 1000,
+      "unet/generic/kbd:leds" : 1001,
+      "unet/generic/kbd:oper_keystate" : 1002,
+      "unet/generic/toneplayer:basic" : 1003
+   },
+   "notiontypes" : {
+      "degcelcius" : 1000,
+      "degfahrenheit" : 1001,
+      "keycode" : 1002
    }
 }

@@ -79,7 +79,7 @@ ifeq ($(BUILDTYPE),m)								#build as dynamic module
 CFLAGS += $(DYNCFLAGS)
 DEPBUNDLES = 
 
-all: $(BUILDTYPEFILE) rmkerneldeps $(library-name).$(SOSUFFIX)
+all: $(BUILDTYPEFILE) rmcoredeps $(library-name).$(SOSUFFIX)
 
 $(library-name).$(SOSUFFIX): $(objs) $(BASEDIR)/auto/bundles.cmd
 	@# $(foreach dep,$(dependency-bundles),$(if $(filter y m,$(call getbuildtype1,$(subst /, ,$(dep)))),good,$(error Dependency library $(dep) of $(FULLBUNDLENAME) is disabled from build, enable it in bundles.cfg)))
@@ -103,10 +103,10 @@ manifest.part%json registry.part%json : manifest.json $(BASEDIR)/manifest_proc $
 
 else ifeq ($(BUILDTYPE),y)							#build for static inclusion
 
-all: $(BUILDTYPEFILE) checkdepsstatic rmkerneldeps $(objs) $(KERNELDEPSFILE)
+all: $(BUILDTYPEFILE) checkdepsstatic rmcoredeps $(objs) $(COREDEPSFILE)
 
-$(KERNELDEPSFILE):
-	@echo "mod-objs += $(addprefix $(MODULESDIR)/$(FULLBUNDLENAME)/,$(objs))" > $(KERNELDEPSFILE)
+$(COREDEPSFILE):
+	@echo "mod-objs += $(addprefix $(MODULESDIR)/$(FULLBUNDLENAME)/,$(objs))" > $(COREDEPSFILE)
 
 
 ##Check that build type for current library wasn't changed
@@ -124,7 +124,7 @@ manifest.part%json registry.part%json : manifest.json $(BASEDIR)/manifest_proc $
 
 else
 
-all: rmkerneldeps
+all: rmcoredeps
 
 ifeq ($(MAKELEVEL),0)
 $(warning Bundle $(library-vendor)/$(library-dir)/$(library-name) is excluded from build in bundles.cfg file)
@@ -136,8 +136,8 @@ endif  #IOTCFG_LOADED
 CFLAGS += -DIOT_VENDOR=$(library-vendor) -DIOT_BUNDLEDIR=$(library-dir) -DIOT_BUNDLENAME=$(library-name) -DIOT_LIBVERSION=$(library-version) -DIOT_LIBPATCHLEVEL=$(library-patchlevel) -DIOT_LIBREVISION=$(library-revision)
 
 
-rmkerneldeps:
-	@$(RM) $(KERNELDEPSFILE)
+rmcoredeps:
+	@$(RM) $(COREDEPSFILE)
 
 #do nothing. necessary for modtime comparison only in 'registry'-derived rule
 $(BASEDIR)/manifest_proc: ;
@@ -168,7 +168,7 @@ checkdepsstatic:
 	@# $(foreach dep,$(dependency-bundles),$(if $(filter y,$(call getbuildtype1,$(subst /, ,$(dep)))),good,$(error Dependency library $(dep) of $(FULLBUNDLENAME) is disabled from build or built as module, enable it to be statically built in bundles.cfg)))
 
 clean:
-	$(RM) *.o *.so $(BUILDTYPEFILE) $(DEPSFILE) $(KERNELDEPSFILE) registry.part.json manifest.part.json
+	$(RM) *.o *.so $(BUILDTYPEFILE) $(DEPSFILE) $(COREDEPSFILE) registry.part.json manifest.part.json
 
 
-.PHONY : all clean rmkerneldeps checkdeps checkdepsstatic registry
+.PHONY : all clean rmcoredeps checkdeps checkdepsstatic registry

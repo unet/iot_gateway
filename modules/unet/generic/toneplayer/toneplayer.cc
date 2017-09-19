@@ -196,7 +196,7 @@ private:
 	virtual int process_input_signals(iot_event_id_t eventid, uint8_t num_valueinputs, const iot_value_signal *valueinputs, uint8_t num_msginputs, const iot_msg_signal *msginputs) override {
 		play=false;
 		if(valueinputs[0].new_value) {
-			const iot_valuetype_boolean* v=iot_valuetype_boolean::cast(valueinputs[0].new_value);
+			const iot_datavalue_boolean* v=iot_datavalue_boolean::cast(valueinputs[0].new_value);
 			if(*v) play=true;
 		}
 		if(!device.conn) return 0;
@@ -247,8 +247,8 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(basic)={
 	.valueinput={
 		{
 			.label = "enable",
-			.notion_id = 0,
-			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
+			.notion = NULL,
+			.dataclass = &iot_datatype_metaclass_boolean::object
 		}
 	},
 	.msgoutput={},

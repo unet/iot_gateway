@@ -124,11 +124,15 @@ struct iot_regitem_module_t {
 };
 
 class iot_libregistry_t {
-	iot_devifacetype_metaclass *devifacetypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
 	iot_hwdevcontype_metaclass *devcontypes_head=NULL; //list of registered hwdevcontypes as list of addresses of metaclass instances
+	iot_devifacetype_metaclass *devifacetypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
+	iot_datatype_metaclass *datatypes_head=NULL; //list of registered hwdevcontypes as list of addresses of metaclass instances
+	iot_valuenotion *notiontypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
 
 	json_object* contypes_table=NULL;
 	json_object* ifacetypes_table=NULL;
+	json_object* datatypes_table=NULL;
+	json_object* notiontypes_table=NULL;
 	bool core_signature_valid=false; //TODO
 
 public:
@@ -136,6 +140,10 @@ public:
 	iot_libregistry_t(void) {
 		assert(libregistry==NULL);
 		libregistry=this;
+		//manual registration for several datatype metaclasses (which use constexpr object instance)
+//		iot_datatype_metaclass* &head=iot_libregistry_t::datatype_pendingreg_head();
+//		ULINKLIST_INSERTHEAD(const_cast<iot_datatype_metaclass_boolean*>(&iot_datatype_metaclass_boolean::object), head, next);
+//		ULINKLIST_INSERTHEAD(const_cast<iot_datatype_metaclass_nodeerrorstate*>(&iot_datatype_metaclass_nodeerrorstate::object), head, next);
 	}
 	~iot_libregistry_t(void) {
 		if(contypes_table) {
@@ -145,6 +153,10 @@ public:
 		if(ifacetypes_table) {
 			json_object_put(ifacetypes_table);
 			ifacetypes_table=NULL;
+		}
+		if(datatypes_table) {
+			json_object_put(datatypes_table);
+			datatypes_table=NULL;
 		}
 	}
 	bool is_libname_valid(const char* libname) { //check if provided libname is valid like "vendor/libdir/name" and each component starts with letter and contains only [A-Za-z0-9_], max len is 64
@@ -190,6 +202,24 @@ public:
 				return IOT_ERROR_BAD_DATA;
 			} else {
 				json_object_get(ifacetypes_table);
+			}
+		}
+		if(json_object_object_get_ex(reg, "datatypes", &datatypes_table)) {
+			if(!json_object_is_type(datatypes_table,  json_type_object)) {
+				outlog_error("Invalid data in lib registry! Top level 'datatypes' item must be a JSON-object");
+				datatypes_table=NULL;
+				return IOT_ERROR_BAD_DATA;
+			} else {
+				json_object_get(datatypes_table);
+			}
+		}
+		if(json_object_object_get_ex(reg, "notiontypes", &notiontypes_table)) {
+			if(!json_object_is_type(notiontypes_table,  json_type_object)) {
+				outlog_error("Invalid data in lib registry! Top level 'notiontypes' item must be a JSON-object");
+				notiontypes_table=NULL;
+				return IOT_ERROR_BAD_DATA;
+			} else {
+				json_object_get(notiontypes_table);
 			}
 		}
 		register_pending_metaclasses();
@@ -315,13 +345,13 @@ public:
 	const iot_devifacetype_metaclass* find_devifacetype(const char* name) {
 		const iot_devifacetype_metaclass* item=devifacetypes_head;
 		while(item) {
-			if(strcmp(item->get_name(), name)==0) return item;
+			if(strcmp(item->type_name, name)==0) return item;
 			item=item->next;
 		}
 		//for name search need to check pending list too
 		item=devifacetype_pendingreg_head();
 		while(item) {
-			if(strcmp(item->get_name(), name)==0) return item;
+			if(strcmp(item->type_name, name)==0) return item;
 			item=item->next;
 		}
 		return NULL;
@@ -342,17 +372,61 @@ public:
 	const iot_hwdevcontype_metaclass* find_devcontype(const char* name) {
 		const iot_hwdevcontype_metaclass* item=devcontypes_head;
 		while(item) {
-			if(strcmp(item->get_name(), name)==0) return item;
+			if(strcmp(item->type_name, name)==0) return item;
 			item=item->next;
 		}
 		//for name search need to check pending list too
 		item=devcontype_pendingreg_head();
 		while(item) {
-			if(strcmp(item->get_name(), name)==0) return item;
+			if(strcmp(item->type_name, name)==0) return item;
 			item=item->next;
 		}
 		return NULL;
 	}
+	const iot_datatype_metaclass* find_datatype(iot_type_id_t datatp, bool tryload) { //must run in main thread if tryload is true
+		if(!datatp) return NULL;
+		const iot_datatype_metaclass* item=datatypes_head;
+		while(item) {
+			if(item->get_id()==datatp) return item;
+			item=item->next;
+		}
+		if(tryload) {// && IOT_DEVCONTYPE_CUSTOM_MODULEID(datatp)>0) 
+			//TODO search in registry for bundle name
+//			if(!load_module(IOT_DEVCONTYPE_CUSTOM_MODULEID(datatp), NULL)) return find_devcontype(datatp, false);
+		}
+		return NULL;
+	}
+	const iot_datatype_metaclass* find_datatype(const char* name) {
+		const iot_datatype_metaclass* item=datatypes_head;
+		while(item) {
+			if(strcmp(item->type_name, name)==0) return item;
+			item=item->next;
+		}
+		//for name search need to check pending list too
+		item=datatype_pendingreg_head();
+		while(item) {
+			if(strcmp(item->type_name, name)==0) return item;
+			item=item->next;
+		}
+		return NULL;
+	}
+
+	const iot_valuenotion* find_notiontype(const char* name) {
+		const iot_valuenotion* item=notiontypes_head;
+		while(item) {
+			if(strcmp(item->type_name, name)==0) return item;
+			item=item->next;
+		}
+		//for name search need to check pending list too
+		item=notiontype_pendingreg_head();
+		while(item) {
+			if(strcmp(item->type_name, name)==0) return item;
+			item=item->next;
+		}
+		return NULL;
+	}
+
+
 
 
 	static iot_devifacetype_metaclass*& devifacetype_pendingreg_head(void) {
@@ -361,6 +435,14 @@ public:
 	}
 	static iot_hwdevcontype_metaclass*& devcontype_pendingreg_head(void) {
 		static iot_hwdevcontype_metaclass *head=NULL; //use function-scope static to guarantee initialization before first use
+		return head;
+	}
+	static iot_datatype_metaclass*& datatype_pendingreg_head(void) {
+		static iot_datatype_metaclass *head=NULL; //use function-scope static to guarantee initialization before first use
+		return head;
+	}
+	static iot_valuenotion*& notiontype_pendingreg_head(void) {
+		static iot_valuenotion *head=NULL; //use function-scope static to guarantee initialization before first use
 		return head;
 	}
 

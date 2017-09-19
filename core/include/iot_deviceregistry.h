@@ -17,7 +17,7 @@ struct iot_hwdevregistry_item_t;
 extern hwdev_registry_t* hwdev_registry;
 
 #include "iot_moduleregistry.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 
 #define IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV 8
 

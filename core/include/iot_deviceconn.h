@@ -12,7 +12,7 @@
 
 #include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 
 //space for IDs of device connections
 #define IOT_MAX_DEVICECONNECTIONS 16384

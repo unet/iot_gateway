@@ -7,7 +7,7 @@
 #include "iot_common.h"
 
 #include "iot_moduleregistry.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 #include "iot_configregistry.h"
 #include "iot_peerconnection.h"
 

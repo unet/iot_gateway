@@ -10,7 +10,7 @@
 #include "iot_moduleregistry.h"
 #include "iot_configregistry.h"
 #include "iot_peerconnection.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 
 
 iot_modules_registry_t *modules_registry=NULL;
@@ -123,7 +123,7 @@ int iot_driver_module_item_t::try_driver_create(iot_hwdevregistry_item_t* hwdev)
 		for(uint8_t i=0;i<drv_iface->num_hwdev_idents; i++) {
 			const iot_hwdev_localident* ident=drv_iface->hwdev_idents[i];
 			if(!ident || !ident->is_valid()) {
-				outlog_notice("Driver module '%s::%s' has invalid device ident at index %u: %s", dbitem->bundle->name, dbitem->module_name, unsigned(i), ident ? ident->get_name(): "NULL");
+				outlog_notice("Driver module '%s::%s' has invalid device ident at index %u: %s", dbitem->bundle->name, dbitem->module_name, unsigned(i), ident ? ident->get_typename(): "NULL");
 				continue;
 			}
 			if(ident->matches(hwdev->dev_ident.local)) {
@@ -630,7 +630,7 @@ void iot_modinstance_item_t::deinit(void) {
 	//modinst->miid.created MUST BE PRESERVED to guarantee uniqueness of created-miid pair
 }
 
-//find running module instance by miid. for use by kernel code in main thread only!!! does not lock modinstance structure
+//find running module instance by miid. for use by core code in main thread only!!! does not lock modinstance structure
 iot_modinstance_item_t* iot_modules_registry_t::find_modinstance_byid(const iot_miid_t &miid) {
 	assert(uv_thread_self()==main_thread);
 	if(!miid.iid || miid.iid>=IOT_MAX_MODINSTANCES) return NULL; //incorrect miid
@@ -747,7 +747,7 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 //	0 - success, driver instance created and started
 //	IOT_ERROR_NOT_READY - temporary success. instance start is async, result not available right now
 //	IOT_ERROR_DEVICE_NOT_SUPPORTED - success result, but module cannot work with provided device
-//	IOT_ERROR_TEMPORARY_ERROR - temporary kernel code error. module can be retried for this device later
+//	IOT_ERROR_TEMPORARY_ERROR - temporary core code error. module can be retried for this device later
 //	IOT_ERROR_MODULE_BLOCKED - error. module was blocked on temporary or constant basis
 //	IOT_ERROR_CRITICAL_ERROR - instanciation is invalid
 int iot_modules_registry_t::create_driver_modinstance(iot_driver_module_item_t* module, iot_hwdevregistry_item_t* devitem) {

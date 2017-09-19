@@ -10,7 +10,7 @@ CXX := g++
 MODULESDIR := modules
 INCLUDEDIR := include
 SOSUFFIX := so
-KERNELDEPSFILE := .kdeps
+COREDEPSFILE := .kdeps
 
 INCLUDEDIRS := -I$(BASEDIR) -I$(BASEDIR)/$(INCLUDEDIR) -I$(BASEDIR)/libuv/include -I$(BASEDIR)/json-c
 

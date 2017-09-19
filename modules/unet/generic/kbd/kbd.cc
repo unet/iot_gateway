@@ -28,7 +28,7 @@ struct eventsrc_instance : public iot_node_base {
 	struct {
 		const iot_conn_clientview *conn;
 		uint16_t maxkeycode;
-		uint32_t keystate[iot_valuetype_bitmap::get_maxkeycode()/32+1]; //current state of keys of device
+		uint32_t keystate[iot_datavalue_bitmap::get_maxkeycode()/32+1]; //current state of keys of device
 	} device[EVENTSRC_MAX_DEVICES]={}; //per device connection state
 
 
@@ -65,7 +65,7 @@ private:
 	//called to stop work of started instance. call can be followed by deinit or started again (if stop was manual, by user)
 	//Return values:
 	//0 - driver successfully stopped and can be deinited or restarted
-	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify kernel when stop is finished.
+	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify core when stop is finished.
 	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
 	//						cannot be called until stop reports OK)
 	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
@@ -141,7 +141,7 @@ private:
 //own methods
 	int update_outputs(void) { //set current common key state on output
 		uint16_t maxkeycode=0;
-		uint32_t keystate[iot_valuetype_bitmap::get_maxkeycode()/32+1]; //current state of keys of device
+		uint32_t keystate[iot_datavalue_bitmap::get_maxkeycode()/32+1]; //current state of keys of device
 		memset(keystate, 0, sizeof(keystate));
 
 		for(int i=0; i<EVENTSRC_MAX_DEVICES; i++) {
@@ -151,9 +151,9 @@ private:
 			for (unsigned j=0; j<n; j++) keystate[j]|=device[i].keystate[j];
 		}
 
-		char valbuf[iot_valuetype_bitmap::calc_datasize(maxkeycode)];
+		char valbuf[iot_datavalue_bitmap::calc_datasize(maxkeycode)];
 		uint8_t outn=0;
-		const iot_valuetype_BASE* outv=new(valbuf) iot_valuetype_bitmap(maxkeycode, keystate, maxkeycode/32+1, false);
+		const iot_datavalue* outv=new(valbuf) iot_datavalue_bitmap(maxkeycode, keystate, maxkeycode/32+1, false);
 		int err=kapi_update_outputs(NULL, 1, &outn, &outv);
 		if(err) {
 			kapi_outlog_error("Cannot update output value for node_id=%" IOT_PRIiotid ": %s, event lost", node_id, kapi_strerror(err));
@@ -217,8 +217,8 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(eventsrc)={
 	.valueoutput={
 		{
 			.label = "state",
-			.notion_id = IOT_VALUENOTION_KEYCODE,
-			.valuetype_id = IOT_VALUECLASSID_BITMAP
+			.notion = &iot_valuenotion_keycode::object,
+			.dataclass = &iot_datatype_metaclass_bitmap::object
 		}
 	},
 	.valueinput={
@@ -319,8 +319,8 @@ private:
 	virtual int process_input_signals(iot_event_id_t eventid, uint8_t num_valueinputs, const iot_value_signal *valueinputs, uint8_t num_msginputs, const iot_msg_signal *msginputs) override {
 		assert(num_valueinputs==1);
 		uint8_t outn=0;
-		const iot_valuetype_BASE* outv;
-		const iot_valuetype_bitmap *state=iot_valuetype_bitmap::cast(valueinputs[0].new_value);
+		const iot_datavalue* outv;
+		const iot_datavalue_bitmap *state=iot_datavalue_bitmap::cast(valueinputs[0].new_value);
 		if(!state) outv=NULL;
 		else if(!key) { //no correct key configured, check only shifts
 			unsigned i=0;
@@ -344,13 +344,13 @@ private:
 				}
 				break;
 			}
-			if(i>=NUM_KEYSTATE_SHIFTS) outv=&iot_valuetype_boolean::const_true;
-				else outv=&iot_valuetype_boolean::const_false;
+			if(i>=NUM_KEYSTATE_SHIFTS) outv=&iot_datavalue_boolean::const_true;
+				else outv=&iot_datavalue_boolean::const_false;
 		} else {
-			const iot_valuetype_BASE* cur_output=kapi_get_outputvalue(outn);
+			const iot_datavalue* cur_output=kapi_get_outputvalue(outn);
 
-			if(!cur_output || cur_output==&iot_valuetype_boolean::const_false) {
-				outv=&iot_valuetype_boolean::const_false;
+			if(!cur_output || cur_output==&iot_datavalue_boolean::const_false) {
+				outv=&iot_datavalue_boolean::const_false;
 				//condition for enabling output
 				if(state->test_code(key)) {
 					unsigned i=0;
@@ -374,11 +374,11 @@ private:
 						}
 						break;
 					}
-					if(i>=NUM_KEYSTATE_SHIFTS) outv=&iot_valuetype_boolean::const_true;
+					if(i>=NUM_KEYSTATE_SHIFTS) outv=&iot_datavalue_boolean::const_true;
 				}
 			} else {
 				//condition for disabling. look just as the state of 'key'
-				outv=state->test_code(key) ? &iot_valuetype_boolean::const_true : &iot_valuetype_boolean::const_false;
+				outv=state->test_code(key) ? &iot_datavalue_boolean::const_true : &iot_datavalue_boolean::const_false;
 			}
 		}
 		int err=kapi_update_outputs(&eventid, 1, &outn, &outv);
@@ -416,15 +416,15 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(oper_keystate)={
 	.valueoutput={
 		{
 			.label = "out",
-			.notion_id = 0,
-			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
+			.notion = NULL,
+			.dataclass = &iot_datatype_metaclass_boolean::object
 		}
 	},
 	.valueinput={
 		{
 			.label = "in",
-			.notion_id = IOT_VALUENOTION_KEYCODE,
-			.valuetype_id = IOT_VALUECLASSID_BITMAP
+			.notion = &iot_valuenotion_keycode::object,
+			.dataclass = &iot_datatype_metaclass_bitmap::object
 		}
 	},
 	.msgoutput={},
@@ -498,7 +498,7 @@ private:
 	//called to stop work of started instance. call can be followed by deinit or started again (if stop was manual, by user)
 	//Return values:
 	//0 - driver successfully stopped and can be deinited or restarted
-	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify kernel when stop is finished.
+	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify core when stop is finished.
 	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
 	//						cannot be called until stop reports OK)
 	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
@@ -570,7 +570,7 @@ private:
 		activate_bitmap=deactivate_bitmap=0;
 		for(int i=0;i<num_valueinputs;i++) {
 			if(!valueinputs[i].new_value) continue;
-			const iot_valuetype_boolean* v=iot_valuetype_boolean::cast(valueinputs[i].new_value);
+			const iot_datavalue_boolean* v=iot_datavalue_boolean::cast(valueinputs[i].new_value);
 			if(!v) continue;
 			if(*v) activate_bitmap|=1<<i;
 				else deactivate_bitmap|=1<<i;
@@ -629,18 +629,18 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(leds)={
 	.valueinput={
 		{
 			.label = "numlk",
-			.notion_id = 0,
-			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
+			.notion = NULL,
+			.dataclass = &iot_datatype_metaclass_boolean::object
 		},
 		{
 			.label = "capslk",
-			.notion_id = 0,
-			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
+			.notion = NULL,
+			.dataclass = &iot_datatype_metaclass_boolean::object
 		},
 		{
 			.label = "scrlk",
-			.notion_id = 0,
-			.valuetype_id = IOT_VALUECLASSID_BOOLEAN
+			.notion = NULL,
+			.dataclass = &iot_datatype_metaclass_boolean::object
 		}
 	},
 	.msgoutput={},

@@ -160,7 +160,7 @@ public:
 		if(!bufsize) return buf;
 
 		int len=0;
-		get_fullname(buf, bufsize, &len);
+		get_fulltypename(buf, bufsize, &len);
 		if(doff) *doff+=len;
 		return buf;
 	}

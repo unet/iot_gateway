@@ -10,7 +10,7 @@
 #include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
 #include "iot_deviceconn.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 
 
 static iot_connsid_t last_connsid=0; //holds last assigned device CONNection Struct ID

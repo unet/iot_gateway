@@ -29,20 +29,20 @@ extern int min_loglevel;
 
 #define IOT_VERSION_COMPOSE(ver, patchlevel, revision) ((((ver)&0xFF)<<24)|(((patchlevel)&0xFF)<<16)|((revision)&0xFFFF))
 
-#define IOT_KERNEL_VERSIONNUM 0
-#define IOT_KERNEL_PATCHLEVEL 1
-#define IOT_KERNEL_REVISION 10
+#define IOT_CORE_VERSIONNUM 0
+#define IOT_CORE_PATCHLEVEL 1
+#define IOT_CORE_REVISION 10
 
 #define IOT_CORE_ABI_VERSION 0
 #define IOT_CORE_ABI_VERSION_STR ECB_STRINGIFY(IOT_CORE_ABI_VERSION)
 
 
-#define IOT_KERNEL_VERSION IOT_VERSION_COMPOSE(IOT_KERNEL_VERSIONNUM, IOT_KERNEL_PATCHLEVEL, IOT_KERNEL_REVISION)
-//#define IOT_ABI_TOKEN_NAME ECB_CONCAT(iot_abi_token ## _, ECB_CONCAT(IOT_KERNEL_VERSIONNUM, ECB_CONCAT(_, IOT_KERNEL_PATCHLEVEL)))
+#define IOT_CORE_VERSION IOT_VERSION_COMPOSE(IOT_CORE_VERSIONNUM, IOT_CORE_PATCHLEVEL, IOT_CORE_REVISION)
+//#define IOT_ABI_TOKEN_NAME ECB_CONCAT(iot_abi_token ## _, ECB_CONCAT(IOT_CORE_VERSIONNUM, ECB_CONCAT(_, IOT_CORE_PATCHLEVEL)))
 
 extern uint32_t IOT_ABI_TOKEN_NAME;
 
-#ifndef DAEMON_KERNEL
+#ifndef DAEMON_CORE
 ////////////////////////////////////////////////////////////////////
 ///////////////////////////Specific declarations for external modules
 ////////////////////////////////////////////////////////////////////
@@ -88,7 +88,7 @@ extern uint32_t IOT_ABI_TOKEN_NAME;
 #else
 
 ////////////////////////////////////////////////////////////////////
-///////////////////////////Specific declarations for kernel
+///////////////////////////Specific declarations for core
 ////////////////////////////////////////////////////////////////////
 
 #define IOT_CURLIBRARY "CORE"
@@ -99,7 +99,7 @@ extern uint32_t IOT_ABI_TOKEN_NAME;
 //gets module ID from value obtained by IOT_DEVCONTYPE_CUSTOM macro
 //#define IOT_DEVCONTYPE_CUSTOM_MODULEID(contp) ((contp)>>8)
 
-#endif //DAEMON_KERNEL
+#endif //DAEMON_CORE
 
 
 ////////////////////////////////////////////////////////////////////
@@ -110,9 +110,9 @@ extern uint32_t IOT_ABI_TOKEN_NAME;
 
 #define IOT_CONFIG_MAX_NODE_DEVICES 3				//max possible is 7
 #define IOT_CONFIG_MAX_IFACES_PER_DEVICE 4         //max possible is 15
-#define IOT_CONFIG_MAX_NODE_VALUEOUTPUTS 31			//max possible is 31
-#define IOT_CONFIG_MAX_NODE_VALUEINPUTS 31			//max possible is 31
-#define IOT_CONFIG_MAX_NODE_MSGOUTPUTS 8			//max possible is 31
+#define IOT_CONFIG_MAX_NODE_VALUEOUTPUTS 31			//max possible is 255
+#define IOT_CONFIG_MAX_NODE_VALUEINPUTS 31			//max possible is 255
+#define IOT_CONFIG_MAX_NODE_MSGOUTPUTS 8			//max possible is 255
 #define IOT_CONFIG_MAX_NODE_MSGINPUTS 8
 #define IOT_CONFIG_MAX_NODE_MSGLINKTYPES 8			//max possible is 254
 #define IOT_CONFIG_DEVLABEL_MAXLEN 7
@@ -129,7 +129,7 @@ extern uint32_t IOT_ABI_TOKEN_NAME;
 
 #define IOT_MEMOBJECT_MAXREF 65536
 
-extern const uint32_t iot_kernel_version;
+extern const uint32_t iot_core_version;
 extern uv_thread_t main_thread;
 extern uint64_t iot_starttime_ms; //start time of process like returned by uv_now (in ms since unknown point)
 
@@ -407,11 +407,11 @@ struct iot_module_instance_base {
 
 //called in instance thread:
 
-	//sends request to kernel to stop current instance with specific error code. Also is used to notify kernel when instance is ready to stop if stop was delayed by
+	//sends request to core to stop current instance with specific error code. Also is used to notify core when instance is ready to stop if stop was delayed by
 	//returning IOT_ERROR_TRY_AGAIN from stop(). Possible error codes:
 	//0 - no error. can be used after delayed stop() only
 	//IOT_ERROR_CRITICAL_BUG - blocks module. so no new instances of current instance type can be created
-	//IOT_ERROR_CRITICAL_ERROR - say kernel about incorrect instanciation (i.e. block driver creation using current module for current hw device) or configuration (iot item config is invalid).
+	//IOT_ERROR_CRITICAL_ERROR - say core about incorrect instanciation (i.e. block driver creation using current module for current hw device) or configuration (iot item config is invalid).
 	//							no instanciation will be attempted until configuration or module version update
 	//IOT_ERROR_TEMPORARY_ERROR - just request to recreate instance after some time due to some temporary error.
 	int kapi_self_abort(int errcode);
@@ -430,7 +430,7 @@ struct iot_module_instance_base {
 	//called to stop work of started instance. call is always followed by instance_deinit
 	//Return values:
 	//0 - driver successfully stopped and can be deinited
-	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify kernel when stop is finished.
+	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify core when stop is finished.
 	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
 	//						cannot be called until stop reports OK)
 	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
@@ -445,7 +445,7 @@ struct iot_device_detector_base : public iot_module_instance_base {
 	iot_device_detector_base(uv_thread_t thread) : iot_module_instance_base(thread) {
 	}
 
-//interface to kernel:
+//interface to core:
 	int kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data);
 };
 
@@ -550,7 +550,7 @@ struct iot_device_driver_base : public iot_module_instance_base {
 
 
 
-//object of this class is used during driver instance creation to provide kernel with info about supported interface classes of device
+//object of this class is used during driver instance creation to provide core with info about supported interface classes of device
 struct iot_devifaces_list {
 	iot_deviface_params_buffered items[IOT_CONFIG_MAX_IFACES_PER_DEVICE];
 	unsigned num;
@@ -587,11 +587,11 @@ struct iot_node_base : public iot_driver_client_base {
 	iot_node_base(uv_thread_t thread) : iot_driver_client_base(thread) {
 	}
 	struct iot_value_signal {
-		const iot_valuetype_BASE* new_value, *prev_value;
+		const iot_datavalue* new_value, *prev_value;
 	};
 
 	struct iot_msg_signal {
-		const iot_msgtype_BASE** msgs;
+		const iot_datavalue** msgs;
 		uint16_t num;
 	};
 
@@ -600,11 +600,11 @@ struct iot_node_base : public iot_driver_client_base {
 	//Updates specific value outputs and sends messages from specific msg outputs
 	//	IOT_ERROR_INVALID_ARGS - provided index or type of value are illegal.
 	//	IOT_ERROR_NO_MEMORY - no memory to process value change. try later.
-	int kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_valuetype_BASE** values, uint8_t num_msgs=0, const uint8_t *msgout_indexes=NULL, const iot_msgtype_BASE** msgs=NULL);
+	int kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_datavalue** values, uint8_t num_msgs=0, const uint8_t *msgout_indexes=NULL, const iot_datavalue** msgs=NULL);
 
 	//Returns last output value which was set by last call to kapi_update_outputs()
 	//Returned NULL value can mean either undefined value or illegal index
-	const iot_valuetype_BASE* kapi_get_outputvalue(uint8_t index);
+	const iot_datavalue* kapi_get_outputvalue(uint8_t index);
 
 	virtual int process_input_signals(iot_event_id_t eventid, uint8_t num_valueinputs, const iot_value_signal *valueinputs, uint8_t num_msginputs, const iot_msg_signal *msginputs) {
 		return 0; //by default say that outputs are not changed
@@ -617,7 +617,7 @@ struct iot_deviceconn_filter_t { //represents general filter for selecting devic
 	const char *label; //unique label to name device connection. device conn in iot configuration is matched by this label. maximum length is IOT_CONFIG_DEVLABEL_MAXLEN
 //	const char *descr; //text description of connection. If begins with '[', then must be evaluated as template
 	uint8_t num_devifaces:4,					//number of allowed classes for current device (number of items in devifaces list in this struct). can be zero when item is unused (num_devices <= index of current struct) of when ANY classid is suitable.
-		flag_canauto:1,						//flag that current device can be automatically selected by kernel according to classids. otherwise only user can select device
+		flag_canauto:1,						//flag that current device can be automatically selected by core according to classids. otherwise only user can select device
 		flag_localonly:1;					//flag that current driver (and thus hwdevice) must run on same host as node instance
 	const iot_deviface_params **devifaces;		//pointer to array (with num_classids items) of device interface params this module can be connected to
 };
@@ -625,36 +625,38 @@ struct iot_deviceconn_filter_t { //represents general filter for selecting devic
 
 struct iot_node_valuelinkcfg_t {
 	const char *label; //unique label to name input/output ('err' is reserved for implicit error output). node link in iot configuration is matched by this label plus 'v' as beginning. maximum length is IOT_CONFIG_LINKLABEL_MAXLEN.
-//	const char *descr; //text description of link. If begins with '[', then must be evaluated as template
-	iot_valuenotion_id_t notion_id;//unit for values if not 0
-	iot_valuetype_id_t valuetype_id;
+	const iot_valuenotion* notion;//unit/notion for values if not NULL
+	const iot_datatype_metaclass* dataclass;
 
-	bool is_compatible(iot_valuetype_id_t cls) const {
-		return valuetype_id==cls;
+	bool is_compatible(const iot_datatype_metaclass* cls) const {
+		if(!cls) return false;
+		return dataclass==cls;
 	}
-	bool is_compatible(const iot_datatype_base *val) const { //NULL means undef and is compatible with any value type
-		return val==NULL || (!val->is_msg() && valuetype_id==static_cast<const iot_valuetype_BASE *>(val)->get_classid());
+	bool is_compatible(const iot_datavalue *val) const { //NULL means undef and is compatible with any value type
+		return val==NULL || is_compatible(val->get_metaclass());
 	}
 	bool is_compatible(const iot_node_valuelinkcfg_t *op) const {
-		return valuetype_id==op->valuetype_id;
+		return dataclass==op->dataclass;
 	}
 }; //describes type of value for corresponding labeled VALUE input/output
 
 struct iot_node_msglinkcfg_t {
 	const char *label; //unique label to name input (can overlap with labels of outputs but not with value inputs). node input in iot configuration is matched by this label. max length is IOT_CONFIG_LINKLABEL_MAXLEN
-//	const char *descr; //text description of link. If begins with '[', then must be evaluated as template
-	uint8_t num_msgtype_ids; //number of items in msgtype_id[]. maximum is IOT_CONFIG_MAX_NODE_MSGLINKTYPES. value 255 means any message is accepted, msgtype_id can be NULL in such case
-	const iot_msgtype_id_t *msgtype_ids; //pointer to array (with num_msgtypes items) of message class ids this link can accept/transmit
+	uint8_t num_dataclasses; //number of items dataclasses[]. maximum is IOT_CONFIG_MAX_NODE_MSGLINKTYPES. value 0 (allowed for input msg link only) means any message is accepted, dataclasses is ignored in such case
+	const iot_datatype_metaclass* *dataclasses; //pointer to array (with num_dataclasses items) of message type meta classes this link can accept/transmit
 
-	bool is_compatible(iot_msgtype_id_t cls) const { //checks if provided data class ID is compatible (is present in list)
-		for(uint8_t i=0;i<num_msgtype_ids;i++) if(msgtype_ids[i]==cls) return true;
+	bool is_compatible(const iot_datatype_metaclass* cls) const {
+		if(!cls) return false;
+		if(num_dataclasses==0) return true;
+		for(uint8_t i=0;i<num_dataclasses;i++) if(dataclasses[i]==cls) return true;
 		return false;
 	}
-	bool is_compatible(const iot_datatype_base *val) const { //NULL means undef and is compatible with any value type
-		return val!=NULL && val->is_msg() && is_compatible(static_cast<const iot_msgtype_BASE *>(val)->get_classid());
+	bool is_compatible(const iot_datavalue *val) const {
+		return val!=NULL && is_compatible(val->get_metaclass());
 	}
 	bool is_compatible(const iot_node_msglinkcfg_t* op) const { //checks if msgtype_id are compatible (there is at least one common class ID)
-		for(uint8_t i=0;i<num_msgtype_ids;i++) if(op->is_compatible(msgtype_ids[i])) return true;
+		if(num_dataclasses==0) return op->num_dataclasses>0 ? true : false;
+		for(uint8_t i=0;i<num_dataclasses;i++) if(op->is_compatible(dataclasses[i])) return true;
 		return false;
 	}
 };

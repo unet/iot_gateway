@@ -13,7 +13,7 @@
 //#include "iot_moduleregistry.h"
 //#include "iot_configregistry.h"
 //#include "iot_peerconnection.h"
-//#include "iot_kernel.h"
+//#include "iot_core.h"
 
 
 //#define IOT_MODULESDB_BUNDLE_OBJ(vendor, bundle) ECB_CONCAT(iot_moddb_bundle_, ECB_CONCAT(vendor, ECB_CONCAT(__, bundle)))
@@ -71,21 +71,21 @@ void iot_libregistry_t::register_pending_metaclasses(void) {
 		type_id=ifacetype_cur->get_id();
 
 		if(!type_id && ifacetypes_table) { //try to find id in registry
-			const char* name=ifacetype_cur->get_name();
+			const char* name=ifacetype_cur->type_name;
 			json_object* val;
 			json_object_object_foreach(ifacetypes_table, idval, data) {
 				if(!json_object_is_type(data, json_type_array)) continue;
 				val=json_object_array_get_idx(data, 0); //get name
 				if(val && json_object_is_type(val, json_type_string) && strcmp(name, json_object_get_string(val))==0) {
 					val=json_object_array_get_idx(data, 1); //get library name
-					if(val && json_object_is_type(val, json_type_string) && strcmp(ifacetype_cur->get_library(), json_object_get_string(val))==0) {
+					if(val && json_object_is_type(val, json_type_string) && strcmp(ifacetype_cur->parentlib, json_object_get_string(val))==0) {
 						IOT_STRPARSE_UINT(idval, iot_type_id_t, type_id);
 						if(type_id) break;
 					}
 				}
 			}
 			if(!type_id) {
-				outlog_info("Cannot find device interface type ID for '%s:%s' in lib registry", ifacetype_cur->get_library(), name);
+				outlog_info("Cannot find device interface type ID for '%s:%s' in lib registry", ifacetype_cur->parentlib, name);
 			} else {
 				ifacetype_cur->set_id(type_id);
 			}
@@ -114,21 +114,21 @@ void iot_libregistry_t::register_pending_metaclasses(void) {
 		}
 		type_id=contype_cur->get_id();
 		if(!type_id && contypes_table) {
-			const char* name=contype_cur->get_name();
+			const char* name=contype_cur->type_name;
 			json_object* val;
 			json_object_object_foreach(contypes_table, idval, data) {
 				if(!json_object_is_type(data, json_type_array)) continue;
 				val=json_object_array_get_idx(data, 0); //get name
 				if(val && json_object_is_type(val, json_type_string) && strcmp(name, json_object_get_string(val))==0) {
 					val=json_object_array_get_idx(data, 1); //get library name
-					if(val && json_object_is_type(val, json_type_string) && strcmp(contype_cur->get_library(), json_object_get_string(val))==0) {
+					if(val && json_object_is_type(val, json_type_string) && strcmp(contype_cur->parentlib, json_object_get_string(val))==0) {
 						IOT_STRPARSE_UINT(idval, iot_type_id_t, type_id);
 						if(type_id) break;
 					}
 				}
 			}
 			if(!type_id) {
-				outlog_info("Cannot find device connection type ID for '%s:%s' in lib registry", contype_cur->get_library(), name);
+				outlog_info("Cannot find device connection type ID for '%s:%s' in lib registry", contype_cur->parentlib, name);
 			} else {
 				contype_cur->set_id(type_id);
 			}
@@ -140,6 +140,98 @@ void iot_libregistry_t::register_pending_metaclasses(void) {
 			contype_prev=contype_cur;
 		}
 	}
+
+	iot_datatype_metaclass* &datatype_head=datatype_pendingreg_head(), *datatype_next=datatype_head, *datatype_cur=NULL, *datatype_prev=NULL;
+	while(datatype_next) {
+		datatype_cur=datatype_next;
+		datatype_next=datatype_next->next;
+
+		const iot_datatype_metaclass* cur=datatypes_head;
+		while(cur) {
+			if(cur==datatype_cur) {
+				char namebuf[256];
+				outlog_error("Double instanciation of Data Type %s!", datatype_cur->get_fullname(namebuf, sizeof(namebuf)));
+				assert(false);
+				return;
+			}
+			cur=cur->next;
+		}
+		type_id=datatype_cur->get_id();
+
+		if(!type_id && datatypes_table) { //try to find id in registry
+			const char* name=datatype_cur->type_name;
+			json_object* val;
+			json_object_object_foreach(datatypes_table, idval, data) {
+				if(!json_object_is_type(data, json_type_array)) continue;
+				val=json_object_array_get_idx(data, 0); //get name
+				if(val && json_object_is_type(val, json_type_string) && strcmp(name, json_object_get_string(val))==0) {
+					val=json_object_array_get_idx(data, 1); //get library name
+					if(val && json_object_is_type(val, json_type_string) && strcmp(datatype_cur->parentlib, json_object_get_string(val))==0) {
+						IOT_STRPARSE_UINT(idval, iot_type_id_t, type_id);
+						if(type_id) break;
+					}
+				}
+			}
+			if(!type_id) {
+				outlog_info("Cannot find data type ID for '%s:%s' in lib registry", datatype_cur->parentlib, name);
+			} else {
+				datatype_cur->set_id(type_id);
+			}
+		}
+		if(type_id) {
+			ULINKLIST_REMOVE_NOCL(datatype_cur, datatype_prev, datatype_head, next);
+			BILINKLIST_INSERTHEAD(datatype_cur, datatypes_head, next, prev);
+		} else {//leave id-less items in pending list
+			datatype_prev=datatype_cur;
+		}
+	}
+
+	iot_valuenotion* &notiontype_head=notiontype_pendingreg_head(), *notiontype_next=notiontype_head, *notiontype_cur=NULL, *notiontype_prev=NULL;
+	while(notiontype_next) {
+		notiontype_cur=notiontype_next;
+		notiontype_next=notiontype_next->next;
+
+		const iot_valuenotion* cur=notiontypes_head;
+		while(cur) {
+			if(cur==notiontype_cur) {
+				char namebuf[256];
+				outlog_error("Double instanciation of Value Notion %s!", notiontype_cur->get_fullname(namebuf, sizeof(namebuf)));
+				assert(false);
+				return;
+			}
+			cur=cur->next;
+		}
+		type_id=notiontype_cur->get_id();
+
+		if(!type_id && notiontypes_table) { //try to find id in registry
+			const char* name=notiontype_cur->type_name;
+			json_object* val;
+			json_object_object_foreach(notiontypes_table, idval, data) {
+				if(!json_object_is_type(data, json_type_array)) continue;
+				val=json_object_array_get_idx(data, 0); //get name
+				if(val && json_object_is_type(val, json_type_string) && strcmp(name, json_object_get_string(val))==0) {
+					val=json_object_array_get_idx(data, 1); //get library name
+					if(val && json_object_is_type(val, json_type_string) && strcmp(notiontype_cur->parentlib, json_object_get_string(val))==0) {
+						IOT_STRPARSE_UINT(idval, iot_type_id_t, type_id);
+						if(type_id) break;
+					}
+				}
+			}
+			if(!type_id) {
+				outlog_info("Cannot find value notion ID for '%s:%s' in lib registry", notiontype_cur->parentlib, name);
+			} else {
+				notiontype_cur->set_id(type_id);
+			}
+		}
+		if(type_id) {
+			ULINKLIST_REMOVE_NOCL(notiontype_cur, notiontype_prev, notiontype_head, next);
+			BILINKLIST_INSERTHEAD(notiontype_cur, notiontypes_head, next, prev);
+		} else {//leave id-less items in pending list
+			notiontype_prev=notiontype_cur;
+		}
+	}
+
+
 
 }
 

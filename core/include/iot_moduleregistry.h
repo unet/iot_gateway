@@ -48,7 +48,7 @@ struct iot_remote_driverinst_item_t;
 
 #define IOT_MSGSTRUCTS_PER_MODINST 2
 
-#include "iot_kernel.h"
+#include "iot_core.h"
 
 
 struct iot_device_entry_t { //keeps either iot_modinstance_item_t of local driver or iot_remote_driverinst_item_t
@@ -462,7 +462,7 @@ private:
 	int register_module(iot_detector_moduleconfig_t* cfg, iot_regitem_module_t *dbitem); //main thread
 
 	iot_modinstance_item_t* register_modinstance(iot_any_module_item_t* module, iot_module_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance); //main thread
-	iot_modinstance_item_t* find_modinstance_byid(const iot_miid_t &miid); //kernel code in main thread
+	iot_modinstance_item_t* find_modinstance_byid(const iot_miid_t &miid); //core code in main thread
 
 };
 

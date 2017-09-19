@@ -23,9 +23,57 @@
 				//"editDialog":
 			}
 		}
-	}//,
-//	"valuetypes": {
-//	},
-//	"msgtypes": {
-//	}
+	},
+	"datatypes": {
+		"nodeerrorstate" : {
+			"title": "NodeErrorState",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		},
+		"boolean" : {
+			"title": "Boolean",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		},
+		"bitmap" : {
+			"title": "Bitmap",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		}
+	},
+	"notiontypes": {
+		"keycode" : {
+			"title": "KeyCode",
+			"tmpl": {
+				//"shortDescr":
+			}
+		},
+		"degcelcius" : {
+			"title": "degcelcius",
+			"tmpl": {
+				//"shortDescr":
+			}
+		},
+		"degfahrenheit" : {
+			"title": "degfahrenheit",
+			"tmpl": {
+				//"shortDescr":
+			}
+		}
+	}
 }

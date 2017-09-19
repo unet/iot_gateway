@@ -13,7 +13,7 @@
 //#include "iot_devclass_toneplayer.h"
 
 #include "iot_daemonlib.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 #include "iot_moduleregistry.h"
 #include "iot_configregistry.h"
 
@@ -218,8 +218,6 @@ int main(int argn, char **arg) {
 	cfg=NULL;
 
 	//Assume config was actualized or no server connection and some config got from file or we wait while server connection succeeds
-
-
 
 	cfg=config_registry->read_jsonfile(conf_dir, REGISTRYFILE_NAME, "registry");
 	if(!cfg) goto onexit;

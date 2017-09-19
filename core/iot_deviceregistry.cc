@@ -6,7 +6,7 @@
 #include "iot_daemonlib.h"
 #include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 
 
 hwdev_registry_t* hwdev_registry=NULL;
@@ -20,7 +20,7 @@ int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action
 		if(!ident) return IOT_ERROR_INVALID_ARGS;
 		char buf[256];
 		if(!ident->is_valid()) {
-			outlog_error("Cannot find device connection interface for contype=%s", ident->get_fullname(buf, sizeof(buf)));
+			outlog_error("Cannot find device connection interface for contype=%s", ident->get_typename());
 			return IOT_ERROR_NOT_FOUND;
 		}
 		if(ident->is_tmpl()) {

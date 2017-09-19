@@ -1,5 +1,5 @@
-#ifndef IOT_KERNEL_H
-#define IOT_KERNEL_H
+#ifndef IOT_CORE_H
+#define IOT_CORE_H
 //Contains constants, methods and data structures for LOCAL hardware devices storing and searching
 
 //#include <stdint.h>
@@ -20,15 +20,15 @@ struct iot_modinstance_item_t;
 //fields from iot_threadmsg_t struct which are interpreted differently depending on message code: miid, bytearg, data
 enum iot_msg_code_t : uint16_t {
 	IOT_MSG_INVALID=0,				//marks invalidated content of msg structure
-//kernel destined messages (is_kernel must be true)
+//core destined messages (is_core must be true)
 	IOT_MSG_START_MODINSTANCE,		//start instance in [miid] arg. [data] unused. [bytearg] unused. instance can be of any type.
-	IOT_MSG_MODINSTANCE_STARTSTATUS,//notification to kernel about status of modinstance start (status will be in data)
+	IOT_MSG_MODINSTANCE_STARTSTATUS,//notification to core about status of modinstance start (status will be in data)
 	IOT_MSG_STOP_MODINSTANCE,		//stop instance in [miid] arg. [data] unused. [bytearg] unused. instance can be of any type.
-	IOT_MSG_MODINSTANCE_STOPSTATUS,	//notification to kernel about status of modinstance stop (status will be in data)
-	IOT_MSG_FREE_MODINSTANCE,		//notification to kernel about unlocking last reference to modinstance structure in pending free state
+	IOT_MSG_MODINSTANCE_STOPSTATUS,	//notification to core about status of modinstance stop (status will be in data)
+	IOT_MSG_FREE_MODINSTANCE,		//notification to core about unlocking last reference to modinstance structure in pending free state
 
 	IOT_MSG_DRVOPEN_CONNECTION,		//open connection to driver instance by calling process_local_connect method. [data] contains address of connection structure
-	IOT_MSG_CONNECTION_DRVOPENSTATUS,//notification to kernel about status of opening connection to driver (status will be in intarg). [data] contains address of connection structure
+	IOT_MSG_CONNECTION_DRVOPENSTATUS,//notification to core about status of opening connection to driver (status will be in intarg). [data] contains address of connection structure
 	IOT_MSG_CONNECTION_DRVREADY,	//notify driver consumer instance about driver connection. [data] contains address of connection structure.
 	IOT_MSG_CONNECTION_D2C_READY,	//client side of connection can read data. [data] contains address of connection structure.
 	IOT_MSG_CONNECTION_C2D_READY,	//driver side of connection can read data. [data] contains address of connection structure.
@@ -81,7 +81,7 @@ struct iot_releasable {
 
 struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 	volatile std::atomic<iot_threadmsg_t*> next; //points to next message in message queue
-	iot_miid_t miid; //msg destination instance or can be 0 for kernel with is_kernel flag set
+	iot_miid_t miid; //msg destination instance or can be 0 for core with is_core flag set
 	iot_msg_code_t code;
 	uint8_t bytearg; //arbitrary byte argument for command in code
 	uint8_t is_memblock:1,	//flag that DATA pointer must be released using iot_release_memblock(), conflicts with 'is_malloc'
@@ -93,7 +93,7 @@ struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 //		is_msginstreserv:1, //flag that THIS struct is from module instance reserv ('msgstructs' array) and must be just marked as free in 'msgstructs_usage',
 //							//conflicts with 'is_msgmemblock'
 
-		is_kernel:1; //message is for kernel and thus miid is message argument, not destination instance
+		is_core:1; //message is for core and thus miid is message argument, not destination instance
 
 	uint32_t datasize; //size of data pointed by data. must be checked for correctness for each command during its processing. Should be zero if
 					//'data' is used to store arbitraty integer.
@@ -127,11 +127,11 @@ struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 //returns error if no memory or critical error (when datasize>0 but data is NULL or datamem is IOT_THREADMSG_DATAMEM_TEMP_NOALLOC
 //and datasize exceedes IOT_MSG_BUFSIZE or illegal datamem)
 int iot_prepare_msg(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_item_t* modinst, uint8_t bytearg, void* data, size_t datasize, 
-		iot_threadmsg_datamem_t datamem, bool is_kernel=false, iot_memallocator* allocator=NULL);
+		iot_threadmsg_datamem_t datamem, bool is_core=false, iot_memallocator* allocator=NULL);
 
 inline int iot_prepare_msg_releasable(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_item_t* modinst, uint8_t bytearg, iot_releasable* data, size_t datasize, 
-		iot_threadmsg_datamem_t datamem, bool is_kernel=false, iot_memallocator* allocator=NULL) {
-	int err=iot_prepare_msg(msg, code, modinst, bytearg, (void*)data, datasize, datamem, is_kernel, allocator);
+		iot_threadmsg_datamem_t datamem, bool is_core=false, iot_memallocator* allocator=NULL) {
+	int err=iot_prepare_msg(msg, code, modinst, bytearg, (void*)data, datasize, datamem, is_core, allocator);
 	if(!err) msg->is_releasable=1;
 	return err;
 }
@@ -238,4 +238,4 @@ public:
 
 void iot_process_module_bug(iot_any_module_item_t *module_item);
 
-#endif //IOT_KERNEL_H
+#endif //IOT_CORE_H

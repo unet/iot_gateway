@@ -21,7 +21,7 @@ class iot_peers_registry_t;
 
 
 #include "iot_moduleregistry.h"
-#include "iot_kernel.h"
+#include "iot_core.h"
 #include "iot_configregistry.h"
 
 struct iot_remote_driverinst_item_t {

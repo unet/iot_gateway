@@ -42,15 +42,13 @@ public:
 		if(!bufsize) return buf;
 
 		int len=0;
-		get_fullname(buf, bufsize, &len);
-		if(int(bufsize)-len>2) {
-			int len1;
+		get_fulltypename(buf, bufsize, &len);
+		if(len<int(bufsize)-2) {
 			if(istmpl)
-				len1=snprintf(buf+len, bufsize-len, "{TMPL: is_pc=%s}", !tmpl.is_pckbd ? "no" : tmpl.is_pckbd==1 ? "yes" : "any");
+				len+=snprintf(buf+len, bufsize-len, "{TMPL: is_pc=%s}", !tmpl.is_pckbd ? "no" : tmpl.is_pckbd==1 ? "yes" : "any");
 			else
-				len1=snprintf(buf+len, bufsize-len, "{max_keycode=%u, is_pc=%s}",unsigned(spec.max_keycode),!spec.is_pckbd ? "no" : "yes");
-			if(len1>=int(bufsize)-len) len=bufsize-1;
-				else len+=len1;
+				len+=snprintf(buf+len, bufsize-len, "{max_keycode=%u, is_pc=%s}",unsigned(spec.max_keycode),!spec.is_pckbd ? "no" : "yes");
+			if(len>=int(bufsize)) len=bufsize-1;
 		}
 		if(doff) *doff+=len;
 		return buf;
@@ -105,11 +103,13 @@ private:
 
 		serialize_header_t *h=(serialize_header_t*)buf;
 		if(obj->istmpl) {
+			if(bufsize<sizeof(serialize_tmpl_t)) return IOT_ERROR_NO_BUFSPACE;
 			h->format=repack_uint32(uint32_t(1));
 			h->istmpl=1;
 			serialize_tmpl_t *t=(serialize_tmpl_t*)(h+1);
 			t->is_pckbd=obj->tmpl.is_pckbd;
 		} else {
+			if(bufsize<sizeof(serialize_spec_t)) return IOT_ERROR_NO_BUFSPACE;
 			h->format=repack_uint32(uint32_t(1));
 			h->istmpl=0;
 			serialize_spec_t *s=(serialize_spec_t*)(h+1);
@@ -174,7 +174,7 @@ inline iot_deviface_params_keyboard::iot_deviface_params_keyboard(bool is_pckbd,
 	istmpl(false) {
 		spec.is_pckbd=is_pckbd ? 1 : 0;
 
-		uint32_t maxcode=iot_valuetype_bitmap::get_maxkeycode();
+		uint32_t maxcode=iot_datavalue_bitmap::get_maxkeycode();
 		spec.max_keycode = max_keycode > maxcode ? maxcode : max_keycode;
 }
 inline iot_deviface_params_keyboard::iot_deviface_params_keyboard(uint8_t is_pckbd) : iot_deviface_params(&iot_devifacetype_metaclass_keyboard::object),
