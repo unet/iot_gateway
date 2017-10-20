@@ -22,7 +22,10 @@ class iot_datavalue;
 
 
 class iot_datatype_metaclass {
+	friend class iot_libregistry_t;
 	iot_type_id_t datatype_id;
+	iot_datatype_metaclass* next, *prev; //non-NULL prev means that class is registered and both next and prev are used. otherwise only next is used
+													//for position in pending registration list
 
 	PACKED(
 		struct serialize_base_t {
@@ -37,8 +40,6 @@ public:
 	const bool fixedsize_values; //flag that ALL objects of this type have equal datasize. flag is unmeaningful if static_values is true
 	const bool static_values;//flag that ALL possible values of data type are precreated statically and thus no memory allocation required
 
-	iot_datatype_metaclass* next, *prev; //non-NULL prev means that class is registered and both next and prev are used. otherwise only next is used
-													//for position in pending registration list
 
 protected:
 	iot_datatype_metaclass(iot_type_id_t id, const char* type, uint32_t ver, bool static_values, bool fixedsize_values=true, const char* parentlib=IOT_CURLIBRARY); //id must be zero for non-builtin types. type cannot be NULL
@@ -54,13 +55,6 @@ public:
 
 	iot_type_id_t get_id(void) const {
 		return datatype_id;
-	}
-	void set_id(iot_type_id_t id) {
-		if(datatype_id>0 || !id) {
-			assert(false);
-			return;
-		}
-		datatype_id=id;
 	}
 
 	char* get_fullname(char *buf, size_t bufsize, int *doff=NULL) const { //doff - delta offset. will be incremented on number of written chars
@@ -103,6 +97,13 @@ public:
 	virtual char* sprint(const iot_datavalue* v, char* buf, size_t bufsize, int* doff=NULL) const = 0;
 	virtual bool check_eq(const iot_datavalue* v, const iot_datavalue *op) const = 0;
 private:
+	void set_id(iot_type_id_t id) {
+		if(datatype_id>0 || !id) {
+			assert(false);
+			return;
+		}
+		datatype_id=id;
+	}
 	virtual int p_serialized_size(const iot_datavalue* obj) const = 0;
 	virtual int p_serialize(const iot_datavalue* obj, char* buf, size_t bufsize) const = 0; //returns error code or 0 on success
 	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_datavalue*& obj) const = 0;
@@ -276,7 +277,7 @@ class iot_datatype_metaclass_boolean : public iot_datatype_metaclass {
 	);
 
 public:
-	static const iot_datatype_metaclass_boolean object;
+	static iot_datatype_metaclass_boolean object;
 
 	virtual char* sprint(const iot_datavalue* v, char* buf, size_t bufsize, int* doff=NULL) const override { //bufsize must include space for NUL
 		assert(v && v->get_metaclass()==this);
@@ -388,7 +389,7 @@ class iot_datatype_metaclass_nodeerrorstate : public iot_datatype_metaclass {
 	);
 
 public:
-	static const iot_datatype_metaclass_nodeerrorstate object;
+	static iot_datatype_metaclass_nodeerrorstate object;
 
 	virtual char* sprint(const iot_datavalue* v, char* buf, size_t bufsize, int* doff=NULL) const override { //bufsize must include space for NUL
 		assert(v && v->get_metaclass()==this);
@@ -555,7 +556,7 @@ class iot_datatype_metaclass_bitmap : public iot_datatype_metaclass {
 	);
 
 public:
-	static const iot_datatype_metaclass_bitmap object;
+	static iot_datatype_metaclass_bitmap object;
 
 	virtual char* sprint(const iot_datavalue* v, char* buf, size_t bufsize, int* doff=NULL) const override { //bufsize must include space for NUL
 		assert(v && v->get_metaclass()==this);

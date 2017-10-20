@@ -25,9 +25,18 @@
 		}
 	],
 	"peer_connect_map": { //manually specified by user current host to specific host connection parameters override
-		DST_HOST_ID: {
-			"host": "1.2.3.4", //host/IP which must be used by current host to connect to this host. defaults to connect_host in common hosts config
-			"port" : 12002, //port which must be used by current host to connect to this host. defaults to connect_port in common hosts config. negative value forbids direct connection
-		}
+		DST_HOST_ID: [
+			{
+				"type": "tcp",
+				"metric": 1,
+				"host": "1.2.3.4", //host/IP which must be used by current host to connect to this host. defaults to connect_host in common hosts config
+				"port" : 12002, //port which must be used by current host to connect to this host. defaults to connect_port in common hosts config. negative value forbids direct connection
+			},
+			{
+				"type": "bt", //bluetooth
+				"metric": 2,
+				"hwaddr": "11:34:65:a5:ba:34",
+			}
+		]
 	}
 }

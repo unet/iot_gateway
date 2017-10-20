@@ -91,6 +91,8 @@ iot_config_item_link_t link={
 };
 
 */
+
+
 json_object* iot_configregistry_t::read_jsonfile(const char* dir, const char* relpath, const char *name) {
 	char namebuf[512];
 	if(dir)
@@ -275,36 +277,6 @@ int iot_configregistry_t::load_config(json_object* cfg, bool skiphosts) { //main
 			if(err) return err;
 		}
 	}
-
-	return 0;
-}
-
-int iot_configregistry_t::host_update(iot_hostid_t hostid, json_object* obj) {
-	json_object *val=NULL;
-	iot_config_item_host_t* host=host_find(hostid);
-	if(!host) {
-		size_t sz=sizeof(iot_config_item_host_t); //+additional bytes
-		host=(iot_config_item_host_t*)main_allocator.allocate(sz, true);
-		if(!host) return IOT_ERROR_NO_MEMORY;
-		memset(host, 0, sz);
-		host->host_id=hostid;
-
-		BILINKLIST_INSERTHEAD(host, hosts_head, next, prev);
-		if(hostid==iot_current_hostid) {
-			assert(current_host==NULL);
-			current_host=host;
-		}
-	} else host->is_del=0;
-
-	uint32_t cfg_id=0;
-	if(json_object_object_get_ex(obj, "cfg_id", &val)) IOT_JSONPARSE_UINT(val, uint32_t, cfg_id)
-
-	if(host->cfg_id>=cfg_id) return 0;
-	//update this data only if cfg_id was incremented
-	host->cfg_id=cfg_id;
-
-	host->listen_port=0;
-	if(json_object_object_get_ex(obj, "listen_port", &val)) IOT_JSONPARSE_UINT(val, uint16_t, host->listen_port)
 
 	return 0;
 }
@@ -508,7 +480,7 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 	if(json_object_object_get_ex(obj, "host_id", &val)) IOT_JSONPARSE_UINT(val, iot_hostid_t, host_id)
 
 	iot_config_item_host_t* host=NULL;
-	if(host_id>0 && host_id!=IOT_HOSTID_ANY) host=host_find(host_id);
+	if(host_id>0 && host_id!=IOT_HOSTID_ANY) host=host_find(host_id, true); //fo rnow di not increase refcount of host in nodes
 	if(!host || host->is_del) {
 		outlog_error("node at config path nodecfg.nodes.%" IOT_PRIiotid " refers to non-existing host " IOT_PRIhostid ", skipping it", nodeid, host_id);
 		return IOT_ERROR_NOT_FOUND;
@@ -955,24 +927,14 @@ void iot_configregistry_t::clean_config(void) { //free all items marked for dele
 	while(cur_group) {
 		iot_config_item_group_t* next=cur_group->next;
 		if(cur_group->is_del) {
+			BILINKLIST_REMOVE_NOCL(cur_group, next, prev);
 			iot_release_memblock(cur_group);
-			if(cur_group==groups_head) groups_head=next;
 		}
 		cur_group=next;
 	}
 
 	//clean hosts
-	iot_config_item_host_t* cur_host=hosts_head;
-	while(cur_host) {
-		iot_config_item_host_t* next=cur_host->next;
-		if(cur_host->is_del) {
-			iot_release_memblock(cur_host);
-			if(cur_host==current_host) current_host=NULL;
-			if(cur_host==hosts_head) hosts_head=next;
-		}
-		cur_host=next;
-	}
-
+	hosts_clean();
 }
 
 bool iot_config_item_node_t::prepare_execute(bool forceasync) { //must be called to preallocate memory before execute()

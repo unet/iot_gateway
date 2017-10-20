@@ -354,11 +354,11 @@ int iot_devifacetype_metaclass::serialize(const iot_deviface_params* obj, char* 
 }
 
 
-const iot_devifacetype_metaclass_keyboard iot_devifacetype_metaclass_keyboard::object;
-const iot_devifacetype_metaclass_activatable iot_devifacetype_metaclass_activatable::object;
-const iot_datatype_metaclass_boolean iot_datatype_metaclass_boolean::object;
-const iot_datatype_metaclass_nodeerrorstate iot_datatype_metaclass_nodeerrorstate::object;
-const iot_datatype_metaclass_bitmap iot_datatype_metaclass_bitmap::object;
+iot_devifacetype_metaclass_keyboard iot_devifacetype_metaclass_keyboard::object;
+iot_devifacetype_metaclass_activatable iot_devifacetype_metaclass_activatable::object;
+iot_datatype_metaclass_boolean iot_datatype_metaclass_boolean::object;
+iot_datatype_metaclass_nodeerrorstate iot_datatype_metaclass_nodeerrorstate::object;
+iot_datatype_metaclass_bitmap iot_datatype_metaclass_bitmap::object;
 //iot_devifacetype_toneplayer iot_devifacetype_toneplayer::object;
 
 uint32_t iot_deviface_params_keyboard::get_d2c_maxmsgsize(void) const {
@@ -457,6 +457,14 @@ const/*expr*/ iot_datavalue_boolean iot_datavalue_boolean::const_false(false);
 
 //use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created
 const/*expr*/ iot_datavalue_nodeerrorstate iot_datavalue_nodeerrorstate::const_noinst(iot_datavalue_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
+
+void object_destroysub_memblock(iot_objectrefable* obj) {
+	obj->~iot_objectrefable();
+	iot_release_memblock(obj);
+}
+void object_destroysub_delete(iot_objectrefable* obj) {
+	delete obj;
+}
 
 
 

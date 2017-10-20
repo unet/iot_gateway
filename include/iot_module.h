@@ -80,10 +80,10 @@ extern uint32_t IOT_ABI_TOKEN_NAME;
 
 
 #define kapi_outlog_error(format... ) do_outlog(__FILE__, __LINE__, __func__, LERROR, format)
-#define kapi_outlog_notice(format... ) if(LMIN<=LNOTICE && min_loglevel <= LNOTICE) do_outlog(__FILE__, __LINE__, __func__, LNOTICE, format)
-#define kapi_outlog_info(format... ) if(LMIN<=LINFO && min_loglevel <= LINFO) do_outlog(__FILE__, __LINE__, __func__, LINFO, format)
-#define kapi_outlog_debug(format... ) if(LMIN<=LDEBUG && min_loglevel <= LDEBUG) do_outlog(__FILE__, __LINE__, __func__, LDEBUG, format)
-#define kapi_outlog(level, format... ) if(LMIN<=level && min_loglevel <= level) do_outlog(__FILE__, __LINE__, __func__, level, format)
+#define kapi_outlog_notice(format... ) do {if(LMIN<=LNOTICE && min_loglevel <= LNOTICE) do_outlog(__FILE__, __LINE__, __func__, LNOTICE, format);} while(0)
+#define kapi_outlog_info(format... ) do {if(LMIN<=LINFO && min_loglevel <= LINFO) do_outlog(__FILE__, __LINE__, __func__, LINFO, format);} while(0)
+#define kapi_outlog_debug(format... ) do {if(LMIN<=LDEBUG && min_loglevel <= LDEBUG) do_outlog(__FILE__, __LINE__, __func__, LDEBUG, format);} while(0)
+#define kapi_outlog(level, format... ) do {if(LMIN<=level && min_loglevel <= level) do_outlog(__FILE__, __LINE__, __func__, level, format);} while(0)
 
 #else
 
@@ -189,6 +189,44 @@ struct iot_event_id_t {
 	bool operator==(const iot_event_id_t &op) {
 		return numerator==op.numerator && host_id==op.host_id;
 	}
+};
+
+//base class for object ids - a way to make reference to 
+struct iot_objid_t {
+	enum type_t : uint8_t {
+		OBJTYPE_NETCON=0, //iot_netcon
+	};
+	uint32_t idx:24; //index of object in corresponding array of objects, idx==0 is valid
+	uint32_t type:8; //id of object type from type_t
+	uint32_t key; //unique serial number to count how many times particular idx was used. key==0 marks INVALID if
+
+	iot_objid_t(type_t type) : idx(0), type(type), key(0) {
+	}
+	iot_objid_t(uint8_t type, uint32_t idx_, uint32_t key) : type(type), key(key) {
+		assert(idx_ < 1<<24);
+		idx=idx_;
+	}
+	iot_objid_t(const iot_objid_t &src) {
+		idx=src.idx;
+		type=src.type;
+		key=src.key;
+	}
+	bool operator==(const iot_objid_t &p) const {
+		return idx==p.idx && type==p.type && key==p.key;
+	}
+	bool operator!=(const iot_objid_t &p) const {
+		return !(*this==p);
+	}
+	bool operator!(void) const {
+		return key==0;
+	}
+	explicit operator bool(void) const {
+		return key!=0;
+	}
+//	void clear(void) {
+//		created=0;
+//		iid=0;
+//	}
 };
 
 

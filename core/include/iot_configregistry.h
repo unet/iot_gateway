@@ -298,14 +298,43 @@ public:
 
 
 //represents configuration host item
-struct iot_config_item_host_t {
-	iot_config_item_host_t *next, *prev; //for list in config_registry->hosts_head;
-	bool is_del;
+struct iot_config_item_host_t : public iot_objectrefable {
+	iot_config_item_host_t *next=NULL, *prev=NULL; //for list in config_registry->hosts_head;
+	bool is_del=false;
 
-	iot_hostid_t host_id;
-	uint32_t cfg_id; //hosts config number when props were updated last time
+	const iot_hostid_t host_id;
+	uint32_t cfg_id=0; //hosts config number when props were updated last time
 
-	uint16_t listen_port;
+	json_object* manual_connect_params=NULL; //manually specified by user ways to connect to host, common for all other hosts
+
+	iot_config_item_host_t(iot_hostid_t host_id, object_destroysub_t destroysub) : iot_objectrefable(destroysub), host_id(host_id) {
+		assert(host_id!=0);
+	}
+	~iot_config_item_host_t(void) {
+		assert(next==NULL && prev==NULL);
+		if(manual_connect_params) {
+			json_object_put(manual_connect_params);
+			manual_connect_params=NULL;
+		}
+	}
+
+	int update_from_json(json_object *obj) {
+		json_object *val=NULL;
+		uint32_t cfg_id_=0;
+		if(json_object_object_get_ex(obj, "cfg_id", &val)) IOT_JSONPARSE_UINT(val, uint32_t, cfg_id_)
+
+		if(cfg_id>=cfg_id_) return 0;
+
+		//update this data only if cfg_id was incremented
+		cfg_id=cfg_id_;
+
+		if(manual_connect_params) {
+			json_object_put(manual_connect_params);
+			manual_connect_params=NULL;
+		}
+		if(json_object_object_get_ex(obj, "connect", &manual_connect_params)) json_object_get(manual_connect_params);
+		return 0;
+	}
 };
 
 
@@ -315,9 +344,9 @@ class iot_configregistry_t {
 public:
 	iot_config_item_host_t *current_host=NULL;
 private:
-//	iot_config_item_group_t *nodes_head=NULL;
 	iot_config_item_group_t *groups_head=NULL;
 	iot_config_item_host_t *hosts_head=NULL;
+	mutable iot_spinrwlock hosts_lock;
 
 	MemHBTree<iot_config_item_node_t*, iot_id_t, 0, 0, true, 10> nodes_index;
 	MemHBTree<iot_config_item_link_t*, iotlink_id_t, 0, 0, true, 10> links_index;
@@ -368,21 +397,119 @@ public:
 	void clean_config(void); //main thread. free all config items marked for deletion
 
 //host management
-	iot_config_item_host_t* host_find(iot_hostid_t hostid) {
-		iot_config_item_host_t* h=hosts_head;
-		while(h) {
-			if(h->host_id==hostid) return h;
-			h=h->next;
+	void host_add(iot_config_item_host_t* h) {
+		assert(uv_thread_self()==main_thread);
+		assert(h->next==NULL && h->prev==NULL);
+
+		//get axclusive lock on hosts list
+		hosts_lock.wrlock();
+
+		BILINKLIST_INSERTHEAD(h, hosts_head, next, prev);
+		h->ref(); //mark that object is referenced
+
+		hosts_lock.wrunlock();
+
+		if(h->host_id==iot_current_hostid) {
+			assert(current_host==NULL);
+			current_host=h;
 		}
-		return NULL;
 	}
-	int host_update(iot_hostid_t hostid, json_object* obj);
-	void hosts_markdel(void) { //set is_del mark for all hosts
+	iot_config_item_host_t* host_find(iot_hostid_t hostid, bool no_ref) const { //thread safe. INCREASES refcount of host item unless no_ref is true and thread is main!!!
+		//no_ref - true value for main thread skips recount increase for returned host item
+		iot_config_item_host_t* h;
+		if(uv_thread_self()==main_thread) { //no lock necessary as only main thread can modify list
+			for(h=hosts_head; h; h=h->next)
+				if(h->host_id==hostid) {
+					if(!no_ref) h->ref();
+					return h;
+				}
+			return NULL;
+		}
+		if(no_ref) { //error
+			assert(false);
+			return NULL;
+		}
+		hosts_lock.rdlock();
+
+		//do shared work
+		for(h=hosts_head; h; h=h->next)
+			if(h->host_id==hostid) {
+				h->ref(); //increase ref being locked so that host_delete could not release last ref after address is returned
+				break;
+			}
+		//release lock
+		hosts_lock.rdunlock();
+
+		return h;
+	}
+	int host_update(iot_hostid_t hostid, json_object* obj) {
+		assert(uv_thread_self()==main_thread);
+
+		iot_config_item_host_t* host=host_find(hostid, true);
+		if(!host) {
+			size_t sz=sizeof(iot_config_item_host_t); //+additional bytes
+			host=(iot_config_item_host_t*)main_allocator.allocate(sz, true);
+			if(!host) return IOT_ERROR_NO_MEMORY;
+			new(host) iot_config_item_host_t(hostid, object_destroysub_memblock);
+			host_add(host);
+			host->try_destroy(); //set auto delete on last reference remove
+		} else host->is_del=false;
+		return host->update_from_json(obj);
+	}
+	void hosts_clean(void) { //remove hosts with is_del flag
+		assert(uv_thread_self()==main_thread);
+
+		//get exclusive lock on hosts list
+		bool locked=false;
+
+		iot_config_item_host_t* cur_host=hosts_head;
+		while(cur_host) {
+			iot_config_item_host_t* next=cur_host->next;
+			if(cur_host->is_del) {
+				if(!locked) { //lock when first deleted host is found
+					locked=true;
+					hosts_lock.wrlock();
+				}
+				host_delete(cur_host, true);
+			}
+			cur_host=next;
+		}
+
+		//release lock
+		if(locked) hosts_lock.wrunlock();
+	}
+	void host_delete(iot_config_item_host_t* h, bool skiplock=false) {
+		assert(uv_thread_self()==main_thread);
+
+		if(!skiplock) {
+			//get axclusive lock on hosts list
+			hosts_lock.wrlock();
+		}
+
+		//do exclusive work
+		BILINKLIST_REMOVE_NOCL(h, next, prev);
+
+		if(!skiplock) {
+			//release lock
+			hosts_lock.wrunlock();
+		}
+
+		if(h==current_host) current_host=NULL;
+		h->next=h->prev=NULL;
+
+		h->unref();
+	}
+	void hosts_markdel(void) const { //set is_del mark for all hosts
+		assert(uv_thread_self()==main_thread);
 		iot_config_item_host_t* h=hosts_head;
 		while(h) {
 			h->is_del=true;
 			h=h->next;
 		}
+	}
+	iot_config_item_host_t* hosts_listhead(void) {
+		assert(uv_thread_self()==main_thread);
+		return hosts_head;
 	}
 
 //group/mode management
@@ -1091,6 +1218,8 @@ printf("Node %" IOT_PRIiotid " blocked\n", dnode->node_id);
 		return NULL;
 	}
 };
+
+
 
 
 #endif //IOT_CONFIGREGISTRY_H

@@ -19,7 +19,10 @@ class iot_hwdev_localident;
 class iot_hwdev_details;
 
 class iot_hwdevcontype_metaclass { //base abstract class for specifc device contype metaclass singleton objects 
+	friend class iot_libregistry_t;
 	iot_type_id_t contype_id;
+	iot_hwdevcontype_metaclass* next, *prev; //non-NULL prev means that class is registered and both next and prev are used. otherwise only next is used
+													//for position in pending registration list
 
 	PACKED(
 		struct serialize_base_t {
@@ -32,8 +35,6 @@ public:
 	const char *const type_name;
 	const char *const parentlib;
 
-	iot_hwdevcontype_metaclass* next, *prev; //non-NULL prev means that class is registered and both next and prev are used. otherwise only next is used
-													//for position in pending registration list
 
 protected:
 	iot_hwdevcontype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver, const char* parentlib=IOT_CURLIBRARY); //id must be zero for non-builtin types. vendor is NULL for builtin types. type cannot be NULL
@@ -43,13 +44,6 @@ public:
 
 	iot_type_id_t get_id(void) const {
 		return contype_id;
-	}
-	void set_id(iot_type_id_t id) {
-		if(contype_id>0 || !id) {
-			assert(false);
-			return;
-		}
-		contype_id=id;
 	}
 //	const char* get_name(void) const {
 //		return type_name;
@@ -109,6 +103,13 @@ public:
 
 
 private:
+	void set_id(iot_type_id_t id) {
+		if(contype_id>0 || !id) {
+			assert(false);
+			return;
+		}
+		contype_id=id;
+	}
 	virtual int p_serialized_size(const iot_hwdev_localident* obj) const = 0;
 	virtual int p_serialize(const iot_hwdev_localident* obj, char* buf, size_t bufsize) const = 0; //returns error code or 0 on success
 	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const = 0;

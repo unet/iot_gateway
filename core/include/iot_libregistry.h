@@ -329,9 +329,9 @@ public:
 		return 0;
 	}
 
-	const iot_devifacetype_metaclass* find_devifacetype(iot_type_id_t ifacetp, bool tryload) { //must run in main thread if tryload is true
+	iot_devifacetype_metaclass* find_devifacetype(iot_type_id_t ifacetp, bool tryload) { //must run in main thread if tryload is true
 		if(!ifacetp) return NULL;
-		const iot_devifacetype_metaclass* item=devifacetypes_head;
+		iot_devifacetype_metaclass* item=devifacetypes_head;
 		while(item) {
 			if(item->get_id()==ifacetp) return item;
 			item=item->next;
@@ -342,8 +342,8 @@ public:
 		}
 		return NULL;
 	}
-	const iot_devifacetype_metaclass* find_devifacetype(const char* name) {
-		const iot_devifacetype_metaclass* item=devifacetypes_head;
+	iot_devifacetype_metaclass* find_devifacetype(const char* name) {
+		iot_devifacetype_metaclass* item=devifacetypes_head;
 		while(item) {
 			if(strcmp(item->type_name, name)==0) return item;
 			item=item->next;
@@ -356,9 +356,9 @@ public:
 		}
 		return NULL;
 	}
-	const iot_hwdevcontype_metaclass* find_devcontype(iot_type_id_t contp, bool tryload) { //must run in main thread if tryload is true
+	iot_hwdevcontype_metaclass* find_devcontype(iot_type_id_t contp, bool tryload) { //must run in main thread if tryload is true
 		if(!contp) return NULL;
-		const iot_hwdevcontype_metaclass* item=devcontypes_head;
+		iot_hwdevcontype_metaclass* item=devcontypes_head;
 		while(item) {
 			if(item->get_id()==contp) return item;
 			item=item->next;
@@ -369,8 +369,8 @@ public:
 		}
 		return NULL;
 	}
-	const iot_hwdevcontype_metaclass* find_devcontype(const char* name) {
-		const iot_hwdevcontype_metaclass* item=devcontypes_head;
+	iot_hwdevcontype_metaclass* find_devcontype(const char* name) {
+		iot_hwdevcontype_metaclass* item=devcontypes_head;
 		while(item) {
 			if(strcmp(item->type_name, name)==0) return item;
 			item=item->next;
@@ -383,9 +383,9 @@ public:
 		}
 		return NULL;
 	}
-	const iot_datatype_metaclass* find_datatype(iot_type_id_t datatp, bool tryload) { //must run in main thread if tryload is true
+	iot_datatype_metaclass* find_datatype(iot_type_id_t datatp, bool tryload) { //must run in main thread if tryload is true
 		if(!datatp) return NULL;
-		const iot_datatype_metaclass* item=datatypes_head;
+		iot_datatype_metaclass* item=datatypes_head;
 		while(item) {
 			if(item->get_id()==datatp) return item;
 			item=item->next;
@@ -396,8 +396,8 @@ public:
 		}
 		return NULL;
 	}
-	const iot_datatype_metaclass* find_datatype(const char* name) {
-		const iot_datatype_metaclass* item=datatypes_head;
+	iot_datatype_metaclass* find_datatype(const char* name) {
+		iot_datatype_metaclass* item=datatypes_head;
 		while(item) {
 			if(strcmp(item->type_name, name)==0) return item;
 			item=item->next;
@@ -411,8 +411,8 @@ public:
 		return NULL;
 	}
 
-	const iot_valuenotion* find_notiontype(const char* name) {
-		const iot_valuenotion* item=notiontypes_head;
+	iot_valuenotion* find_notiontype(const char* name) {
+		iot_valuenotion* item=notiontypes_head;
 		while(item) {
 			if(strcmp(item->type_name, name)==0) return item;
 			item=item->next;

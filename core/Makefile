@@ -1,2 +1,2 @@
 kernel:
-	$(MAKE) -C .. kernel
+	$(MAKE) -C .. core

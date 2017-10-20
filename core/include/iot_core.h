@@ -42,6 +42,8 @@ enum iot_msg_code_t : uint16_t {
 	IOT_MSG_EVENTSIG_OUT,			//notification to config modeller about change of output value or new output msg. [data] contains iot_modelsignal pointer.
 	IOT_MSG_EVENTSIG_NOUPDATE,		//notification to config modeller that sync execution of node changed NO outputs. [data] contains iot_modelnegsignal pointer.
 
+	IOT_MSG_PEERCON_STARTWORK,		//request to working thread of peer connection to start work. [data] contains iot_peercon pointer.
+
 //node instance destined messages
 	IOT_MSG_NOTIFY_INPUTSUPDATED,	//notification to modinstance about change of input value(s) and/or new input msg(s). [data] contains iot_notify_inputsupdate
 									//pointer. [bytearg] contains sync mode at the time of message generation in main thread

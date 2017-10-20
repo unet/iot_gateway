@@ -199,7 +199,7 @@ class iot_hwdevcontype_metaclass_linuxinput : public iot_hwdevcontype_metaclass 
 	);
 
 public:
-	static const iot_hwdevcontype_metaclass_linuxinput object; //the only instance of this class
+	static iot_hwdevcontype_metaclass_linuxinput object; //the only instance of this class
 
 private:
 	virtual int p_serialized_size(const iot_hwdev_localident* obj0) const override {
@@ -338,7 +338,7 @@ nomem:
 	}
 };
 
-const iot_hwdevcontype_metaclass_linuxinput iot_hwdevcontype_metaclass_linuxinput::object; //the only instance of this class
+iot_hwdevcontype_metaclass_linuxinput iot_hwdevcontype_metaclass_linuxinput::object; //the only instance of this class
 
 
 iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(void)

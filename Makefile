@@ -1,8 +1,17 @@
 
 .DEFAULT_GOAL := all
 
+APPNAME := iotdaemon$(APPEXT)
+COREDIR := core
+COREINCLUDEDIR := core/include
+
 auto/cvars.mk: ; #prevent make from attempt to remake this file
 include auto/cvars.mk
+
+ifneq ($(MAKECMDGOALS),clean)
+-include $(COREDIR)/.deps #include will trigger file rebuild if necessary
+endif
+
 
 APPEXT =
 ifdef SystemRoot
@@ -10,10 +19,6 @@ ifdef SystemRoot
 	APPEXT := .exe
 endif
 
-APPNAME := iotdaemon$(APPEXT)
-
-COREDIR := core
-COREINCLUDEDIR := core/include
 
 #BUNDLELIST := unet/generic/inputlinux unet/generic/kbd unet/generic/toneplayer
 BUNDLELIST := $(shell sed -n -r 's,^\s*([a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*y\s*$$,\1,p' bundles.cfg | tr '\n' ' ')
@@ -21,7 +26,7 @@ BUNDLELIST := $(shell sed -n -r 's,^\s*([a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a
 DYNBUNDLELIST := $(shell sed -n -r 's,^\s*([a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9]/[a-zA-Z0-9_]*[a-zA-Z0-9])\s*=\s*m\s*$$,\1,p' bundles.cfg | tr '\n' ' ')
 
 common_hdr := $(wildcard $(INCLUDEDIR)/*.h)
-core_hdr := $(common_hdr) $(wildcard $(COREINCLUDEDIR)/*.h)
+core_hdr := $(common_hdr) $(wildcard $(COREINCLUDEDIR)/*.h) $(wildcard auto/*.h)
 core_autohdr := 
 core_ccsrc := $(wildcard $(COREDIR)/*.cc)
 core_ccobjs := $(patsubst %.cc,%.o,$(core_ccsrc))
@@ -37,9 +42,14 @@ PHONY := all core static_modules modules clean registry coreregistry
 all: $(APPNAME) modules registry
 
 clean:
-	$(RM) $(COREDIR)/*.o *.o $(APPNAME) manifest_proc auto/iot_linkedlibs.cc auto/iot_dynlibs.cc auto/iot_modulesdb.h auto/bundles.cmd registry.part.json manifest.part.json dev_ids.json
+	$(RM) $(COREDIR)/*.o *.o $(COREDIR)/.deps $(APPNAME) manifest_proc auto/iot_linkedlibs.cc auto/iot_dynlibs.cc auto/iot_modulesdb.h auto/bundles.cmd registry.part.json manifest.part.json dev_ids.json
 	@echo Cleaning modules...
 	@for i in $(BUNDLELIST) $(DYNBUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i clean; done
+
+#regenerate deps file when any source changes
+$(COREDIR)/.deps : $(core_ccsrc) main.cc manifest_proc.cc
+	@set -e; echo "Generating dependencies for core..." ; $(RM) $@; $(CXX) $(CORECFLAGS) $(CXXFLAGS) -MM -MP $(core_ccsrc) | sed -r 's,^([a-zA-Z0-9_]+)\.o[ :]+,$(COREDIR)/\1.o $@ : ,g' > $@
+	@$(CXX) $(CORECFLAGS) $(CXXFLAGS) -MM -MP main.cc manifest_proc.cc | sed -r 's,^([a-zA-Z0-9_]+)\.o[ :]+,\1.o $@ : ,g' >> $@
 
 
 auto/iot_linkedlibs.cc: bundles.cfg
@@ -87,15 +97,15 @@ registry: manifest_proc coreregistry
 
 core: $(core_ccobjs)
 
-$(COREDIR)/iot_libregistry.o: auto/iot_linkedlibs.cc
+#in auto deps $(COREDIR)/iot_libregistry.o: auto/iot_linkedlibs.cc
 
 
-$(core_ccobjs) main.o manifest_proc.o: $(core_autohdr) $(core_hdr)
+#in auto deps $(core_ccobjs) main.o manifest_proc.o: $(core_autohdr) $(core_hdr)
 
 $(core_ccobjs) main.o manifest_proc.o: %.o : %.cc
 	$(CXX) $(CORECFLAGS) $(CXXFLAGS) -o $@ -c $<
 
-manifest_proc.o: auto/iot_dynlibs.cc
+#in auto deps  manifest_proc.o: auto/iot_dynlibs.cc
 
 
 static_modules:

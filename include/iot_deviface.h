@@ -11,8 +11,11 @@
 class iot_deviface_params;
 
 class iot_devifacetype_metaclass { //base abstract class for specifc device interface metaclass singleton objects
+	friend class iot_libregistry_t;
 	iot_type_id_t ifacetype_id;
 //	const char *vendor_name; //is NULL for built-in types
+	iot_devifacetype_metaclass* next, *prev; //non-NULL prev means that class is registered and both next and prev are used. otherwise only next is used
+													//for position in pending registration list
 
 	PACKED(
 		struct serialize_base_t {
@@ -24,9 +27,6 @@ public:
 	const char *const type_name;
 	const char *const parentlib;
 
-	iot_devifacetype_metaclass* next, *prev; //non-NULL prev means that class is registered and both next and prev are used. otherwise only next is used
-													//for position in pending registration list
-
 protected:
 	iot_devifacetype_metaclass(iot_type_id_t id, /*const char* vendor, */const char* type, uint32_t ver, const char* parentlib=IOT_CURLIBRARY); //id must be zero for non-builtin types. vendor is NULL for builtin types. type cannot be NULL
 
@@ -35,13 +35,6 @@ public:
 
 	iot_type_id_t get_id(void) const {
 		return ifacetype_id;
-	}
-	void set_id(iot_type_id_t id) {
-		if(ifacetype_id>0 || !id) {
-			assert(false);
-			return;
-		}
-		ifacetype_id=id;
 	}
 //	uint32_t get_version(void) const {
 //		return ver;
@@ -94,6 +87,13 @@ public:
 	int to_json(const iot_deviface_params* obj, json_object* &dst) const;
 
 private:
+	void set_id(iot_type_id_t id) {
+		if(ifacetype_id>0 || !id) {
+			assert(false);
+			return;
+		}
+		ifacetype_id=id;
+	}
 	virtual int p_serialized_size(const iot_deviface_params* obj) const = 0;
 	virtual int p_serialize(const iot_deviface_params* obj, char* buf, size_t bufsize) const = 0; //returns error code or 0 on success
 	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_deviface_params*& obj) const = 0;

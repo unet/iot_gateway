@@ -10,4 +10,7 @@
 
 #define IOT_SIGLEN 0
 
+//default port for TCP and UDP peer connectors
+#define IOT_PEERCON_TCPUDP_PORT 12002
+
 #endif //CONFIG_H

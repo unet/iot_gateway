@@ -303,6 +303,7 @@ int proc_module(iot_module_type_t type, const char* modname, void* modcfg, iot_r
 			iot_node_moduleconfig_t *modcfg_=(iot_node_moduleconfig_t *)modcfg;
 			iot_version_str(modcfg_->version, verbuf, sizeof(verbuf));
 			
+			json_object_object_add(data, "persistent", json_object_new_int(modcfg_->is_persistent ? (int(modcfg_->num_valueinputs) + modcfg_->num_msginputs == 0 ? 1 : 2) : 0));
 			//process device connections
 			if(json_object_object_get_ex(data, "device_connections", &subdata)) {
 				if(!json_object_is_type(subdata, json_type_object)) {

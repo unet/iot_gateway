@@ -265,6 +265,149 @@ public:
 	}
 };
 
+class iot_objectrefable;
+typedef void (*object_destroysub_t)(iot_objectrefable*);
 
+void object_destroysub_memblock(iot_objectrefable*);
+void object_destroysub_delete(iot_objectrefable*);
+
+
+//object which can be referenced by iot_objid_t - derived struct, has reference count and delayed destruction
+class iot_objectrefable {
+	mutable volatile std::atomic_flag reflock=ATOMIC_FLAG_INIT; //lock to protect critical sections
+//reflock protected:
+	mutable volatile bool pend_destroy=false; //flag that this struct in waiting for zero in refcount to be freed. can be accessed under acclock only
+	mutable volatile uint8_t reflock_recurs=0;
+	mutable volatile int32_t refcount=0; //how many times address of this object is referenced. value -1 together with true pend_destroy means that destroy_sub was already called (or is right to be called)
+	mutable volatile uv_thread_t reflocked_by={};
+///////////////////
+
+	object_destroysub_t destroy_sub; //can be NULL if no specific destruction required (i.e. object is statically allocated)
+
+protected:
+	iot_objectrefable(object_destroysub_t destroy_sub) : destroy_sub(destroy_sub) {
+	}
+	void lock_refdata(void) const { //wait for reflock mutex
+		if(reflocked_by==uv_thread_self()) { //this thread already owns lock increase recursion level
+			reflock_recurs++;
+			assert(reflock_recurs<5); //limit recursion to protect against endless loops
+			return;
+		}
+		uint16_t c=1;
+		while(reflock.test_and_set(std::memory_order_acquire)) {
+			//busy wait
+			if(!(c++ & 1023)) sched_yield();
+		}
+		reflocked_by=uv_thread_self();
+		assert(reflock_recurs==0);
+	}
+	void unlock_refdata(void) const { //free reflock mutex
+		if(reflocked_by!=uv_thread_self()) {
+			assert(false);
+			return;
+		}
+		if(reflock_recurs>0) { //in recursion
+			reflock_recurs--;
+			return;
+		}
+		reflocked_by={};
+		reflock.clear(std::memory_order_release);
+	}
+public:
+	virtual ~iot_objectrefable(void) {
+		if(!destroy_sub) { //statically allocated global object, so no explicit try_destroy call required to be done and refcount must be 0 on destruction in such case
+			if(refcount==0) return;
+			//else try_destroy call could have been done and refcount must be -1
+		}
+		assert(refcount==-1 && pend_destroy); //ensure destroy was called (and thus refcount checked)
+	}
+	void ref(void) const { //increment refcount if destruction is not pending. returns false in last case
+		lock_refdata();
+		assert(refcount>=0);
+//		if(refcount<0) {
+//			assert(false);
+//			pend_destroy=true; //set to make guaranted exit by next condition
+//		}
+//		if(pend_destroy) { //cannot be referenced ones more
+//			unlock_refdata();
+//			return false;
+//		}
+		refcount++;
+		unlock_refdata();
+		return;// true;
+	}
+	void unref(void) {
+		lock_refdata();
+		if(refcount<=0) {
+			assert(false);
+			unlock_refdata();
+			return;
+		}
+		refcount--;
+		if(refcount>0 || !pend_destroy) {
+			unlock_refdata();
+			return;
+		}
+		//here refcount==0 and pend_destroy==true
+		//mark as destroyed by setting refcount to -1
+		refcount=-1;
+		unlock_refdata();
+		if(destroy_sub) destroy_sub(this);
+	}
+	bool try_destroy(void) { //destroys object by calling destroy_sub and returns true if refcount is zero. otherwise marks object to be destroyed on last reference free and returns false
+		lock_refdata();
+		pend_destroy=true;
+		if(refcount==0) {
+			//mark as destroyed by setting refcount to -1
+			refcount=-1;
+			unlock_refdata();
+			if(destroy_sub) destroy_sub(this);
+			return true;
+		}
+		assert(refcount>0);
+		unlock_refdata();
+		return false;
+	}
+};
+
+//can be used with single writer only! no recursion allowed!
+class iot_spinrwlock {
+	volatile std::atomic<uint32_t> lockobj={0};
+public:
+	void rdlock(void) {
+		uint32_t lockval=lockobj.load(std::memory_order_relaxed); //initial read
+		uint16_t c=1;
+		do {
+			if(lockval<0x8000000u) { //no exclusive lock right now, try to increment readers count
+				lockval=lockobj.fetch_add(1, std::memory_order_acq_rel);
+				if(lockval<0x80000000u) break; //still no exclusive lock, so we got shared lock
+				//exclusive lock was initiated just after "initial read", so cancel initiated shared lock because writer can be waiting for 0x80000000u value
+				lockobj.fetch_sub(1, std::memory_order_release);
+			}
+			if(!((c++) & 1023)) sched_yield();
+			lockval=lockobj.load(std::memory_order_acquire); //repeat read again
+		} while(1);
+		//here we got shared lock
+		assert(lockval<0x20000); //limit maximum number of reader to 65536*2
+	}
+	void rdunlock(void) {
+		lockobj.fetch_sub(1, std::memory_order_release);
+	}
+	void wrlock(void) {
+		uint32_t lockval=lockobj.fetch_add(0x80000000u, std::memory_order_acq_rel);
+		assert(lockval<0x80000000u);
+		lockval+=0x80000000u;
+		uint16_t c=1;
+		while(lockval!=0x80000000u) {
+			assert(lockval>0x80000000u);
+			if(!((c++) & 1023)) sched_yield();
+			lockval=lockobj.load(std::memory_order_acquire);
+		}
+		//here lockval==0x80000000u so no readers active and cannot become active
+	}
+	void wrunlock(void) {
+		lockobj.fetch_sub(0x80000000u, std::memory_order_release);
+	}
+};
 
 #endif //IOT_COMMON_H

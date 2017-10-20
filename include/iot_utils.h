@@ -40,6 +40,8 @@ ecb_inline ecb_const double repack_double(double v) {uint64_t u=ecb_bswap64(*(ui
 	#define PACKED( __Declaration__ ) __pragma( pack(push, 1) ) __Declaration__ __pragma( pack(pop) )
 #elif defined(__GNUC__)
 	#define PACKED( __Declaration__ ) __Declaration__ __attribute__((packed))
+#else
+	#error Cannot set PACKED for current compiler
 #endif
 //Find correct event loop for specified thread
 //Returns 0 on success and fills loop with correct pointer

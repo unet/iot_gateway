@@ -7,7 +7,6 @@
 #include<assert.h>
 //#include<time.h>
 
-#include "iot_kapi.h"
 #include "iot_common.h"
 
 class iot_peer_link_t;
@@ -24,6 +23,10 @@ class iot_peers_registry_t;
 #include "iot_core.h"
 #include "iot_configregistry.h"
 
+
+
+
+
 struct iot_remote_driverinst_item_t {
 	iot_remote_driverinst_item_t *next, *prev;
 
@@ -35,9 +38,10 @@ struct iot_remote_driverinst_item_t {
 	iot_miid_t miid;
 };
 
-//represents data channel to another gateway
-class iot_peer_link_t {
-	iot_peer_link_t *next, *prev;
+
+//represents logical data channel to another gateway
+class iot_peer {
+	iot_peer *next, *prev;
 	
 	iot_remote_driverinst_item_t* drivers_head; //head of list of driver instances available for connections
 	enum {
@@ -54,7 +58,7 @@ class iot_peer_link_t {
 public:
 	const iot_hostid_t hostid;
 
-	iot_peer_link_t(iot_hostid_t hostid) : drivers_head(NULL), state(STATE_INIT), last_sync(0), hostid(hostid) {
+	iot_peer(iot_hostid_t hostid) : drivers_head(NULL), state(STATE_INIT), last_sync(0), hostid(hostid) {
 		state_time=uv_now(main_loop);
 	}
 
@@ -78,15 +82,15 @@ public:
 extern iot_peers_registry_t *peers_registry;
 
 class iot_peers_registry_t {
-	iot_peer_link_t *peers_head;
+	iot_peer *peers_head;
 	
 public:
 	iot_peers_registry_t(void) : peers_head(NULL) {
 		assert(peers_registry==NULL);
 		peers_registry=this;
 	}
-	iot_peer_link_t* find_peer_link(iot_hostid_t hostid) {
-		iot_peer_link_t* link=peers_head;
+	iot_peer* find_peer_link(iot_hostid_t hostid) {
+		iot_peer* link=peers_head;
 		while(link) {
 			if(link->hostid==hostid) return link;
 		}

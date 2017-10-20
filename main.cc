@@ -16,7 +16,8 @@
 #include "iot_core.h"
 #include "iot_moduleregistry.h"
 #include "iot_configregistry.h"
-
+#include "iot_netcon.h"
+#include "iot_netproto_iotgw.h"
 
 #define PIDFILE_NAME "daemon.pid"
 #define LOGFILE_NAME "daemon.log"
@@ -38,7 +39,9 @@ static timeval _start_timeval;
 //};
 
 
+iot_netproto_config_iotgw listen_proto_iotgw(0); //protocol config for listening sockets
 
+iot_netconregistry *peers_conregistry=NULL;
 
 volatile sig_atomic_t need_restart=0;
 void onsignal (uv_signal_t *w, int signum);
@@ -47,7 +50,8 @@ struct daemon_setup_t {
 	iot_hostid_t host_id=0;
 	bool daemonize=true;
 	int min_loglevel=-1;
-	uint16_t listen_port=12000;
+	json_object* listencfg=NULL;
+//	uint16_t listen_port=12000;
 } daemon_setup;
 
 
@@ -81,7 +85,7 @@ bool parse_setup(void) {
 	close(fd);
 	buf[len]='\0';
 
-	json_tokener *tok=json_tokener_new_ex(3);
+	json_tokener *tok=json_tokener_new_ex(5);
 	if(!tok) {
 		fprintf(stderr, "Lack of memory to start JSON parser\n");
 		return false;
@@ -121,11 +125,19 @@ bool parse_setup(void) {
 	if(json_object_object_get_ex(obj, "daemonize", &val)) {
 		daemon_setup.daemonize = json_object_get_boolean(val) ? true : false;
 	}
-	if(json_object_object_get_ex(obj, "listen_port", &val)) {
-		errno=0;
-		int32_t i32=json_object_get_int(val);
-		if(!errno && i32>0 && i32<65536) daemon_setup.listen_port=uint16_t(i32);
-			else fprintf(stderr, "Invalid value '%s' for 'listen_port' in setup file '%s' was ignored\n",  json_object_get_string(val), namebuf);
+//	if(json_object_object_get_ex(obj, "listen_port", &val)) {
+//		errno=0;
+//		int32_t i32=json_object_get_int(val);
+//		if(!errno && i32>0 && i32<65536) daemon_setup.listen_port=uint16_t(i32);
+//			else fprintf(stderr, "Invalid value '%s' for 'listen_port' in setup file '%s' was ignored\n",  json_object_get_string(val), namebuf);
+//	}
+	if(json_object_object_get_ex(obj, "listen", &val)) {
+		if(!json_object_is_type(val,  json_type_array)) {
+			fprintf(stderr, "Invalid 'listen' configuration in setup file '%s', it must have JSON-array\n", namebuf);
+			json_object_put(obj); obj = NULL;
+			return false;
+		}
+		daemon_setup.listencfg=json_object_get(val);
 	}
 
 	json_object_put(obj); obj = NULL;
@@ -148,6 +160,7 @@ int main(int argn, char **arg) {
 		fprintf(stderr,"Error creating '%s': %s\n", run_dir, strerror(errno));
 		return 1;
 	}
+
 
 	if(!parse_setup()) {
 		return 1;
@@ -192,6 +205,23 @@ int main(int argn, char **arg) {
 	iot_starttime_ms=uv_now(main_loop);
 	gettimeofday(&_start_timeval, NULL);
 
+	uv_signal_t sigint_watcher,sighup_watcher,sigusr1_watcher,sigterm_watcher,sigquit_watcher;
+
+	uv_signal_init(main_loop, &sigint_watcher);
+	uv_signal_init(main_loop, &sighup_watcher);
+	uv_signal_init(main_loop, &sigusr1_watcher);
+	uv_signal_init(main_loop, &sigterm_watcher);
+	uv_signal_init(main_loop, &sigquit_watcher);
+
+	uv_signal_start(&sigint_watcher,onsignal,SIGINT);
+	uv_signal_start(&sighup_watcher,onsignal,SIGHUP);
+	uv_signal_start(&sigusr1_watcher,onsignal,SIGUSR1);
+	uv_signal_start(&sigterm_watcher,onsignal,SIGTERM);
+	uv_signal_start(&sigquit_watcher,onsignal,SIGQUIT);
+
+	uv_timer_t shutdown_watcher;
+	uv_timer_init(main_loop, &shutdown_watcher);
+
 	iot_current_hostid=daemon_setup.host_id;
 	outlog_debug("Started, my host id is %" IOT_PRIhostid, iot_current_hostid);
 
@@ -205,6 +235,38 @@ int main(int argn, char **arg) {
 		json_object_put(cfg);
 		goto onexit;
 	}
+
+	peers_conregistry=new iot_netconregistry("peers_conregistry", 100);
+	assert(peers_conregistry!=NULL);
+	err=peers_conregistry->init();
+	if(err) {
+		outlog_error("Error initializing peer conregistry: %s", kapi_strerror(err));
+		json_object_put(cfg);
+		goto onexit;
+	}
+	if(daemon_setup.listencfg) {
+		err=peers_conregistry->add_connections(true, daemon_setup.listencfg, &listen_proto_iotgw, true);
+		if(err) {
+			outlog_error("Error adding connections to listen for peers: %s", kapi_strerror(err));
+			json_object_put(cfg);
+			goto onexit;
+		}
+	}
+
+	//add client connections
+	for(auto curhost=config_registry->hosts_listhead(); curhost; curhost=curhost->next) {
+		if(curhost->host_id==iot_current_hostid) continue;
+		if(curhost->manual_connect_params) {
+			iot_netproto_config_iotgw* protocfg=new iot_netproto_config_iotgw(curhost, object_destroysub_delete);
+			assert(protocfg!=NULL);
+			err=peers_conregistry->add_connections(false, curhost->manual_connect_params, protocfg, true);
+			if(err) {
+				outlog_error("Error adding connections to host %" IOT_PRIhostid ": %s", kapi_strerror(err));
+			}
+			protocfg->try_destroy(); //sets auto delete on last unref
+		}
+	}
+
 
 	//Here setup server connection to actualize config before instantiation
 	//
@@ -234,22 +296,6 @@ int main(int argn, char **arg) {
 
 	config_registry->start_config();
 
-	uv_signal_t sigint_watcher,sighup_watcher,sigusr1_watcher,sigterm_watcher,sigquit_watcher;
-
-	uv_signal_init(main_loop, &sigint_watcher);
-	uv_signal_init(main_loop, &sighup_watcher);
-	uv_signal_init(main_loop, &sigusr1_watcher);
-	uv_signal_init(main_loop, &sigterm_watcher);
-	uv_signal_init(main_loop, &sigquit_watcher);
-
-	uv_signal_start(&sigint_watcher,onsignal,SIGINT);
-	uv_signal_start(&sighup_watcher,onsignal,SIGHUP);
-	uv_signal_start(&sigusr1_watcher,onsignal,SIGUSR1);
-	uv_signal_start(&sigterm_watcher,onsignal,SIGTERM);
-	uv_signal_start(&sigquit_watcher,onsignal,SIGQUIT);
-
-	uv_timer_t shutdown_watcher;
-	uv_timer_init(main_loop, &shutdown_watcher);
 
 
 //	bool shuttingdown; //true when graceful shutdown was scheduled
@@ -291,6 +337,8 @@ onexit:
 
 //  close connections to all peers
 
+	if(peers_conregistry) delete peers_conregistry;
+	if(daemon_setup.listencfg) json_object_put(daemon_setup.listencfg);
 
 	outlog_notice("Terminated%s",need_restart ? ", restart requested" : "");
 	close_log();

@@ -85,7 +85,7 @@ class iot_devifacetype_metaclass_keyboard : public iot_devifacetype_metaclass {
 
 
 public:
-	static const iot_devifacetype_metaclass_keyboard object; //the only instance of this class
+	static iot_devifacetype_metaclass_keyboard object; //the only instance of this class
 
 private:
 	virtual int p_serialized_size(const iot_deviface_params* obj0) const override {

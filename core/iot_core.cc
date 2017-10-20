@@ -8,6 +8,7 @@
 #include "iot_module.h"
 #include "iot_daemonlib.h"
 #include "iot_core.h"
+#include "iot_netcon.h"
 
 //correspondence between cpu_loading indexes and points which every modinstance adds to thread total loading estimation
 static const uint16_t iot_thread_loading[4] = {
@@ -502,6 +503,15 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						iot_release_msg(msg); msg=NULL; //early release of message struct
 
 						config_registry->inject_negative_signal(&neg);
+						break;
+					}
+					case IOT_MSG_PEERCON_STARTWORK: { //peercon must be started
+						//peercon thread
+						iot_netcon *con=(iot_netcon *)msg->data;
+						assert(con!=NULL);
+						iot_release_msg(msg); msg=NULL; //early release of message struct
+						con->start_msg=NULL; //mark that no references to connection left in message struct
+						con->do_start_uv();
 						break;
 					}
 
