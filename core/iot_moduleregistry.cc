@@ -3,21 +3,31 @@
 //#include<time.h>
 #include <new>
 
-#include "iot_module.h"
-#include "iot_utils.h"
-#include "iot_daemonlib.h"
-#include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
+
+#include "iot_threadregistry.h"
+#include "iot_deviceconn.h"
+#include "iot_deviceregistry.h"
 #include "iot_configregistry.h"
 #include "iot_peerconnection.h"
-#include "iot_core.h"
 
 
-iot_modules_registry_t *modules_registry=NULL;
-static iot_modules_registry_t _modules_registry; //instantiate singleton
 
 static iot_modinstance_item_t iot_modinstances[IOT_MAX_MODINSTANCES]; //zero item is not used
 static iot_iid_t last_iid=0; //holds last assigned module instance id
+
+void iot_driverclient_conndata_t::block_driver(dbllist_node<iot_device_entry_t, iot_mi_inputid_t, uint32_t>* node, uint32_t till) {
+		assert(node!=NULL);
+		node->val=till;
+		retry_drivers.insert_head(node);
+		//add to driver's list
+		if(node->key1.is_local) {
+			node->key1.local->data.driver.retry_clients.insert_head(node);
+		} else {
+			node->key1.remote->retry_clients.insert_head(node);
+		}
+	}
+
 
 
 void iot_modules_registry_t::create_detector_modinstance(iot_detector_module_item_t* module) {

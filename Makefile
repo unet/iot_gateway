@@ -47,7 +47,7 @@ clean:
 	@for i in $(BUNDLELIST) $(DYNBUNDLELIST) ; do $(MAKE) -C $(MODULESDIR)/$$i clean; done
 
 #regenerate deps file when any source changes
-$(COREDIR)/.deps : $(core_ccsrc) main.cc manifest_proc.cc
+$(COREDIR)/.deps : auto/iot_linkedlibs.cc auto/iot_dynlibs.cc $(core_ccsrc) main.cc manifest_proc.cc
 	@set -e; echo "Generating dependencies for core..." ; $(RM) $@; $(CXX) $(CORECFLAGS) $(CXXFLAGS) -MM -MP $(core_ccsrc) | sed -r 's,^([a-zA-Z0-9_]+)\.o[ :]+,$(COREDIR)/\1.o $@ : ,g' > $@
 	@$(CXX) $(CORECFLAGS) $(CXXFLAGS) -MM -MP main.cc manifest_proc.cc | sed -r 's,^([a-zA-Z0-9_]+)\.o[ :]+,\1.o $@ : ,g' >> $@
 

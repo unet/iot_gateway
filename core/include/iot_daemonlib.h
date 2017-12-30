@@ -1,6 +1,8 @@
 #ifndef IOT_DAEMONLIB_H
 #define IOT_DAEMONLIB_H
 
+#include "iot_module.h"
+
 
 #define outlog_error(format... ) do_outlog(__FILE__, __LINE__, __func__, LERROR, format)
 #define outlog_notice(format... ) do {if(LMIN<=LNOTICE && min_loglevel <= LNOTICE) do_outlog(__FILE__, __LINE__, __func__, LNOTICE, format);} while(0)

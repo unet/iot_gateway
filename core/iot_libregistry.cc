@@ -4,11 +4,7 @@
 #include <new>
 
 //#include "iot_module.h"
-#include "config.h"
 #include "iot_libregistry.h"
-#include "iot_utils.h"
-#include "iot_daemonlib.h"
-#include "iot_common.h"
 //#include "iot_deviceregistry.h"
 //#include "iot_moduleregistry.h"
 //#include "iot_configregistry.h"

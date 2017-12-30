@@ -5,13 +5,15 @@
 
 
 //#include "iot_compat.h"
-#include "uv.h"
-#include "iot_module.h"
+#include "iot_core.h"
 #include "iot_devclass_keyboard.h"
 #include "iot_devclass_activatable.h"
 //#include "iot_devclass_toneplayer.h"
-#include "iot_daemonlib.h"
+
 #include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_configmodel.h"
+#include "iot_threadregistry.h"
 
 
 extern uv_loop_t *main_loop;

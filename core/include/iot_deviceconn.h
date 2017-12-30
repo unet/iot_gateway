@@ -5,14 +5,9 @@
 #include<stdint.h>
 #include<assert.h>
 
-#include "iot_module.h"
-#include "iot_kapi.h"
-#include "iot_common.h"
-
-
-#include "iot_deviceregistry.h"
-#include "iot_moduleregistry.h"
 #include "iot_core.h"
+#include "iot_libregistry.h"
+#include "iot_memalloc.h"
 
 //space for IDs of device connections
 #define IOT_MAX_DEVICECONNECTIONS 16384
@@ -136,11 +131,10 @@ public:
 	int close(iot_threadmsg_t* asyncmsg=NULL); //any thread
 
 	void lock(void) { //tries to lock structure from modifying
-		uint8_t c=0;
+		uint16_t c=1;
 		while(acclock.test_and_set(std::memory_order_acquire)) {
 			//busy wait
-			c++;
-			if((c & 0x3F)==0x3F) sched_yield();
+			if(!(c++ & 1023)) sched_yield();
 		}
 	}
 	void unlock(void) {

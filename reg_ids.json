@@ -3,9 +3,9 @@
       "linuxinput" : 2000
    },
    "datatypes" : {
-      "bitmap" : 1002,
+      "bitmap" : 1000,
       "boolean" : 1001,
-      "nodeerrorstate" : 1000
+      "nodeerrorstate" : 1002
    },
    "detector_modules" : {
       "unet/generic/inputlinux:det" : 1000

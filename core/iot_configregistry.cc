@@ -4,18 +4,14 @@
 #include <inttypes.h>
 //#include<time.h>
 
-#include "iot_module.h"
-#include "iot_utils.h"
-#include "iot_daemonlib.h"
-#include "iot_deviceregistry.h"
-#include "iot_moduleregistry.h"
-#include "iot_core.h"
 #include "iot_configregistry.h"
 
+#include "iot_deviceregistry.h"
+#include "iot_moduleregistry.h"
+#include "iot_peerconnection.h"
 
 
-iot_configregistry_t* config_registry=NULL;
-static iot_configregistry_t _config_registry;
+
 
 iot_hostid_t iot_current_hostid=0; //ID of current host in user config
 
@@ -91,6 +87,34 @@ iot_config_item_link_t link={
 };
 
 */
+
+int iot_config_item_host_t::update_from_json(json_object *obj) {
+		json_object *val=NULL;
+		uint32_t cfg_id_=0;
+		if(json_object_object_get_ex(obj, "cfg_id", &val)) IOT_JSONPARSE_UINT(val, uint32_t, cfg_id_)
+
+		if(cfg_id>=cfg_id_) return 0;
+
+		//update this data only if cfg_id was incremented
+		cfg_id=cfg_id_;
+
+		if(!is_current) { //no need in connection params for current host
+			if(manual_connect_params) {
+				json_object_put(manual_connect_params);
+				manual_connect_params=NULL;
+			}
+			if(json_object_object_get_ex(obj, "connect", &manual_connect_params)) {
+				json_object_get(manual_connect_params);
+				if(peer) {
+					int err=peer->set_connections(manual_connect_params);
+					if(err) outlog_error("Cannot set connections to peer host " IOT_PRIhostid ": %s", host_id, kapi_strerror(err));
+				}
+			} else if(peer) {
+				peer->reset_connections();
+			}
+		}
+		return 0;
+	}
 
 
 json_object* iot_configregistry_t::read_jsonfile(const char* dir, const char* relpath, const char *name) {
@@ -386,6 +410,26 @@ int iot_configregistry_t::rule_update(iot_id_t ruleid, json_object* obj) {
 	return 0;
 }
 
+int iot_configregistry_t::host_update(iot_hostid_t hostid, json_object* obj) {
+		assert(uv_thread_self()==main_thread);
+
+		iot_config_item_host_t* host=host_find(hostid);
+		if(!host) {
+			size_t sz=sizeof(iot_config_item_host_t); //+additional bytes
+			host=(iot_config_item_host_t*)main_allocator.allocate(sz, true);
+			if(!host) return IOT_ERROR_NO_MEMORY;
+
+			iot_peer* p=gwinst->peers_registry->find_peer(hostid, true);
+			if(!p) {
+				iot_release_memblock(host);
+				return IOT_ERROR_NO_MEMORY;
+			}
+			new(host) iot_config_item_host_t(gwinst->this_hostid==hostid, hostid, p);
+			host_add(host);
+		} else host->is_del=false;
+		return host->update_from_json(obj);
+	}
+
 
 //errors:
 //	IOT_ERROR_NOT_FOUND - group_id not found
@@ -480,7 +524,7 @@ int iot_configregistry_t::node_update(iot_id_t nodeid, json_object* obj) {
 	if(json_object_object_get_ex(obj, "host_id", &val)) IOT_JSONPARSE_UINT(val, iot_hostid_t, host_id)
 
 	iot_config_item_host_t* host=NULL;
-	if(host_id>0 && host_id!=IOT_HOSTID_ANY) host=host_find(host_id, true); //fo rnow di not increase refcount of host in nodes
+	if(host_id>0 && host_id!=IOT_HOSTID_ANY) host=host_find(host_id);
 	if(!host || host->is_del) {
 		outlog_error("node at config path nodecfg.nodes.%" IOT_PRIiotid " refers to non-existing host " IOT_PRIhostid ", skipping it", nodeid, host_id);
 		return IOT_ERROR_NOT_FOUND;
@@ -1070,7 +1114,7 @@ void iot_config_item_node_t::execute(bool forceasync) {
 		}
 
 		if(!nodemodel) {
-			if(host!=config_registry->current_host) {
+			if(!host->is_current) {
 				//TODO
 				return;
 			}

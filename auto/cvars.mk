@@ -17,7 +17,7 @@ INCLUDEDIRS := -I$(BASEDIR) -I$(BASEDIR)/$(INCLUDEDIR) -I$(BASEDIR)/libuv/includ
 #CFLAGS = -Wall -Wstrict-overflow=2 -g -O0 -fPIC -rdynamic -fno-strict-aliasing -I. -Iinclude -pthread -Ilibuv/include
 #CFLAGS_NDEBUG = -Wall -Wstrict-overflow=2 -O2 -DNDEBUG -I. -Iinclude -pthread -Ilibuv/include
 CFLAGS := -Wall -Wstrict-overflow=2 -g -O0 -pthread -fdata-sections -ffunction-sections $(INCLUDEDIRS)
-CXXFLAGS = $(CFLAGS) -fno-rtti -std=c++11
+CXXFLAGS = $(CFLAGS) -fno-rtti -std=c++17
 
 DYNCFLAGS := -fPIC
 DYNLDFLAGS := -g -shared

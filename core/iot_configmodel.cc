@@ -1,14 +1,12 @@
 #include<stdint.h>
 //#include<time.h>
 
-#include "iot_module.h"
-#include "iot_utils.h"
-#include "iot_daemonlib.h"
+#include "iot_configmodel.h"
 #include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
-#include "iot_core.h"
 #include "iot_configregistry.h"
-#include "iot_configmodel.h"
+#include "iot_threadregistry.h"
+#include "iot_peerconnection.h"
 
 
 iot_nodemodel* iot_nodemodel::create(iot_config_item_node_t* cfgitem) {

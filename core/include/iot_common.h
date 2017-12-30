@@ -2,15 +2,16 @@
 #define IOT_COMMON_H
 //Contains constants, methods and data structures for LOCAL hardware devices storing and searching
 
+#include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <atomic>
 #include <sched.h>
 #include <assert.h>
 
-//#include<time.h>
-
-#include "ecb.h"
-#include "iot_utils.h"
+#include "uv.h"
+//#include "ecb.h"
+//#include "iot_daemonlib.h"
 
 
 #define IOT_JSONPARSE_UINT(jsonval, typename, varname) { \
@@ -98,10 +99,9 @@ public:
 										/*  head will be modified if FALSE!!! */
 				head=stub;
 			} else { //push is right in progress. it can be at critial point so we must wait when it will be passed and 'next' gets non-NULL value
-				unsigned char c=0;
+				uint16_t c=1;
 				while(!(oldhead->*NextPtr).load(std::memory_order_acquire)) {
-					c++;
-					if((c & 0x3F) == 0x3F) sched_yield();
+					if(!(c++ & 1023)) sched_yield();
 				}
 				head=(oldhead->*NextPtr).load(std::memory_order_relaxed); //non-NULL next becomes new head
 			}
@@ -131,10 +131,9 @@ public:
 				break;
 			}
 			//push is right in progress. it can be at critial point so we must wait when it will be passed and 'next' gets non-NULL value
-			unsigned char c=0;
+			uint16_t c=1;
 			while(!(head->*NextPtr).load(std::memory_order_acquire)) {
-				c++;
-				if((c & 0x3F) == 0x3F) sched_yield();
+				if(!(c++ & 1023)) sched_yield();
 			}
 			//here push was finished so we can continue to grab connected items (more than one could become ready at this point)
 			next=(head->*NextPtr).load(std::memory_order_relaxed);
@@ -265,6 +264,11 @@ public:
 	}
 };
 
+struct iot_releasable {
+	virtual void releasedata(void) = 0; //called to free/release dynamic data connected with object
+};
+
+
 class iot_objectrefable;
 typedef void (*object_destroysub_t)(iot_objectrefable*);
 
@@ -276,19 +280,26 @@ void object_destroysub_delete(iot_objectrefable*);
 class iot_objectrefable {
 	mutable volatile std::atomic_flag reflock=ATOMIC_FLAG_INIT; //lock to protect critical sections
 //reflock protected:
-	mutable volatile bool pend_destroy=false; //flag that this struct in waiting for zero in refcount to be freed. can be accessed under acclock only
+	mutable volatile bool pend_destroy; //flag that this struct in waiting for zero in refcount to be freed. can be accessed under acclock only
 	mutable volatile uint8_t reflock_recurs=0;
-	mutable volatile int32_t refcount=0; //how many times address of this object is referenced. value -1 together with true pend_destroy means that destroy_sub was already called (or is right to be called)
+	mutable volatile int32_t refcount; //how many times address of this object is referenced. value -1 together with true pend_destroy means that destroy_sub was already called (or is right to be called)
 	mutable volatile uv_thread_t reflocked_by={};
 ///////////////////
 
-	object_destroysub_t destroy_sub; //can be NULL if no specific destruction required (i.e. object is statically allocated)
+	object_destroysub_t destroy_sub; //can be NULL if no specific destruction required (i.e. object is statically allocated). this function MUST call iot_objectrefable desctuctor (explicitely or doing delete)
 
 protected:
-	iot_objectrefable(object_destroysub_t destroy_sub) : destroy_sub(destroy_sub) {
+	iot_objectrefable(object_destroysub_t destroy_sub, bool is_dynamic) : destroy_sub(destroy_sub) {
+		if(is_dynamic) { //creates object with 1 reference count and pending release, so first unref() without prior ref() will destroy the object
+			refcount=1;
+			pend_destroy=true;
+		} else { //such mode can be used for statically allocated objects (so destroy_sub must be NULL)
+			refcount=0;
+			pend_destroy=false;
+		}
 	}
 	void lock_refdata(void) const { //wait for reflock mutex
-		if(reflocked_by==uv_thread_self()) { //this thread already owns lock increase recursion level
+		if(reflocked_by==uv_thread_self()) { //this thread already owns lock, just increase recursion level
 			reflock_recurs++;
 			assert(reflock_recurs<5); //limit recursion to protect against endless loops
 			return;
@@ -321,7 +332,11 @@ public:
 		}
 		assert(refcount==-1 && pend_destroy); //ensure destroy was called (and thus refcount checked)
 	}
+	int32_t get_refcount(void) const {
+		return refcount;
+	}
 	void ref(void) const { //increment refcount if destruction is not pending. returns false in last case
+//outlog_error("%x ref increased", unsigned(uintptr_t(this)));
 		lock_refdata();
 		assert(refcount>=0);
 //		if(refcount<0) {
@@ -337,6 +352,7 @@ public:
 		return;// true;
 	}
 	void unref(void) {
+//outlog_error("%x unref", unsigned(uintptr_t(this)));
 		lock_refdata();
 		if(refcount<=0) {
 			assert(false);
@@ -369,6 +385,102 @@ public:
 		return false;
 	}
 };
+
+
+
+//smart pointer which holds additional reference to iot_objectrefable-derived objects and frees it on destruction
+template<typename T> class iot_objref_ptr {
+	T *ptr;
+public:
+	iot_objref_ptr(void) : ptr(NULL) {} //default constructor for arrays
+	iot_objref_ptr(const iot_objref_ptr& src) { //copy constructor
+		ptr=src.ptr;
+		if(ptr) ptr->ref(); //increase refcount
+	}
+	iot_objref_ptr(iot_objref_ptr&& src) noexcept { //move constructor
+		ptr=src.ptr;
+		src.ptr=NULL;
+	}
+	iot_objref_ptr(T *obj) {
+		if(!obj) {
+			ptr=NULL;
+		} else {
+			ptr=obj;
+			ptr->ref(); //increase refcount
+		}
+	}
+	iot_objref_ptr(bool noref, T *obj) { //true 'noref' tells to not increment refcount
+		if(!obj) {
+			ptr=NULL;
+		} else {
+			ptr=obj;
+			if(!noref) ptr->ref(); //increase refcount
+		}
+	}
+	iot_objref_ptr(T && srcobj) = delete; //move constructor for temporary object. NO TEMPORARY iot_objectrefable-derived OBJECTS SHOULD BE CREATED
+
+	~iot_objref_ptr() {
+		clear();
+	}
+	void clear(void) { //free reference
+		if(!ptr) return;
+		ptr->unref();
+		ptr=NULL;
+	}
+	iot_objref_ptr& operator=(T *obj) {
+		if(ptr==obj) return *this; //no action
+		if(ptr) ptr->unref();
+		if(!obj) {
+			ptr=NULL;
+		} else {
+			ptr=obj;
+			ptr->ref(); //increase refcount
+		}
+		return *this;
+	}
+	iot_objref_ptr& operator=(const iot_objref_ptr& src) { //copy assignment
+		if(this==&src || ptr==src.ptr) return *this; //no action
+		if(ptr) ptr->unref();
+		ptr=src.ptr;
+		if(ptr) ptr->ref(); //increase refcount
+		return *this;
+	}
+	iot_objref_ptr& operator=(iot_objref_ptr&& src) {  //move assignment
+		if(this==&src || ptr==src.ptr) return *this; //no action
+		if(ptr) ptr->unref();
+		ptr=src.ptr;
+		src.ptr=NULL;
+		return *this;
+	}
+	bool operator==(const T& rhs) const{
+		return ptr==rhs.ptr;
+	}
+	bool operator!=(const T& rhs) const{
+		return ptr!=rhs.ptr;
+	}
+	bool operator==(const T *rhs) const{
+		return ptr==rhs;
+	}
+	bool operator!=(const T *rhs) const{
+		return ptr!=rhs;
+	}
+	explicit operator bool() const {
+		return ptr!=NULL;
+	}
+	bool operator !(void) const {
+		return ptr==NULL;
+	}
+	operator T*() const {
+		return ptr;
+	}
+	T* operator->() const {
+		assert(ptr!=NULL);
+		return ptr;
+	}
+};
+
+
+
 
 //can be used with single writer only! no recursion allowed!
 class iot_spinrwlock {
@@ -409,5 +521,9 @@ public:
 		lockobj.fetch_sub(0x80000000u, std::memory_order_release);
 	}
 };
+
+
+
+
 
 #endif //IOT_COMMON_H

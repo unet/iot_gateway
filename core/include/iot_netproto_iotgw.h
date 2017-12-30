@@ -4,41 +4,20 @@
 
 #include<stdint.h>
 #include<assert.h>
-//#include<time.h>
 
+#include "iot_core.h"
 #include "iot_netcon.h"
 
+
+
 class iot_netproto_config_iotgw;
-class iot_gwprotoreq_introduce;
 struct iot_netproto_session_iotgw;
-
-class iot_netprototype_metaclass_iotgw : public iot_netprototype_metaclass {
-	iot_netprototype_metaclass_iotgw(void) : iot_netprototype_metaclass("iotgw") {
-	}
-
-public:
-	static iot_netprototype_metaclass_iotgw object;
-};
+class iot_gwprotoreq_introduce;
+class iot_gwproto_sesregistry;
 
 
+//#include "iot_configregistry.h"
 
-class iot_netproto_config_iotgw : public iot_netproto_config {
-public:
-	iot_config_item_host_t* const peer_host;
-	iot_netproto_config_iotgw(iot_config_item_host_t* peer_host, object_destroysub_t destroysub=NULL) :
-			iot_netproto_config(&iot_netprototype_metaclass_iotgw::object, destroysub),
-			peer_host(peer_host)
-	{
-		if(peer_host) peer_host->ref();
-	}
-
-	~iot_netproto_config_iotgw(void) {
-		if(peer_host) peer_host->unref();
-	}
-
-	virtual int instantiate(iot_netconiface* coniface) override; //must assign con->protostate. called in coniface->worker_thread
-	virtual void deinstantiate(iot_netconiface* con) override; //must free con->protosession and clean the pointer
-};
 
 enum class alloc_method_t : uint8_t {
 	STATIC,
@@ -52,12 +31,10 @@ enum class iot_gwproto_cmd_t : uint8_t {
 	INTRODUCE=1,   //sent by client side of connection to introduce itself
 };
 
-enum class iot_gwproto_reqtype_t : uint8_t {
-	REPLY=0,   //reply to previous request, must be matched by cmd and rqid
-	REQUEST=1, //request which requires reply with same cmd and rqid
-	NOTIFY=2,  //request which doesn't assume any reply
-
-	MAX=2
+//bit flags describing type of packet
+enum iot_gwproto_reqtype_t : uint8_t {
+	IOTGW_IS_REPLY=1,		//packet is reply packet, so on receive must be matched with corresponding request with same cmd, cmd_ver and rqid. when absent, packet is a request
+	IOTGW_IS_ASYNC=2,		//request packet which doesn't want any reply. otherwise reply is expected. should not be set for reply packets
 };
 
 enum class iot_gwproto_errcode_t : uint8_t {
@@ -71,10 +48,10 @@ enum class iot_gwproto_errcode_t : uint8_t {
 	CUSTOMBASE=32	//custom error statuses processed by specific request classes start from this value
 };
 
-
+//base class for IOTGW protocol request types
 struct iot_gwprotoreq {
 	iot_gwprotoreq* next=NULL, *prev=NULL;
-	iot_gwproto_reqtype_t reqtype;
+	uint8_t reqtype;
 	const iot_gwproto_cmd_t cmd;
 	const uint8_t cmd_ver;
 	enum state_t : uint8_t {
@@ -94,7 +71,7 @@ struct iot_gwprotoreq {
 
 	alloc_method_t alloc_method; //method of allocation of this struct to select proper deallocation method in release()
 
-	iot_gwprotoreq(iot_gwproto_reqtype_t reqtype, iot_gwproto_cmd_t cmd, uint8_t cmd_ver, alloc_method_t alloc_method, bool is_outgoing, uint32_t rqid=0) : 
+	iot_gwprotoreq(uint8_t reqtype, iot_gwproto_cmd_t cmd, uint8_t cmd_ver, alloc_method_t alloc_method, bool is_outgoing, uint32_t rqid=0) : 
 		reqtype(reqtype), cmd(cmd), cmd_ver(cmd_ver), state(is_outgoing ? STATE_SEND_READY : STATE_READ_READY), rqid(rqid), alloc_method(alloc_method)
 	{
 	}
@@ -109,27 +86,7 @@ struct iot_gwprotoreq {
 		release(p);
 	}
 
-	static void release(iot_gwprotoreq* &r) {
-		assert(r!=NULL);
-		switch(r->alloc_method) {
-			case alloc_method_t::STATIC:
-				break;
-			case alloc_method_t::NEW:
-				delete r;
-				break;
-			case alloc_method_t::MALLOC:
-				r->~iot_gwprotoreq();
-				free(r);
-				break;
-			case alloc_method_t::MEMBLOCK:
-				r->~iot_gwprotoreq();
-				iot_release_memblock(r);
-				break;
-			default:
-				assert(false);
-		}
-		r=NULL;
-	}
+	static void release(iot_gwprotoreq* &r);
 
 	//request header details to start sending request/reply in STATE_BEING_SENT.
 	virtual int p_req_outpacket_start(iot_netproto_session_iotgw* session, uint32_t &data_size, uint8_t &error_status) = 0; //returns error status (todo)
@@ -146,7 +103,7 @@ struct iot_gwprotoreq {
 
 	//called for request/reply when outpacket has been outputted to lower (or lowest?) level
 	virtual int p_req_outpacket_sent(iot_netproto_session_iotgw* session) {
-		if(reqtype==iot_gwproto_reqtype_t::NOTIFY) state=STATE_FINISHED;
+		if(reqtype & IOTGW_IS_ASYNC) state=STATE_FINISHED;
 		return 0;
 	}
 	virtual int p_reply_outpacket_sent(iot_netproto_session_iotgw* session) {
@@ -187,75 +144,96 @@ private:
 };
 
 
+
+
+
+
+//metaclass for IOTGW protocol type
+class iot_netprototype_metaclass_iotgw : public iot_netprototype_metaclass {
+	iot_netprototype_metaclass_iotgw(void) : iot_netprototype_metaclass("iotgw") {
+	}
+
+public:
+	static iot_netprototype_metaclass_iotgw object;
+};
+
+
+//keeps configuration for IOTGW protocol sessions
+class iot_netproto_config_iotgw : public iot_netproto_config {
+public:
+	iot_gwinstance *gwinst;
+	iot_objref_ptr<iot_peer> const peer;
+	iot_netproto_config_iotgw(iot_gwinstance *gwinst, iot_peer* peer, object_destroysub_t destroysub, bool is_dynamic) : 
+		iot_netproto_config(&iot_netprototype_metaclass_iotgw::object, destroysub, is_dynamic), gwinst(gwinst), peer(peer)
+	{
+		assert(gwinst!=NULL);
+	}
+
+	~iot_netproto_config_iotgw(void) {}
+
+	virtual int instantiate(iot_netconiface* coniface, iot_objref_ptr<iot_netproto_session> &ses) override; //called in coniface->worker_thread
+};
+
+
+
+
 #define IOT_GWPROTO_SENDBUFSIZE 65536
 #define IOT_GWPROTO_READBUFSIZE 65536
 
+#define IOT_GWPROTO_MINBUFSIZE (sizeof(iot_netproto_session_iotgw::packet_hdr_prolog)+sizeof(iot_netproto_session_iotgw::packet_hdr)+128)
+
+//represents IOTGW protocol session
 struct iot_netproto_session_iotgw : public iot_netproto_session {
+//	enum headflags_t : uint8_t {
+//	};
 	PACKED (
-		struct packet_hdr { //packet header. used for requests and replies, and for notifications from cache to manager
-			uint8_t reqtype;//value from iot_gwproto_reqtype_t
-			uint8_t cmd; 	//value from iot_gwproto_cmd_t
+		struct packet_hdr_prolog { //packet prolog. tells which optional parts of header are present.
+			uint8_t iotsign[2]; //'I','G' - protocol signature
+			uint8_t headflags; //bit field with flags from headflags_t. for future extensions
+			uint8_t headlen; //size of header, including all optional and generic part according to headflags
+		}
+	);
+	PACKED (
+		struct packet_hdr { //data packet header, always immediately precedes data
+			uint8_t reqtype;//bit mask constructed from values from iot_gwproto_reqtype_t
+			uint8_t cmd;	//value from iot_gwproto_cmd_t
 			uint8_t cmd_ver;//version of command request structure. reply structure must use the same numbering
 			uint8_t error;	//error status for reply
-			uint32_t sz; //size of additional data (format depends on cmd)
-			uint32_t rqid; //request ID to be matched between request and reply. zero is unused
+			uint32_t sz;	//size of additional data (format depends on cmd)
+			uint32_t rqid;	//request ID to be matched between request and reply. zero is unused
 		}
 	);
 	static_assert(sizeof(packet_hdr)==12);
 
-	alignas(16) char sendbuf[IOT_GWPROTO_SENDBUFSIZE >= sizeof(packet_hdr) ? IOT_GWPROTO_SENDBUFSIZE : sizeof(packet_hdr)];
-	alignas(16) char readbuf[IOT_GWPROTO_READBUFSIZE >= sizeof(packet_hdr) ? IOT_GWPROTO_READBUFSIZE : sizeof(packet_hdr)];
+	alignas(16) char sendbuf[IOT_GWPROTO_SENDBUFSIZE >= IOT_GWPROTO_MINBUFSIZE ? IOT_GWPROTO_SENDBUFSIZE : IOT_GWPROTO_MINBUFSIZE];
+	alignas(16) char readbuf[IOT_GWPROTO_READBUFSIZE >= IOT_GWPROTO_MINBUFSIZE ? IOT_GWPROTO_READBUFSIZE : IOT_GWPROTO_MINBUFSIZE];
 
-	iot_netproto_config_iotgw* const config;
-	iot_config_item_host_t* peer_host;
+	static const uint8_t packet_signature[2];
+	static_assert(sizeof(packet_hdr_prolog::iotsign)==sizeof(packet_signature));
+
+	iot_netproto_session_iotgw *registry_next=NULL, *registry_prev=NULL; //used to keep links for peer->sesreg iot_gwproto_sesregistry object
+	iot_objref_ptr<iot_netproto_config_iotgw> const config;
+	iot_objref_ptr<iot_peer> peer_host;
+
+	uint32_t next_rqid=1; //incremented for each outgoing request
+	iot_gwprotoreq* outpackets_head=NULL, *outpackets_tail=NULL; //outgoing queue. packets are added to tail, taken from head
+	iot_gwprotoreq* current_outpacket=NULL; //request being currently sent
+	size_t current_outpacket_offset=0, current_outpacket_size=0; //related to current_outpacket
+
+	iot_gwprotoreq* waitingpackets_head=NULL, *waitingpackets_tail=NULL; //reply awaiting queue. waiting requests are added to tail, checked from head
+	iot_gwprotoreq* current_inpacket=NULL; //request being read (if header already got)
+	size_t current_inpacket_offset=0, current_inpacket_size=0;
+	uint32_t readbuf_offset=0;
+	bool current_inpacket_wantsfull=false; //when true, means that current_inpacket wants all data in one chunk (so current_inpacket_size must fit readbuf)
+
 	bool introduced;
 	uint8_t closed=0; //1 - graceful close: reading stops immediately, writing stops accepting new requests but finishes to send existing and then makes shutdown of coniface
 					//2 - immediate close: reading stops immediately, write is stopped immediately by closing coniface
 
-	uint32_t next_rqid=1; //incremented for each outgoing request
-	iot_gwprotoreq* outpackets_head=NULL, *outpackets_tail=NULL; //added to tail, taken from head
-	iot_gwprotoreq* current_outpacket=NULL; //request being sent
-	size_t current_outpacket_offset=0;
-	size_t current_outpacket_size=0;
 
-	iot_gwprotoreq* waitingpackets_head=NULL, *waitingpackets_tail=NULL; //added to tail, checked from head
+	iot_netproto_session_iotgw(iot_netconiface* coniface, iot_netproto_config_iotgw* config, object_destroysub_t destroysub);
+	~iot_netproto_session_iotgw();
 
-	iot_gwprotoreq* current_inpacket=NULL; //request being read (if header already got)
-	size_t current_inpacket_offset=0;
-	size_t current_inpacket_size=0;
-	uint32_t readbuf_offset=0;
-	bool current_inpacket_wantsfull=false; //when true, means that current_inpacket want all data in one chunk (so current_inpacket_size must fit readbuf)
-//	uint32_t current_inrequest_len=0; //how many bytes of readbuf already filled
-
-	iot_netproto_session_iotgw(iot_netconiface* coniface, iot_netproto_config_iotgw* config) :
-			iot_netproto_session(&iot_netprototype_metaclass_iotgw::object, coniface), config(config), peer_host(config->peer_host), introduced(false)
-	{
-		config->ref();
-		if(peer_host) {
-			peer_host->ref();
-			introduced=true;
-		}
-	}
-	~iot_netproto_session_iotgw() {
-		//todo do something with requests in queue
-		if(current_outpacket) {
-			current_outpacket->on_session_close();
-			current_outpacket=NULL;
-		}
-		for(iot_gwprotoreq* nextreq, *curreq=outpackets_head; curreq; curreq=nextreq) {
-			nextreq=curreq->next;
-			BILINKLISTWT_REMOVE(curreq, next, prev);
-			curreq->on_session_close();
-		}
-		for(iot_gwprotoreq* nextreq, *curreq=waitingpackets_head; curreq; curreq=nextreq) {
-			nextreq=curreq->next;
-			BILINKLISTWT_REMOVE(curreq, next, prev);
-			curreq->on_session_close();
-		}
-
-		if(peer_host) peer_host->unref();
-		config->unref();
-	}
 	virtual int start(void) override;
 
 	void graceful_stop(void) {
@@ -265,7 +243,7 @@ struct iot_netproto_session_iotgw : public iot_netproto_session {
 
 	int on_introduce(iot_gwprotoreq_introduce* req, iot_hostid_t host_id, uint32_t core_vers);
 
-	//returns false uf request was released
+	//returns false if request was released
 	bool add_req(iot_gwprotoreq* req) { //request should not be used in any way after calling this func!!! it can be released in it (false is returned in such case)
 		assert(req && !req->prev && !req->next);
 		assert(req->state==iot_gwprotoreq::STATE_SEND_READY);
@@ -286,13 +264,13 @@ private:
 		assert(current_outpacket->state==iot_gwprotoreq::STATE_BEING_SENT);
 		if(current_outpacket_offset==current_outpacket_size) {
 			int err;
-			if(current_outpacket->reqtype==iot_gwproto_reqtype_t::REQUEST) {
+			if((current_outpacket->reqtype & (IOTGW_IS_REPLY | IOTGW_IS_ASYNC)) == 0) { //sync request
 				current_outpacket->state=iot_gwprotoreq::STATE_WAITING_REPLY;
 				BILINKLISTWT_INSERTTAIL(current_outpacket, waitingpackets_head, waitingpackets_tail, next, prev);
 				err=current_outpacket->p_req_outpacket_sent(this);
-			} else { //reply or notify
+			} else { //reply or async request
 				current_outpacket->state=iot_gwprotoreq::STATE_SENT;
-				err=current_outpacket->reqtype==iot_gwproto_reqtype_t::REPLY ?
+				err=current_outpacket->reqtype & IOTGW_IS_REPLY ?
 						current_outpacket->p_reply_outpacket_sent(this) :
 						current_outpacket->p_req_outpacket_sent(this);
 			}
@@ -322,11 +300,33 @@ private:
 			current_outpacket->state=iot_gwprotoreq::STATE_BEING_SENT;
 
 			//prepare packet header
-			current_outpacket_offset=0;
+			packet_hdr_prolog *hdr_prolog=(packet_hdr_prolog *)sendbuf;
+			memcpy(hdr_prolog->iotsign, packet_signature, sizeof(hdr_prolog->iotsign));
+			uint8_t headflags=0;
+			uint8_t headlen=sizeof(packet_hdr_prolog);
+//todo		if(current_outpacket->proxied_from) {
+//				need_signature=true; //proxied packets must always be signed
+//				headflags|=HEADFLAG_PROXIED;
+//				packet_hdr_proxy *hdr_proxy=(packet_hdr_proxy *)(sendbuf+headlen)
+//				headlen+=sizeof(packet_hdr_proxy);
+//				hdr_proxy->originator=current_outpacket->proxied_from;
+//				hdr_proxy->destination=current_outpacket->proxied_to;
+//			}
+
+			packet_hdr *hdr=(packet_hdr *)(sendbuf+headlen);
+			headlen+=sizeof(packet_hdr);
+			hdr_prolog->headlen=headlen;
+			hdr_prolog->headflags=headflags;
+
 			uint32_t data_size=0;
 			uint8_t errcode=0;
-			packet_hdr *hdr=(packet_hdr *)sendbuf;
-			if(current_outpacket->reqtype!=iot_gwproto_reqtype_t::REPLY) { //request or notification, generate new rqid
+			if(current_outpacket->reqtype & IOTGW_IS_REPLY) {
+				int rval=current_outpacket->p_reply_outpacket_start(this, data_size, errcode);
+				if(rval) { //todo
+					assert(false);
+				}
+				hdr->rqid=repack_uint32(current_outpacket->rqid);
+			} else {  //request or notification, generate new rqid
 				int rval=current_outpacket->p_req_outpacket_start(this, data_size, errcode);
 				if(rval) { //todo
 					assert(false);
@@ -334,12 +334,6 @@ private:
 				current_outpacket->rqid=next_rqid;
 				hdr->rqid=repack_uint32(next_rqid);
 				if(++next_rqid==0) next_rqid=1;
-			} else {
-				int rval=current_outpacket->p_reply_outpacket_start(this, data_size, errcode);
-				if(rval) { //todo
-					assert(false);
-				}
-				hdr->rqid=repack_uint32(current_outpacket->rqid);
 			}
 			hdr->reqtype=uint8_t(current_outpacket->reqtype);
 			hdr->cmd=uint8_t(current_outpacket->cmd);
@@ -347,8 +341,9 @@ private:
 			hdr->error=errcode;
 			hdr->sz=repack_uint32(data_size);
 
+			current_outpacket_offset=0;
 			current_outpacket_size=data_size;
-			sendbuf_startoff=sizeof(packet_hdr);
+			sendbuf_startoff=hdr_prolog->headlen;
 		} else { //continue sending current packet
 			assert(current_outpacket->state==iot_gwprotoreq::STATE_BEING_SENT);
 			assert(current_outpacket_size>current_outpacket_offset); //packet must have more bytes to send
@@ -362,10 +357,10 @@ private:
 		if(current_outpacket_size>current_outpacket_offset) {
 			size_t bufused=0;
 			int rval;
-			if(current_outpacket->reqtype!=iot_gwproto_reqtype_t::REPLY) //request or notification, generate new rqid
-				rval=current_outpacket->p_req_outpacket_cont(this, current_outpacket_offset, sendbuf+sendbuf_startoff, sizeof(sendbuf)-sendbuf_startoff, bufused, ownbufs, 64-ownbufsused);
-			else
+			if(current_outpacket->reqtype & IOTGW_IS_REPLY)
 				rval=current_outpacket->p_reply_outpacket_cont(this, current_outpacket_offset, sendbuf+sendbuf_startoff, sizeof(sendbuf)-sendbuf_startoff, bufused, ownbufs, 64-ownbufsused);
+			else
+				rval=current_outpacket->p_req_outpacket_cont(this, current_outpacket_offset, sendbuf+sendbuf_startoff, sizeof(sendbuf)-sendbuf_startoff, bufused, ownbufs, 64-ownbufsused);
 			if(rval<0) {
 				//todo
 				assert(false);
@@ -396,7 +391,7 @@ private:
 		int err;
 
 		if(!current_inpacket) { //on start of this function header must be not ready and begin at start of readbuf
-			assert(readbuf_offset<sizeof(packet_hdr)); //partial header must begin at start of readbuf
+			assert(readbuf_offset<sizeof(packet_hdr_prolog)); //partial header must begin at start of readbuf
 			//simulate single reading at beginning of readbuf
 			nread+=readbuf_offset;
 			readbuf_offset=0;
@@ -404,22 +399,30 @@ private:
 
 		while(nread>0 && !closed) {
 			if(!current_inpacket) {
-				if(size_t(nread)<sizeof(packet_hdr)) { //remaining data is not enough for full header, wait for more
+				if(size_t(nread)<sizeof(packet_hdr_prolog)) { //remaining data is not enough for full header prolog, wait for more
+					if(readbuf_offset!=0) memcpy(readbuf, readbuf+readbuf_offset, nread); //move partial header to start of readbuf if not at start
+					readbuf_offset=nread;
+					databuf=readbuf+readbuf_offset; databufsize=sizeof(readbuf)-readbuf_offset;
+					return true; //continue reading
+				}
+				packet_hdr_prolog *hdr_prolog=(packet_hdr_prolog *)(readbuf+readbuf_offset);
+				assert(hdr_prolog->headlen==sizeof(packet_hdr_prolog)+sizeof(packet_hdr)); //todo. for now there are no optional header parts
+				if(size_t(nread)<hdr_prolog->headlen) { //remaining data is not enough for full header, wait for more
 					if(readbuf_offset!=0) memcpy(readbuf, readbuf+readbuf_offset, nread); //move partial header to start of readbuf if not at start
 					readbuf_offset=nread;
 					databuf=readbuf+readbuf_offset; databufsize=sizeof(readbuf)-readbuf_offset;
 					return true; //continue reading
 				}
 
-				packet_hdr *hdr=(packet_hdr *)(readbuf+readbuf_offset);
+				packet_hdr *hdr=(packet_hdr *)(readbuf+readbuf_offset+sizeof(packet_hdr_prolog));
 				if(!start_new_inpacket(hdr)) { //returns false on memory error. may be retry memory allocation after timeout
 					if(readbuf_offset!=0) memcpy(readbuf, readbuf+readbuf_offset, nread); //move current unprocessed data to start of readbuf for later retry
 					readbuf_offset=nread; //remember obtained data
 					assert(false); //todo retrying
 					return false;
 				}
-				readbuf_offset+=sizeof(packet_hdr);
-				nread-=sizeof(packet_hdr);
+				readbuf_offset+=hdr_prolog->headlen;
+				nread-=hdr_prolog->headlen;
 				//else current_inpacket, current_inpacket_wantsfull, current_inpacket_offset, current_inpacket_size assigned correctly
 				assert(current_inpacket!=NULL && current_inpacket_offset==0);
 				//if current_inpacket_size==0, packet must have state >= STATE_READ
@@ -466,10 +469,10 @@ private:
 					last_chunk=true;
 					current_inpacket->state=iot_gwprotoreq::STATE_READ;
 				}
-				if(current_inpacket->reqtype!=iot_gwproto_reqtype_t::REPLY) //request or notification
-					err=current_inpacket->p_req_inpacket_cont(this, current_inpacket_size, current_inpacket_offset, readbuf+readbuf_offset, chunksize);
-					else
+				if(current_inpacket->reqtype & IOTGW_IS_REPLY) //request or notification
 					err=current_inpacket->p_reply_inpacket_cont(this, current_inpacket_size, current_inpacket_offset, readbuf+readbuf_offset, chunksize);
+					else
+					err=current_inpacket->p_req_inpacket_cont(this, current_inpacket_size, current_inpacket_offset, readbuf+readbuf_offset, chunksize);
 				if(err) {
 					assert(false);
 					//todo
@@ -489,7 +492,7 @@ private:
 			//here request is full and must wait for execution, be executing, sending reply or finished
 			if(current_inpacket->state == iot_gwprotoreq::STATE_READ) {
 				//run execution manually
-				if(current_inpacket->reqtype==iot_gwproto_reqtype_t::REPLY) //request or notification
+				if(current_inpacket->reqtype & IOTGW_IS_REPLY) //request or notification
 					err=current_inpacket->p_reply_inpacket_execute(this);
 					else
 					err=current_inpacket->p_req_inpacket_execute(this);
@@ -511,8 +514,10 @@ private:
 		return true;
 	}
 
-
+	virtual void on_stop(void) override {
+	}
 };
+
 
 
 struct iot_gwprotoreq_introduce : public iot_gwprotoreq {
@@ -537,7 +542,7 @@ struct iot_gwprotoreq_introduce : public iot_gwprotoreq {
 	uint8_t reply_errcode=0;
 
 
-	iot_gwprotoreq_introduce(iot_gwproto_reqtype_t tp, bool is_outgoing, uint32_t rqid=0, alloc_method_t alloc_method=alloc_method_t::NEW) :
+	iot_gwprotoreq_introduce(uint8_t tp, bool is_outgoing, uint32_t rqid=0, alloc_method_t alloc_method=alloc_method_t::NEW) :
 			iot_gwprotoreq(tp, iot_gwproto_cmd_t::INTRODUCE, 0, alloc_method, is_outgoing, rqid) {
 	}
 
@@ -549,12 +554,12 @@ struct iot_gwprotoreq_introduce : public iot_gwprotoreq {
 	static iot_gwprotoreq_introduce* create_out_request(iot_memallocator* allocator) { //no additional args
 		iot_gwprotoreq_introduce* obj=(iot_gwprotoreq_introduce*)allocator->allocate(object_size());
 		if(!obj) return NULL;
-		new(obj) iot_gwprotoreq_introduce(iot_gwproto_reqtype_t::REQUEST, true, 0, alloc_method_t::MEMBLOCK);
+		new(obj) iot_gwprotoreq_introduce(0, true, 0, alloc_method_t::MEMBLOCK);
 		return obj;
 	}
-	static iot_gwprotoreq_introduce* create_incoming(iot_gwproto_reqtype_t reqtype, iot_gwproto_cmd_t cmd, uint8_t cmd_ver, uint32_t data_size, uint32_t rqid, iot_memallocator* allocator) {
+	static iot_gwprotoreq_introduce* create_incoming(uint8_t reqtype, iot_gwproto_cmd_t cmd, uint8_t cmd_ver, uint32_t data_size, uint32_t rqid, iot_memallocator* allocator) {
 		assert(cmd==iot_gwproto_cmd_t::INTRODUCE && cmd_ver==0); //todo. return mark about unknown command
-		if(reqtype==iot_gwproto_reqtype_t::REPLY) {
+		if(reqtype && IOTGW_IS_REPLY) {
 			assert(data_size==sizeof(reply_t));
 		} else {
 			assert(data_size==sizeof(req_t));
@@ -566,16 +571,16 @@ struct iot_gwprotoreq_introduce : public iot_gwprotoreq {
 	}
 private:
 	void mutate_2reply(void) {
-		assert(reqtype==iot_gwproto_reqtype_t::REQUEST);
-		reqtype=iot_gwproto_reqtype_t::REPLY;
+		assert((reqtype & (IOTGW_IS_REPLY | IOTGW_IS_ASYNC))==0);
+		reqtype=IOTGW_IS_REPLY;
 		state=STATE_SEND_READY;
 		//do any deallocation/reallocation if necessary
 	}
 
 	virtual int p_req_got_reply(iot_netproto_session_iotgw* session, uint32_t data_size, uint8_t errcode) override {
-		assert(reqtype==iot_gwproto_reqtype_t::REQUEST);
+		assert((reqtype & (IOTGW_IS_REPLY | IOTGW_IS_ASYNC))==0);
 		assert(state==STATE_WAITING_REPLY);
-		reqtype=iot_gwproto_reqtype_t::REPLY;
+		reqtype=IOTGW_IS_REPLY;
 		reply_errcode=errcode;
 		state=STATE_READ_READY;
 		//do any deallocation/reallocation if necessary
@@ -641,7 +646,7 @@ private:
 		}
 		//end of execution
 
-		if(reqtype==iot_gwproto_reqtype_t::NOTIFY) state=STATE_FINISHED;
+		if(reqtype & IOTGW_IS_ASYNC) state=STATE_FINISHED;
 		else {
 			mutate_2reply();
 			reply_errcode=uint8_t(rval); //0 or ERRCODE_UNKNOWN_HOST or ERRCODE_INVALID_AUTH

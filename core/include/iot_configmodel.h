@@ -5,8 +5,7 @@
 #include<stdint.h>
 #include<assert.h>
 
-#include "iot_module.h"
-#include "iot_common.h"
+#include "iot_core.h"
 
 //struct iot_config_item_node_t;
 //struct iot_configregistry_t;
@@ -14,15 +13,26 @@
 //struct iot_config_item_group_t;
 
 class iot_nodemodel;
-class iot_nodelink;
-class iot_nodevaluelink;
-class iot_nodemsglink;
+//class iot_nodelink;
+//class iot_nodevaluelink;
+//class iot_nodemsglink;
 struct iot_modelsignal;
+struct iot_modelevent;
+struct iot_modelnegsignal;
 struct iot_notify_inputsupdate;
 
-#include "iot_configregistry.h"
-#include "iot_moduleregistry.h"
-#include "iot_core.h"
+
+struct iot_config_item_node_t;
+struct iot_configregistry_t;
+struct iot_config_item_group_t;
+struct iot_config_node_in_t;
+struct iot_config_node_out_t;
+struct iot_config_item_host_t;
+struct iot_config_item_link_t;
+
+
+
+//#include "iot_configregistry.h"
 
 struct iot_modelsignal : public iot_releasable { //represents signal from specific node's output. MUST BE ALLOCATED AS MEMBLOCK
 	iot_modelsignal* next=NULL; //for list of signals in iot_modelevent  OR to form list of signals
@@ -107,6 +117,8 @@ struct iot_notify_inputsupdate : public iot_releasable {
 		numitems=0;
 	}
 };
+
+//#include "iot_moduleregistry.h"
 
 
 //models node with several inputs and several outputs. each input/output is iot_nodelinkmodel object, which is instanciated by some node output

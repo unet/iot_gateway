@@ -5,16 +5,12 @@
 #include<assert.h>
 #include<string.h>
 
-#include "config.h"
-#include "iot_module.h"
-#include "iot_common.h"
-#include "iot_daemonlib.h"
+#include "iot_core.h"
 
 enum iot_module_type_t : uint8_t {
 	IOT_MODTYPE_DETECTOR=0,
 	IOT_MODTYPE_DRIVER=1,	//module which realizes interface of hardware device driver iface_device_driver
 	IOT_MODTYPE_NODE=2,	//module which can be source of events. Realizes iface_event_source interface
-
 	IOT_MODTYPE_MAX=2
 };
 

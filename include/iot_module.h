@@ -194,7 +194,8 @@ struct iot_event_id_t {
 //base class for object ids - a way to make reference to 
 struct iot_objid_t {
 	enum type_t : uint8_t {
-		OBJTYPE_NETCON=0, //iot_netcon
+		OBJTYPE_NONE=0, //used to init objid with illegal type
+		OBJTYPE_PEERCON=1, //iot_netcon-derived object used for peer connection, stored at 
 	};
 	uint32_t idx:24; //index of object in corresponding array of objects, idx==0 is valid
 	uint32_t type:8; //id of object type from type_t

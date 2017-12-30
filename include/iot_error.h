@@ -26,7 +26,8 @@
 	XX(NO_ACTION, -20, "no action performed")								\
 	XX(HARD_LIMIT_REACHED, -21, "hard limit reached")						\
 	XX(BAD_REQUEST, -22, "request is broken")								\
-	XX(BAD_DATA, -23, "request is broken")								\
+	XX(BAD_DATA, -23, "request is broken")									\
+	XX(OBJECT_INVALIDATED, -24, "target object was freed (form of success)") \
 	XX(CRITICAL_BUG, -100, "bug in code")
 
 enum iot_error_t {

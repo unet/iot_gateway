@@ -9,12 +9,11 @@
 
 #include <json-c/json.h>
 
-#include "iot_module.h"
-
-#include "iot_daemonlib.h"
 #include "iot_core.h"
 #include "iot_moduleregistry.h"
 #include "iot_libregistry.h"
+#include "iot_configregistry.h"
+#include "iot_peerconnection.h"
 
 #include "iot_dynlibs.cc"
 

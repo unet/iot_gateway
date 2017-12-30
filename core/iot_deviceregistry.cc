@@ -1,16 +1,11 @@
 #include<stdint.h>
 //#include<time.h>
 
-#include "iot_module.h"
-#include "iot_utils.h"
-#include "iot_daemonlib.h"
 #include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
-#include "iot_core.h"
+#include "iot_deviceconn.h"
 
 
-hwdev_registry_t* hwdev_registry=NULL;
-static hwdev_registry_t _hwdev_registry; //instantiate singleton
 //errors:
 //	IOT_ERROR_INVALID_ARGS - provided ident is template or action unknown
 //	IOT_ERROR_NOT_FOUND - interface to ident's data not found (invalid or module cannot be loaded)

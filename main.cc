@@ -6,18 +6,17 @@
 
 #include <json-c/json.h>
 
-#include "uv.h"
-#include "iot_module.h"
 //#include "iot_devclass_keyboard.h"
 //#include "iot_devclass_activatable.h"
 //#include "iot_devclass_toneplayer.h"
 
-#include "iot_daemonlib.h"
 #include "iot_core.h"
 #include "iot_moduleregistry.h"
 #include "iot_configregistry.h"
+#include "iot_threadregistry.h"
 #include "iot_netcon.h"
 #include "iot_netproto_iotgw.h"
+#include "iot_peerconnection.h"
 
 #define PIDFILE_NAME "daemon.pid"
 #define LOGFILE_NAME "daemon.log"
@@ -39,14 +38,14 @@ static timeval _start_timeval;
 //};
 
 
-iot_netproto_config_iotgw listen_proto_iotgw(0); //protocol config for listening sockets
 
-iot_netconregistry *peers_conregistry=NULL;
+//iot_peers_conregistry *peers_conregistry=NULL;
 
 volatile sig_atomic_t need_restart=0;
 void onsignal (uv_signal_t *w, int signum);
 
 struct daemon_setup_t {
+	uint32_t guid=0;
 	iot_hostid_t host_id=0;
 	bool daemonize=true;
 	int min_loglevel=-1;
@@ -108,20 +107,25 @@ bool parse_setup(void) {
 	}
 
 	json_object *val=NULL;
-	if(json_object_object_get_ex(obj, "host_id", &val)) {
-		uint64_t u64=iot_strtou64(json_object_get_string(val), NULL, 10);
-		if(!errno && u64>0 && (u64<INT64_MAX || json_object_is_type(val, json_type_string))) daemon_setup.host_id=iot_hostid_t(u64);
+
+	if(json_object_object_get_ex(obj, "guid", &val)) IOT_JSONPARSE_UINT(val, uint32_t, daemon_setup.guid);
+	if(!daemon_setup.guid) {
+		fprintf(stderr, "Required setup value 'guid' not found or is invalid in setup file '%s'\n", namebuf);
+		json_object_put(obj); obj = NULL;
+		return false;
 	}
+
+	if(json_object_object_get_ex(obj, "host_id", &val)) IOT_JSONPARSE_UINT(val, iot_hostid_t, daemon_setup.host_id);
 	if(!daemon_setup.host_id) {
 		fprintf(stderr, "Required setup value 'host_id' not found or is invalid in setup file '%s'\n", namebuf);
 		json_object_put(obj); obj = NULL;
 		return false;
 	}
-	if(json_object_object_get_ex(obj, "loglevel", &val)) {
-		errno=0;
-		int32_t i32=json_object_get_int(val);
-		if(!errno && i32>=LDEBUG && i32<=LERROR) daemon_setup.min_loglevel=i32;
-	}
+
+	if(json_object_object_get_ex(obj, "loglevel", &val)) IOT_JSONPARSE_UINT(val, uint8_t, daemon_setup.min_loglevel);
+	if(daemon_setup.min_loglevel<LDEBUG || daemon_setup.min_loglevel>LERROR) daemon_setup.min_loglevel=-1;
+
+
 	if(json_object_object_get_ex(obj, "daemonize", &val)) {
 		daemon_setup.daemonize = json_object_get_boolean(val) ? true : false;
 	}
@@ -144,11 +148,11 @@ bool parse_setup(void) {
 	return true;
 }
 
-
-
 int main(int argn, char **arg) {
 	int err;
 	bool pidcreated=false;
+	json_object* cfg=NULL;
+	iot_gwinstance* gwinst=NULL;
 
 	assert(sizeof(iot_threadmsg_t)==64);
 
@@ -225,47 +229,51 @@ int main(int argn, char **arg) {
 	iot_current_hostid=daemon_setup.host_id;
 	outlog_debug("Started, my host id is %" IOT_PRIhostid, iot_current_hostid);
 
-	json_object* cfg;
+	gwinst=new iot_gwinstance(daemon_setup.guid, daemon_setup.host_id);
+	if(!gwinst || gwinst->error) {
+		outlog_error("Cannot allocate memory for initial data structures");
+		goto onexit;
+	}
+	err=gwinst->peers_registry->init();
+	if(err) {
+		outlog_error("Error initializing peers registry: %s", kapi_strerror(err));
+		goto onexit;
+	}
+
+	config_registry=new iot_configregistry_t(gwinst);
+	assert(config_registry!=NULL); //TODO: move to iot_gwinstance
+
 	cfg=config_registry->read_jsonfile(conf_dir, IOTCONFIG_NAME, "config");
 	if(!cfg) goto onexit;
 
 	err=config_registry->load_hosts_config(cfg);
 	if(err) {
 		outlog_error("Cannot load config: %s", kapi_strerror(err));
-		json_object_put(cfg);
 		goto onexit;
 	}
 
-	peers_conregistry=new iot_netconregistry("peers_conregistry", 100);
-	assert(peers_conregistry!=NULL);
-	err=peers_conregistry->init();
-	if(err) {
-		outlog_error("Error initializing peer conregistry: %s", kapi_strerror(err));
-		json_object_put(cfg);
-		goto onexit;
-	}
+//	peers_conregistry=new iot_peers_conregistry("peers_conregistry", 100);
+//	assert(peers_conregistry!=NULL);
 	if(daemon_setup.listencfg) {
-		err=peers_conregistry->add_connections(true, daemon_setup.listencfg, &listen_proto_iotgw, true);
+		err=gwinst->peers_registry->add_listen_connections(daemon_setup.listencfg, true);
 		if(err) {
 			outlog_error("Error adding connections to listen for peers: %s", kapi_strerror(err));
-			json_object_put(cfg);
 			goto onexit;
 		}
 	}
 
-	//add client connections
-	for(auto curhost=config_registry->hosts_listhead(); curhost; curhost=curhost->next) {
-		if(curhost->host_id==iot_current_hostid) continue;
-		if(curhost->manual_connect_params) {
-			iot_netproto_config_iotgw* protocfg=new iot_netproto_config_iotgw(curhost, object_destroysub_delete);
-			assert(protocfg!=NULL);
-			err=peers_conregistry->add_connections(false, curhost->manual_connect_params, protocfg, true);
-			if(err) {
-				outlog_error("Error adding connections to host %" IOT_PRIhostid ": %s", kapi_strerror(err));
-			}
-			protocfg->try_destroy(); //sets auto delete on last unref
-		}
-	}
+//	//add client connections
+//	for(auto curhost=config_registry->hosts_listhead(); curhost; curhost=curhost->next) {
+//		if(curhost->host_id==iot_current_hostid) continue;
+//		if(curhost->manual_connect_params) {
+//			iot_objref_ptr<iot_netproto_config_iotgw> protocfg(true, new iot_netproto_config_iotgw(gwinst, curhost->peer, object_destroysub_delete, true));
+//			assert(protocfg!=NULL);
+//			err=peers_conregistry->add_connections(false, curhost->manual_connect_params, protocfg, true);
+//			if(err) {
+//				outlog_error("Error adding connections to host %" IOT_PRIhostid ": %s", kapi_strerror(err));
+//			}
+//		}
+//	}
 
 
 	//Here setup server connection to actualize config before instantiation
@@ -276,8 +284,7 @@ int main(int argn, char **arg) {
 		outlog_error("Cannot load config: %s", err==IOT_ERROR_NOT_FOUND ? "inconsistent data" : kapi_strerror(err));
 		//try to continue and get config from server or start with empty config
 	}
-	json_object_put(cfg);
-	cfg=NULL;
+	json_object_put(cfg); cfg=NULL;
 
 	//Assume config was actualized or no server connection and some config got from file or we wait while server connection succeeds
 
@@ -329,7 +336,9 @@ onexit:
 	outlog_info("Exiting...");
 	//do hard stop
 
-	config_registry->free_config(); //must stop evaluation of configuration
+	if(cfg) {json_object_put(cfg); cfg=NULL;}
+
+	if(config_registry) config_registry->free_config(); //must stop evaluation of configuration
 
 //	stop all additional threads
 
@@ -337,8 +346,9 @@ onexit:
 
 //  close connections to all peers
 
-	if(peers_conregistry) delete peers_conregistry;
-	if(daemon_setup.listencfg) json_object_put(daemon_setup.listencfg);
+//	if(peers_conregistry) {delete peers_conregistry; peers_conregistry=NULL;}
+	if(daemon_setup.listencfg) {json_object_put(daemon_setup.listencfg); daemon_setup.listencfg=NULL;}
+	if(gwinst) {delete gwinst; gwinst=NULL;}
 
 	outlog_notice("Terminated%s",need_restart ? ", restart requested" : "");
 	close_log();

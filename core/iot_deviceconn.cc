@@ -1,16 +1,14 @@
 #include<stdint.h>
 #include<assert.h>
 
-#include "iot_module.h"
-
-#include "iot_daemonlib.h"
-#include "iot_common.h"
-
+#include "iot_deviceconn.h"
 
 #include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
-#include "iot_deviceconn.h"
-#include "iot_core.h"
+#include "iot_configregistry.h"
+#include "iot_configmodel.h"
+#include "iot_threadregistry.h"
+#include "iot_peerconnection.h"
 
 
 static iot_connsid_t last_connsid=0; //holds last assigned device CONNection Struct ID

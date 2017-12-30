@@ -8,16 +8,13 @@
 #include<assert.h>
 //#include<time.h>
 
-#include "iot_kapi.h"
-#include "iot_common.h"
-
-
-class hwdev_registry_t;
-struct iot_hwdevregistry_item_t;
-extern hwdev_registry_t* hwdev_registry;
-
-#include "iot_moduleregistry.h"
 #include "iot_core.h"
+
+
+struct iot_hwdevregistry_item_t;
+class hwdev_registry_t;
+
+//#include "iot_moduleregistry.h"
 
 #define IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV 8
 
@@ -91,7 +88,7 @@ public:
 		hwdev_registry=this;
 	}
 	int list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data); //main thread
-	//finish removal or removed device after stopping bound driver
+	//finish removal of removed device after stopping bound driver
 	void finish_hwdev_removal(iot_hwdevregistry_item_t* it) { //main thread
 		assert(it->is_removed);
 		assert(!it->devdrv_modinstlk);

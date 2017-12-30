@@ -3,241 +3,107 @@
 //Contains constants, methods and data structures for LOCAL hardware devices storing and searching
 
 //#include <stdint.h>
-#include <atomic>
+//#include <atomic>
 #include "uv.h"
 
 //#include<time.h>
 
+#include "iot_config.h"
 #include "iot_module.h"
 #include "iot_common.h"
+#include "iot_daemonlib.h"
 
+struct iot_gwinstance;
+
+
+struct iot_modinstance_item_t;
+struct iot_any_module_item_t;
 struct iot_threadmsg_t;
 struct iot_thread_item_t;
 class iot_thread_registry_t;
+class iot_modules_registry_t;
+class iot_memallocator;
+class iot_peer;
+class iot_peers_registry_t;
+struct iot_configregistry_t;
+class hwdev_registry_t;
+
+struct iot_node_module_item_t;
+struct iot_driver_module_item_t;
+struct iot_detector_module_item_t;
 struct iot_modinstance_item_t;
-
-//list of possible codes of thread messages.
-//fields from iot_threadmsg_t struct which are interpreted differently depending on message code: miid, bytearg, data
-enum iot_msg_code_t : uint16_t {
-	IOT_MSG_INVALID=0,				//marks invalidated content of msg structure
-//core destined messages (is_core must be true)
-	IOT_MSG_START_MODINSTANCE,		//start instance in [miid] arg. [data] unused. [bytearg] unused. instance can be of any type.
-	IOT_MSG_MODINSTANCE_STARTSTATUS,//notification to core about status of modinstance start (status will be in data)
-	IOT_MSG_STOP_MODINSTANCE,		//stop instance in [miid] arg. [data] unused. [bytearg] unused. instance can be of any type.
-	IOT_MSG_MODINSTANCE_STOPSTATUS,	//notification to core about status of modinstance stop (status will be in data)
-	IOT_MSG_FREE_MODINSTANCE,		//notification to core about unlocking last reference to modinstance structure in pending free state
-
-	IOT_MSG_DRVOPEN_CONNECTION,		//open connection to driver instance by calling process_local_connect method. [data] contains address of connection structure
-	IOT_MSG_CONNECTION_DRVOPENSTATUS,//notification to core about status of opening connection to driver (status will be in intarg). [data] contains address of connection structure
-	IOT_MSG_CONNECTION_DRVREADY,	//notify driver consumer instance about driver connection. [data] contains address of connection structure.
-	IOT_MSG_CONNECTION_D2C_READY,	//client side of connection can read data. [data] contains address of connection structure.
-	IOT_MSG_CONNECTION_C2D_READY,	//driver side of connection can read data. [data] contains address of connection structure.
-	IOT_MSG_CLOSE_CONNECTION,		//async call for driver connection close. [data] contains address of connection structure.
-	IOT_MSG_CONNECTION_CLOSECL,		//notify driver consumer instance about driver connection close. [data] contains address of connection structure.
-	IOT_MSG_CONNECTION_CLOSEDRV,	//notify driver instance about driver connection close. [data] contains address of connection structure.
-
-	IOT_MSG_THREAD_SHUTDOWN,		//process shutdown of thread (break event loop and exit thread)
-	IOT_MSG_THREAD_SHUTDOWNREADY,	//notification to main thread about child thread stop. [data] contains thread item address
-
-	IOT_MSG_EVENTSIG_OUT,			//notification to config modeller about change of output value or new output msg. [data] contains iot_modelsignal pointer.
-	IOT_MSG_EVENTSIG_NOUPDATE,		//notification to config modeller that sync execution of node changed NO outputs. [data] contains iot_modelnegsignal pointer.
-
-	IOT_MSG_PEERCON_STARTWORK,		//request to working thread of peer connection to start work. [data] contains iot_peercon pointer.
-
-//node instance destined messages
-	IOT_MSG_NOTIFY_INPUTSUPDATED,	//notification to modinstance about change of input value(s) and/or new input msg(s). [data] contains iot_notify_inputsupdate
-									//pointer. [bytearg] contains sync mode at the time of message generation in main thread
-};
-
-extern iot_thread_item_t* main_thread_item; //prealloc main thread item
-extern iot_thread_registry_t* thread_registry;
+struct iot_driverclient_conndata_t;
+struct iot_device_entry_t;
+struct iot_device_connection_t;
+struct iot_netproto_session_iotgw;
 
 extern uv_loop_t *main_loop;
+extern iot_thread_item_t* main_thread_item; //prealloc main thread item
+extern iot_thread_registry_t* thread_registry;
 extern volatile sig_atomic_t need_exit;
-extern int max_threads; //maximum threads to run (specified from command line). limited by IOT_THREADS_MAXNUM
+extern iot_memallocator main_allocator;
+extern iot_modules_registry_t *modules_registry;
+extern iot_configregistry_t* config_registry;
+extern hwdev_registry_t* hwdev_registry;
+
+
+#include "iot_threadmsg.h"
+
 
 //void kern_notifydriver_removedhwdev(iot_hwdevregistry_item_t*);
 
-#define IOT_THREAD_LOADING_MAX 1000
-#define IOT_THREAD_LOADING_MAIN (IOT_THREAD_LOADING_MAX/10)
-
-//upper limit on threads number for max_threads
-#define IOT_THREADS_MAXNUM 100
-
-//selects memory model for message data argument to extended version of iot_thread_item_t::send_msg
-enum iot_threadmsg_datamem_t : uint8_t {
-	IOT_THREADMSG_DATAMEM_STATIC, //provided data buffer points to static buffer (or datasize is zero and data is arbitraty integer), so no releasing required
-	IOT_THREADMSG_DATAMEM_TEMP_NOALLOC, //provided data buffer points to temporary buffer, so it MUST fit IOT_MSG_BUFSIZE bytes or error (assert in debug) will be returned
-	IOT_THREADMSG_DATAMEM_TEMP, //provided data buffer points to temporary buffer, so it either must fit IOT_MSG_BUFSIZE bytes or memory will be allocated by provided allocator
-	IOT_THREADMSG_DATAMEM_MEMBLOCK_NOOPT, //provided data buffer points to buffer allocated by iot_memallocator. release will be called for it when releasing message. refcount should be increased before sending message if buffer will be used later. datasize is not engaged anywhere, so can be arbitrary
-	IOT_THREADMSG_DATAMEM_MEMBLOCK, //provided data buffer points to buffer allocated by iot_memallocator. if its size fits IOT_MSG_BUFSIZE, buffer will be copied and released immediately. refcount should be increased before sending message if buffer will be used later
-	IOT_THREADMSG_DATAMEM_MALLOC_NOOPT, //provided data buffer points to buffer allocated by malloc(). free() will be called for it when releasing message. datasize is not engaged anywhere, so can be arbitrary
-	IOT_THREADMSG_DATAMEM_MALLOC, //provided data buffer points to buffer allocated by malloc(). if its size fits IOT_MSG_BUFSIZE, buffer will be copied and freed immediately
-};
-
-//#define IOT_THREADMSG_LOADING_MAX 1000
-
-struct iot_releasable {
-	virtual void releasedata(void) = 0; //called to free/release dynamic data connected with object
-};
-
-struct iot_threadmsg_t { //this struct MUST BE 64 bytes
-	volatile std::atomic<iot_threadmsg_t*> next; //points to next message in message queue
-	iot_miid_t miid; //msg destination instance or can be 0 for core with is_core flag set
-	iot_msg_code_t code;
-	uint8_t bytearg; //arbitrary byte argument for command in code
-	uint8_t is_memblock:1,	//flag that DATA pointer must be released using iot_release_memblock(), conflicts with 'is_malloc'
-		is_malloc:1,		//flag that DATA pointer must be released using free(), conflicts with 'is_memblock'
-		is_releasable:1,	//flag that DATA points to iot_releasable-derived class and its releasedata() method must be called when releasing msg struct.
-							//(iot_releasable*) POINTER MUST BE PROVIDED for DATA pointer!!!
-
-		is_msgmemblock:1, //flag that THIS struct must be released using iot_release_memblock(), conflicts with 'is_msginstreserv'
-//		is_msginstreserv:1, //flag that THIS struct is from module instance reserv ('msgstructs' array) and must be just marked as free in 'msgstructs_usage',
-//							//conflicts with 'is_msgmemblock'
-
-		is_core:1; //message is for core and thus miid is message argument, not destination instance
-
-	uint32_t datasize; //size of data pointed by data. must be checked for correctness for each command during its processing. Should be zero if
-					//'data' is used to store arbitraty integer.
-	void* data; //data corresponding to code. can point to builtin buffer if IOT_MSG_BUFSIZE is enough or be allocated as memblock (is_memblock==1) or
-				//malloc (is_malloc==1). Can be used to store arbitrary integer value (up to 32 bit for compatibility) when both is_memblock and is_malloc are 0.
-
-	char buf[64-(sizeof(std::atomic<iot_threadmsg_t*>)+sizeof(void*)+sizeof(iot_miid_t)+sizeof(iot_msg_code_t)+2+4+sizeof(int))]; //must complement struct to 64 bytes!
-	int intarg; //arbitrary int argument for command in code when datasize is 0 or <= IOT_MSG_INTARG_SAFEDATASIZE.
-
-	bool is_free(void) volatile { //for use with static msg structs to determine is struct is not in use just now
-		return code==IOT_MSG_INVALID;
-	}
-	void set_next(iot_threadmsg_t* n) { //shortcut for relaxed access of next pointer outside message queue position
-		next.store(n, std::memory_order_relaxed);
-	}
-	iot_threadmsg_t* get_next(void) const { //shortcut for relaxed access of next pointer outside message queue position
-		return next.load(std::memory_order_relaxed);
-	}
-};
-#define IOT_MSG_BUFSIZE (sizeof(iot_threadmsg_t)-offsetof(struct iot_threadmsg_t, buf))
-#define IOT_MSG_INTARG_SAFEDATASIZE (offsetof(struct iot_threadmsg_t, intarg) - offsetof(struct iot_threadmsg_t, buf))
-
-
-
-#include "iot_memalloc.h"
-
-//fills thread message struct
-//'msg' arg can be NULL to request struct allocation from provided allocator (which can be NULL to request its auto selection).
-//Otherwise (if struct is already allocated) it must be zeroed and 'is_msgmemblock' set correctly.
-//Interprets data pointer according to datamem
-//returns error if no memory or critical error (when datasize>0 but data is NULL or datamem is IOT_THREADMSG_DATAMEM_TEMP_NOALLOC
-//and datasize exceedes IOT_MSG_BUFSIZE or illegal datamem)
-int iot_prepare_msg(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_item_t* modinst, uint8_t bytearg, void* data, size_t datasize, 
-		iot_threadmsg_datamem_t datamem, bool is_core=false, iot_memallocator* allocator=NULL);
-
-inline int iot_prepare_msg_releasable(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_item_t* modinst, uint8_t bytearg, iot_releasable* data, size_t datasize, 
-		iot_threadmsg_datamem_t datamem, bool is_core=false, iot_memallocator* allocator=NULL) {
-	int err=iot_prepare_msg(msg, code, modinst, bytearg, (void*)data, datasize, datamem, is_core, allocator);
-	if(!err) msg->is_releasable=1;
-	return err;
-}
-
-
-void iot_release_msg(iot_threadmsg_t *&msg, bool = false);
-
-
-//#include "iot_deviceregistry.h"
-#include "iot_moduleregistry.h"
-
-struct iot_thread_item_t {
-	iot_threadmsg_t termmsg={}; //preallocated msg structire to send
-	iot_thread_item_t *next=NULL, *prev=NULL; //position in iot_thread_registry_t::threads_head list
-	uint32_t thread_id=0;
-	uv_thread_t thread=0;
-	uv_loop_t* loop=NULL;
-	iot_memallocator* allocator=NULL;
-	uv_async_t msgq_watcher; //gets signal when new message arrives
-	iot_modinstance_item_t *instances_head=NULL; //list of instances, which work (or will work after start) in this thread
-	iot_modinstance_item_t *hung_instances_head=NULL; //list of instances in HUNG state
-
-	mpsc_queue<iot_threadmsg_t, iot_threadmsg_t, &iot_threadmsg_t::next> msgq;
-	uint16_t cpu_loading=0; //current sum of declared cpu loading
-	bool is_shutdown=false;
-
-
-	struct {
-		iot_atimer timer;
-		uint32_t interval;
-	} atimer_pool[8]={};
-
-	iot_thread_item_t(void) {
-		thread_id=last_thread_id++;
-	}
-
-	int init(bool ismain=false);
-
-	void deinit(void);
-
-	void send_msg(iot_threadmsg_t* msg) {
-		if(is_shutdown) return;
-		assert(msg->code!=0 && loop!=NULL);
-		if(msgq.push(msg)) {
-			uv_async_send(&msgq_watcher);
-		}
-	}
-	void schedule_atimer(iot_atimer_item& it, uint64_t delay) { //schedules atimer_item to signal after delay or earlier
-		assert(uv_thread_self()==main_thread);
-		for(int i=sizeof(atimer_pool)/sizeof(atimer_pool[0])-1;i>=1;i--) {
-			if(delay<atimer_pool[i].interval) continue;
-			atimer_pool[i].timer.schedule(it);
-			return;
-		}
-		atimer_pool[0].timer.schedule(it);
-	}
-private:
-	static uint32_t last_thread_id;
-	void thread_func(void);
-};
-
-
-class iot_thread_registry_t {
-	iot_thread_item_t *threads_head=NULL;
-	iot_thread_item_t *delthreads_head=NULL;
-	int num_threads=0; //number of started additional threads (not counting main)
-	iot_thread_item_t main_thread_obj;
-
-public:	
-	bool is_shutdown=false;
-
-	iot_thread_registry_t(void);
-	void remove_modinstance(iot_modinstance_item_t* inst_item);
-	void add_modinstance(iot_modinstance_item_t* inst_item, iot_thread_item_t* thread_item);
-	iot_thread_item_t* assign_thread(uint8_t cpu_loadtp);
-	static void on_thread_msg(uv_async_t* handle);
-
-	iot_thread_item_t* find_thread(uv_thread_t th_id) {
-		assert(uv_thread_self()==main_thread);
-
-		iot_thread_item_t* th=threads_head;
-		while(th) {
-			if(th->thread==th_id) return th;
-			th=th->next;
-		}
-		return NULL;
-	}
-	iot_memallocator* find_allocator(uv_thread_t th_id) {
-		iot_thread_item_t* th=find_thread(th_id);
-		if(th) return th->allocator;
-		return NULL;
-	}
-	uv_loop_t* find_loop(uv_thread_t th_id) {
-		iot_thread_item_t* th=find_thread(th_id);
-		if(th) return th->loop;
-		return NULL;
-	}
-
-	void graceful_shutdown(void); //initiate graceful shutdown, stop all module instances in all threads
-	void on_thread_modinstances_ended(iot_thread_item_t* thread); //called by remove_modinstance() after removing last modinstance in shutdown mode
-	void on_thread_shutdown(iot_thread_item_t* thread);
-};
-
-
 void iot_process_module_bug(iot_any_module_item_t *module_item);
+
+//holds locked state of mod instance structure
+//does not allow to copy itself, only to move
+struct iot_modinstance_locker {
+	iot_modinstance_item_t *modinst;
+	iot_modinstance_locker(iot_modinstance_item_t *inst) { //bind already locked modinstance structure to locker object. refcount must have been just increased
+//		assert(inst!=NULL && inst->miid.iid!=0);
+//		assert(inst->refcount>0); //structure must be locked AND ITS refcount must be already incremented outside
+		modinst=inst;
+	}
+	iot_modinstance_locker(void) {
+		modinst=NULL;
+	}
+	iot_modinstance_locker(const iot_modinstance_locker&) = delete;
+	iot_modinstance_locker(iot_modinstance_locker&& src) { //move constructor
+		modinst=src.modinst;
+		src.modinst=NULL; //invalidate src
+	}
+	~iot_modinstance_locker(void);
+	void unlock(void);
+	bool lock(iot_modinstance_item_t *inst); //tries to lock provided structure and increment its refcount. returns false if struture cannot be locked (pending free)
+
+	iot_modinstance_locker& operator=(iot_modinstance_item_t *inst) = delete; //without this assignment like "iot_modinstance_locker L=NULL or (iot_modinstance_item_t *) is possible)
+	iot_modinstance_locker& operator=(const iot_modinstance_locker&) = delete;
+	iot_modinstance_locker& operator=(iot_modinstance_locker&& src) noexcept {  //move assignment
+		if(this!=&src) {
+			modinst=src.modinst;
+			src.modinst=NULL; //invalidate src
+		}
+		return *this;
+	}
+	
+	explicit operator bool() const {
+		return modinst!=NULL;
+	}
+	bool operator !(void) const {
+		return modinst==NULL;
+	}
+};
+
+
+struct iot_gwinstance { //represents IOT gateway per-user state instance
+	const uint32_t guid=0;
+	const iot_hostid_t this_hostid=0; //ID of current host in user config
+
+	iot_peers_registry_t *const peers_registry=NULL;
+	int error=0;
+
+	iot_gwinstance(uint32_t guid, iot_hostid_t hostid);
+	~iot_gwinstance(void);
+};
+
 
 #endif //IOT_CORE_H

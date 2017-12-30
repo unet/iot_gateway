@@ -11,8 +11,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include "config.h"
-
+#include "iot_config.h"
 #include "iot_module.h"
 #include "iot_daemonlib.h"
 

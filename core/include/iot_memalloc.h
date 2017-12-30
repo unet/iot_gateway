@@ -10,15 +10,11 @@
 
 #include<new>
 
-#include "iot_utils.h"
-#include "iot_kapi.h"
+#include "iot_core.h"
 
 
 struct iot_memobject;
 class iot_memallocator;
-extern iot_memallocator main_allocator;
-
-#include "iot_common.h"
 
 
 //mask for iot_memobject::parent field to get index of freelist inside allocator
@@ -78,7 +74,7 @@ public:
 	bool incref(void* ptr); //increase object's reference count if possible (returns true). max number of refs is IOT_MEMOBJECT_MAXREF. can be called from any thread
 	void release(void* ptr); //decrease object's reference count. can be called from any thread
 
-	iot_threadmsg_t *allocate_threadmsg(void); //allocates threadmsg structure as memblock and inits is properly
+	iot_threadmsg_t *allocate_threadmsg(void); //allocates threadmsg structure as memblock and inits it properly
 
 private:
 	void deinit(void); //free all OS-allocated chunks
@@ -113,6 +109,7 @@ template<class Key1, class Key2, class Value> struct dbllist_node { //represents
 		BILINKLISTWT_REMOVE(this, next[idx], prev[idx]);
 	}
 };
+
 
 
 //Index is 1 or 2
@@ -212,6 +209,7 @@ public:
 		}
 	}
 };
+
 
 
 #endif //IOT_MEMALLOC_H

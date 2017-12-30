@@ -1,4 +1,4 @@
-		Copyright Unet Global LLC 2017
+		Copyright Unet Global LLC 2017-2018
 
 		IOT Gateway Software
 
