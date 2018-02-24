@@ -186,16 +186,24 @@ int iot_configregistry_t::load_hosts_config(json_object* cfg) { //main thread
 	json_object *curhost=NULL;
 	json_object *hosts=NULL;
 	char curhoststr[22];
-	snprintf(curhoststr, sizeof(curhoststr), "%" IOT_PRIhostid, iot_current_hostid);
+	snprintf(curhoststr, sizeof(curhoststr), "%" IOT_PRIhostid, gwinst->this_hostid);
 	if(!json_object_object_get_ex(hostcfg, "hosts", &hosts) || !json_object_is_type(hosts,  json_type_object) || 
 	 !json_object_object_get_ex(hosts, curhoststr, &curhost) || !json_object_is_type(curhost,  json_type_object)) {
-		outlog_error("No mandatory 'hostcfg.hosts.%s' JSON-subobject with configuration of current host found in config");
+		outlog_error("No mandatory 'hostcfg.hosts.%s' JSON-subobject with configuration of current host found in config", curhoststr);
 		return IOT_ERROR_CRITICAL_ERROR;
 	}
+	iot_hostid_t newlogger=0; //new value of logger host id
+	json_object *val=NULL;
+	if(json_object_object_get_ex(hostcfg, "logger_host", &val)) IOT_JSONPARSE_UINT(val, iot_hostid_t, newlogger);
+	if(newlogger!=logger_host_id) {
+		logger_host_id=newlogger;
+		//TODO something else? make host_update() update some logger_peer to always have known connection to logger host (it will be NULL if local host is logger)
+	}
+
 	hosts_markdel();
 
 	int err;
-	err=host_update(iot_current_hostid, curhost);
+	err=host_update(gwinst->this_hostid, curhost);
 	if(err) return err;
 
 	//iterate through hosts
@@ -206,10 +214,11 @@ int iot_configregistry_t::load_hosts_config(json_object* cfg) { //main thread
 			outlog_error("Invalid host id '%s' skipped in 'hostcfg.hosts' JSON-subobject of config", host_id);
 			continue;
 		}
-		if(id==iot_current_hostid) continue;
+		if(id==gwinst->this_hostid) continue;
 		err=host_update(id, host);
 		if(err) return err;
 	}
+
 	return 0;
 }
 
@@ -419,12 +428,16 @@ int iot_configregistry_t::host_update(iot_hostid_t hostid, json_object* obj) {
 			host=(iot_config_item_host_t*)main_allocator.allocate(sz, true);
 			if(!host) return IOT_ERROR_NO_MEMORY;
 
-			iot_peer* p=gwinst->peers_registry->find_peer(hostid, true);
-			if(!p) {
-				iot_release_memblock(host);
-				return IOT_ERROR_NO_MEMORY;
+			if(gwinst->this_hostid==hostid) { //current host, no peer is created
+				new(host) iot_config_item_host_t(true, hostid, iot_objref_ptr<iot_peer>(NULL));
+			} else {
+				iot_objref_ptr<iot_peer> p=gwinst->peers_registry->find_peer(hostid, true);
+				if(!p) {
+					iot_release_memblock(host);
+					return IOT_ERROR_NO_MEMORY;
+				}
+				new(host) iot_config_item_host_t(false, hostid, p);
 			}
-			new(host) iot_config_item_host_t(gwinst->this_hostid==hostid, hostid, p);
 			host_add(host);
 		} else host->is_del=false;
 		return host->update_from_json(obj);
@@ -824,7 +837,7 @@ void iot_configregistry_t::start_config(void) {
 		}
 		inited=true;
 		uv_check_init(main_loop, &events_executor);
-
+		events_executor.data=this;
 
 		iot_config_item_node_t** node=NULL;
 		decltype(nodes_index)::treepath path;
@@ -833,7 +846,7 @@ void iot_configregistry_t::start_config(void) {
 		while(res==1) {
 			if((*node)->host==current_host) {//skip nodes of other hosts
 
-				iot_nodemodel* model=iot_nodemodel::create((*node));
+				iot_nodemodel* model=iot_nodemodel::create(*node, gwinst);
 				if(!model) {
 					outlog_error("Not enough memory to create configuration model, aborting");
 					//TODO

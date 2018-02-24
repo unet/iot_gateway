@@ -2,14 +2,17 @@
 #include<stdlib.h>
 #include<assert.h>
 #include<string.h>
-#include <execinfo.h>
+
+#ifndef NDEBUG
+	#include <execinfo.h>
+#endif
 
 #include "iot_memalloc.h"
 #include "iot_threadregistry.h"
 
 
 iot_membuf_chain* iot_memallocator::allocate_chain(uint32_t size) { //size is length of useful data to store in chained buffer
-		assert(uv_thread_self()==thread); //only one thread can allocate
+		assert(uv_thread_self()==*thread); //only one thread can allocate
 		if(!size) return NULL;
 
 		uint32_t perblock=iot_membuf_chain::get_increment(IOT_MEMOBJECT_CHAINSIZE-offsetof(struct iot_memobject, data));
@@ -76,7 +79,7 @@ iot_threadmsg_t *iot_memallocator::allocate_threadmsg(void) { //allocates thread
 
 //real function called insted of allocate() with or without debug data
 void* iot_memallocator::allocate(uint32_t size, bool allow_direct) { //true allow_direct says that block can be malloced directly without going to freelist on release. can be used for rarely realloced buffers
-		assert(uv_thread_self()==thread); //only one thread can allocate
+		assert(uv_thread_self()==*thread); //only one thread can allocate
 
 		iot_memobject* rval;
 		size+=offsetof(struct iot_memobject, data);
@@ -194,18 +197,20 @@ void iot_memallocator::release(void* ptr) { //decrease object's reference count.
 		//refcount was 1, so became 0
 		int32_t infly=totalinfly.fetch_sub(1, std::memory_order_release);
 		assert(infly>0);
+		infly--;
 		if(obj->listindex<14) {
 			freelist[obj->listindex].push(obj);
-			return;
+			goto onexit;
 		}
 		if(obj->listindex==15) {
 			memchunks_refs[obj->memchunk]--;
 			do_free_direct(obj->memchunk);
-			return;
+			goto onexit;
 		}
 		//obj->listindex==14
 		//ptr must point to iot_membuf_chain object
-		int n=0;
+		int n;
+		n=0;
 		do {
 			ptr=((iot_membuf_chain*)ptr)->next;
 			freelist[14].push(obj);
@@ -217,7 +222,13 @@ void iot_memallocator::release(void* ptr) { //decrease object's reference count.
 		} while(1);
 		if(n>0) {
 			infly=totalinfly.fetch_sub(n, std::memory_order_release);
-			assert(infly>0);
+			assert(infly>=n);
+			infly-=n;
+		}
+onexit:
+		if(!infly && prev_slave && thread==&main_thread) { //non-main allocator was previously uninited and now became empty
+			BILINKLIST_REMOVE(this, next_slave, prev_slave);
+			delete this;
 		}
 	}
 
@@ -365,8 +376,8 @@ bool iot_memallocator::do_allocate_freelist(uint32_t &n, uint32_t sz, iot_memobj
 		return false;
 	}
 
-void iot_memallocator::deinit(void) { //free all OS-allocated chunks
-		if(!memchunks) return;
+bool iot_memallocator::deinit(void) { //free all OS-allocated chunks
+		if(!memchunks) return true;
 		//clear all freelists
 		for(int i=0;i<15;i++) {
 			iot_memobject* lst=freelist[i].pop_all();
@@ -375,6 +386,21 @@ void iot_memallocator::deinit(void) { //free all OS-allocated chunks
 				assert(memchunks_refs[lst->memchunk]>0);
 				memchunks_refs[lst->memchunk]--;
 				lst=lst->next.load(std::memory_order_relaxed);
+			}
+		}
+		bool wasslaveerror=false;
+		if(this!=&main_allocator) {
+			if(totalinfly.load(std::memory_order_acquire)>0 && !prev_slave) { //deinit of non-main allocator. just become slave of main
+				main_allocator.add_slave(this);
+				return false;
+			}
+		} else {
+			iot_memallocator *sl, *slnext=slaves_head;
+			while((sl=slnext)) {
+				slnext=slnext->next_slave;
+				if(sl->totalinfly.load(std::memory_order_relaxed)>0) wasslaveerror=true;
+				BILINKLIST_REMOVE(sl, next_slave, prev_slave);
+				delete sl;
 			}
 		}
 #ifndef NDEBUG
@@ -392,7 +418,7 @@ void iot_memallocator::deinit(void) { //free all OS-allocated chunks
 //				memchunks[i]=NULL;
 				int nfound=0, offset=0;
 				char timebuf[128];
-				for(int j=0; j<(listindex==15 ? 1 : 1024) && nfound<memchunks_refs[i]; j++, offset+=objsizes[listindex]) { //analyze up to 1024 sobblocks in memory chunk
+				for(int j=0; j<(listindex==15 ? 1 : 1024) && nfound<memchunks_refs[i]; j++, offset+=objsizes[listindex]) { //analyze up to 1024 subblocks in memory chunk
 					iot_memobject* obj=(iot_memobject*)((char*)memchunks[i]+offset);
 					if(obj->refcount==0) continue;
 					nfound++;
@@ -400,16 +426,20 @@ void iot_memallocator::deinit(void) { //free all OS-allocated chunks
 					localtime_r(&obj->alloctimeval.tv_sec,&tm1);
 					strftime(timebuf, sizeof(timebuf),"%d.%m.%Y %H:%M:%S", &tm1);
 					char **symb=backtrace_symbols(obj->backtrace,3);
-					outlog_debug("Found unreleased memblock of %d bytes (-1 for arbitrary block), allocated at %s.%06u, backtrace: %s\n\t%s\n\t%s", listindex==15 ? -1 : int(objsizes[listindex]), timebuf,
+					outlog_debug("Found unreleased memblock (data 0x%lx) of %d bytes (-1 for arbitrary block), allocated at %s.%06u, backtrace: %s\n\t%s\n\t%s", long(uintptr_t(&obj->data)), listindex==15 ? -1 : int(objsizes[listindex]), timebuf,
 						unsigned(obj->alloctimeval.tv_usec), symb[0], symb[1], symb[2]);
-					printf("Found unreleased memblock of %d bytes (-1 for arbitrary block), allocated at %s.%06u, backtrace: %s\n\t%s\n\t%s\n", listindex==15 ? -1 : int(objsizes[listindex]), timebuf,
+					printf("Found unreleased memblock (data 0x%lx) of %d bytes (-1 for arbitrary block), allocated at %s.%06u, backtrace: %s\n\t%s\n\t%s\n", long(uintptr_t(&obj->data)), listindex==15 ? -1 : int(objsizes[listindex]), timebuf,
 						unsigned(obj->alloctimeval.tv_usec), symb[0], symb[1], symb[2]);
 					free(symb);
 				}
 			}
+			if(prev_slave) return false; //main allocator will assert
 		}
 #endif
-		assert(totalinfly.load(std::memory_order_acquire)==0);
+		if(totalinfly.load(std::memory_order_acquire)!=0 || wasslaveerror) {
+			assert(false);
+			return false;
+		}
 		uint32_t realholes=0;
 		for(uint32_t i=0;i<nummemchunks;i++) {
 			if(memchunks_refs[i]==-2) {realholes++;continue;} //a hole
@@ -426,6 +456,7 @@ void iot_memallocator::deinit(void) { //free all OS-allocated chunks
 		assert(realholes==numholes.load(std::memory_order_relaxed));
 		numholes.store(0,std::memory_order_relaxed);
 printf("Allocator deinited\n");
+		return true;
 	}
 
 const uint32_t iot_memallocator::objsizes[15]={

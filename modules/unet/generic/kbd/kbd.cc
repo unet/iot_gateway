@@ -33,8 +33,8 @@ struct eventsrc_instance : public iot_node_base {
 
 
 /////////////static fields/methods for module instances management
-	static int init_instance(iot_node_base**instance, uv_thread_t thread, uint32_t node_id, json_object *json_cfg) {
-		eventsrc_instance *inst=new eventsrc_instance(thread, node_id);
+	static int init_instance(iot_node_base**instance, uint32_t node_id, json_object *json_cfg) {
+		eventsrc_instance *inst=new eventsrc_instance(node_id);
 		*instance=inst;
 
 		return 0;
@@ -45,7 +45,7 @@ struct eventsrc_instance : public iot_node_base {
 		return 0;
 	}
 private:
-	eventsrc_instance(uv_thread_t thread, uint32_t node_id) : iot_node_base(thread), node_id(node_id) {}
+	eventsrc_instance(uint32_t node_id) : node_id(node_id) {}
 	virtual ~eventsrc_instance(void) {}
 
 //methods from iot_module_instance_base
@@ -180,8 +180,6 @@ static const iot_deviface_params* eventsrc_devifaces[]={
 
 iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(eventsrc)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
-	.init_module = NULL,
-	.deinit_module = NULL,
 	.cpu_loading = 0,
 	.num_devices = 3,
 	.num_valueoutputs = 1,
@@ -229,6 +227,8 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(eventsrc)={
 	},
 
 	//methods
+	.init_module = NULL,
+	.deinit_module = NULL,
 	.init_instance = &eventsrc_instance::init_instance,
 	.deinit_instance = &eventsrc_instance::deinit_instance
 
@@ -262,7 +262,7 @@ struct oper_keystate_instance : public iot_node_base {
 	int shift_conf[NUM_KEYSTATE_SHIFTS]; //configured conditions for shifts: -1 for undefined, 0 for false, 1 for left, 2 for right, 3 for true
 
 /////////////static fields/methods for module instances management
-	static int init_instance(iot_node_base** instance, uv_thread_t thread, uint32_t node_id, json_object *json_cfg) {
+	static int init_instance(iot_node_base** instance, uint32_t node_id, json_object *json_cfg) {
 		uint16_t key=0;
 		int shift_conf[NUM_KEYSTATE_SHIFTS];
 		for(unsigned i=0;i<NUM_KEYSTATE_SHIFTS;i++) shift_conf[i]=-1;
@@ -290,7 +290,7 @@ struct oper_keystate_instance : public iot_node_base {
 
 		}
 		kapi_outlog_info("OPERATOR oper_keystate INITED id=%u, key=%u", node_id, unsigned(key));
-		oper_keystate_instance *inst=new oper_keystate_instance(thread, node_id, key, shift_conf);
+		oper_keystate_instance *inst=new oper_keystate_instance(node_id, key, shift_conf);
 		*instance=inst;
 		return 0;
 	}
@@ -300,7 +300,7 @@ struct oper_keystate_instance : public iot_node_base {
 		return 0;
 	}
 private:
-	oper_keystate_instance(uv_thread_t thread, uint32_t node_id, uint16_t key, int* shift) : iot_node_base(thread), node_id(node_id), key(key) {
+	oper_keystate_instance(uint32_t node_id, uint16_t key, int* shift) : node_id(node_id), key(key) {
 		for(unsigned i=0;i<NUM_KEYSTATE_SHIFTS;i++) shift_conf[i]=shift[i];
 	}
 	virtual ~oper_keystate_instance(void) {}
@@ -401,8 +401,6 @@ private:
 
 iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(oper_keystate)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
-	.init_module = NULL,
-	.deinit_module = NULL,
 	.cpu_loading = 0,
 	.num_devices = 0,
 	.num_valueoutputs = 1,
@@ -431,6 +429,8 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(oper_keystate)={
 	.msginput={},
 
 	//methods
+	.init_module = NULL,
+	.deinit_module = NULL,
 	.init_instance = &oper_keystate_instance::init_instance,
 	.deinit_instance = &oper_keystate_instance::deinit_instance
 
@@ -460,10 +460,10 @@ struct leds_instance : public iot_node_base {
 		return 0;
 	}
 
-	static int init_instance(iot_node_base** instance, uv_thread_t thread, uint32_t node_id, json_object *json_cfg) {
+	static int init_instance(iot_node_base** instance, uint32_t node_id, json_object *json_cfg) {
 		kapi_outlog_info("NODE leds INITED id=%u", node_id);
 
-		leds_instance *inst=new leds_instance(thread, node_id);
+		leds_instance *inst=new leds_instance(node_id);
 		*instance=inst;
 		return 0;
 	}
@@ -474,7 +474,7 @@ struct leds_instance : public iot_node_base {
 		return 0;
 	}
 private:
-	leds_instance(uv_thread_t thread, uint32_t node_id) : iot_node_base(thread), node_id(node_id)
+	leds_instance(uint32_t node_id) : node_id(node_id)
 	{
 	}
 
@@ -604,8 +604,6 @@ static const iot_deviface_params* leds_devifaces[]={
 
 iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(leds)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
-	.init_module = leds_instance::init_module,
-	.deinit_module = leds_instance::deinit_module,
 
 	.cpu_loading = 0,
 	.num_devices = 1,
@@ -647,6 +645,8 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(leds)={
 	.msginput={},
 
 	//methods
+	.init_module = leds_instance::init_module,
+	.deinit_module = leds_instance::deinit_module,
 	.init_instance = &leds_instance::init_instance,
 	.deinit_instance = &leds_instance::deinit_instance
 

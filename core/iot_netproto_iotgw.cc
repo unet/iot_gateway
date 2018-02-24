@@ -4,6 +4,7 @@
 
 #include "iot_netproto_iotgw.h"
 #include "iot_peerconnection.h"
+#include "iot_threadregistry.h"
 
 
 iot_netprototype_metaclass_iotgw iot_netprototype_metaclass_iotgw::object;
@@ -33,9 +34,9 @@ void iot_gwprotoreq::release(iot_gwprotoreq* &r) {
 	}
 
 
-int iot_netproto_config_iotgw::instantiate(iot_netconiface* coniface, iot_objref_ptr<iot_netproto_session> &ses) {
-		assert(uv_thread_self()==coniface->worker_thread);
-		ses=iot_objref_ptr<iot_netproto_session>(true, new iot_netproto_session_iotgw(coniface, this, object_destroysub_delete));
+int iot_netproto_config_iotgw::instantiate(iot_netconiface* coniface) {
+		assert(uv_thread_self()==coniface->thread->thread);
+		auto ses=new iot_netproto_session_iotgw(coniface, this, object_destroysub_delete);
 		if(!ses) return IOT_ERROR_NO_MEMORY;
 		return 0;
 	}
@@ -54,8 +55,8 @@ iot_netproto_session_iotgw::iot_netproto_session_iotgw(iot_netconiface* coniface
 	}
 iot_netproto_session_iotgw::~iot_netproto_session_iotgw() {
 		if(peer_host) {
-			if(registry_prev) {
-				peer_host->sesreg.on_dead_session(this);
+			if(peer_prev) {
+				peer_host->on_dead_iotsession(this);
 			}
 		}
 		//todo do something with requests in queue
@@ -77,6 +78,8 @@ iot_netproto_session_iotgw::~iot_netproto_session_iotgw() {
 
 
 int iot_netproto_session_iotgw::start(void) {
+		assert(uv_thread_self()==thread->thread);
+
 		if(!peer_host) { //this should be listening side of connection which yet doesn't know its peer, setup timer to get intoduction from other side
 		} else { //if(!introduced) { //this is connecting side of connection which knows its peer (as it should be according to config) and introduction to another side is required
 			iot_gwprotoreq_introduce* req=iot_gwprotoreq_introduce::create_out_request(coniface->allocator);
@@ -149,7 +152,7 @@ bool iot_netproto_session_iotgw::start_new_inpacket(packet_hdr *hdr) {
 
 int iot_netproto_session_iotgw::on_introduce(iot_gwprotoreq_introduce* req, iot_hostid_t host_id, uint32_t core_vers) {
 		if(introduced) { //for client side of connection. make session approved
-			assert(registry_prev==NULL); //must not be already in registry
+			assert(peer_prev==NULL); //must not be already in registry
 			if(peer_host->host_id!=host_id) return iot_gwprotoreq_introduce::ERRCODE_INVALID_AUTH; //repeated introduce with different host
 		} else {
 			assert(peer_host==NULL);
@@ -157,26 +160,7 @@ int iot_netproto_session_iotgw::on_introduce(iot_gwprotoreq_introduce* req, iot_
 			if(!peer_host) return iot_gwprotoreq_introduce::ERRCODE_UNKNOWN_HOST;
 			introduced=true;
 		}
-		peer_host->sesreg.on_new_session(this);
+		peer_host->on_new_iotsession(this);
 		return 0;
 	}
 
-int iot_gwproto_sesregistry::on_new_session(iot_netproto_session_iotgw *ses) { //called from any thread
-		assert(ses!=NULL);
-
-		lock_datamutex();
-
-		BILINKLIST_INSERTHEAD(ses, sessions_head, registry_next, registry_prev);
-//onexit:
-		unlock_datamutex();
-
-		outlog_debug("New gateway host_id=%" IOT_PRIhostid " connected", ses->peer_host->host_id);
-		return 0;
-	}
-
-void iot_gwproto_sesregistry::on_dead_session(iot_netproto_session_iotgw *ses) { //called from any thread
-		assert(ses!=NULL && ses->registry_prev!=NULL);
-		lock_datamutex();
-		BILINKLIST_REMOVE(ses, registry_next, registry_prev);
-		unlock_datamutex();
-	}

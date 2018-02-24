@@ -23,6 +23,8 @@ struct iot_hwdevregistry_item_t {
 	iot_hwdevregistry_item_t *next, *prev; //position in actual_dev_head or removed_dev_head (when is_removed true)
 	//TODO add next-prev fields for locations inside search indexes (by detector_module_id or devcontype) if necessary
 
+	iot_gwinstance* gwinst;
+
 	iot_hwdev_ident_buffered dev_ident;
 	iot_hwdev_details* dev_data; //will be assigned to custom_data buffer in current struct
 	iot_miid_t detector_miid; //miid of detector instance
@@ -80,12 +82,13 @@ class hwdev_registry_t {
 
 
 public:
+	iot_gwinstance* const gwinst;
 	bool have_unconnected_devs=false; //flag that there are hw devices without driver and some drivers were delayed due to temp errors, so periodic search must be attempted
 								//TODO. make periodic recheck every 2 minutes
 
-	hwdev_registry_t(void) {
-		assert(hwdev_registry==NULL);
-		hwdev_registry=this;
+	hwdev_registry_t(iot_gwinstance* gwinst_) : gwinst(gwinst_) {
+//		assert(hwdev_registry==NULL);
+//		hwdev_registry=this;
 	}
 	int list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data); //main thread
 	//finish removal of removed device after stopping bound driver

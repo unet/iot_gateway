@@ -15,6 +15,8 @@
 
 //Functions to be used during serialization/deserialization to get fixed (little endian) byte order
 #if ECB_LITTLE_ENDIAN
+//#if ECB_BIG_ENDIAN
+#define repack_is_nullop 1
 #define repack_uint64(v) (v)
 #define repack_int64(v) (v)
 #define repack_uint32(v) (v)
@@ -24,6 +26,8 @@
 #define repack_float(v) (v)
 #define repack_double(v) (v)
 #elif ECB_BIG_ENDIAN
+//#elif ECB_LITTLE_ENDIAN
+#define repack_is_nullop 0
 #define repack_uint64(v) ecb_bswap64(v)
 #define repack_int64(v) ((int64_t)ecb_bswap64(v))
 #define repack_uint32(v) ecb_bswap32(v)
@@ -95,6 +99,8 @@ inline char* iot_version_str(uint32_t ver, char* buf, size_t bufsize) { //maximu
 //convers string version representation like "VER.PATCHLEVEL[:REVISION]" into integer. returns UINT32_MAX on parse error
 uint32_t iot_parse_version(const char* s);
 
+void iot_gen_random(char* buf, uint16_t len);
+
 //Uni-linked list without tail (NULL value of next field tells about EOL). headvar is of the same type as itemptr. Empty list has headvar==NULL
 //Insert item with address itemptr at head of list. nextfld - name of field inside item struct for linking to next item
 #define ULINKLIST_INSERTHEAD(itemptr, headvar, nextfld)	\
@@ -103,7 +109,7 @@ uint32_t iot_parse_version(const char* s);
 		headvar = itemptr;								\
 	} while(0)
 
-//removing of any element when previous item is not tracked. itemptr and previtemptr CANNOT BE same expression as headvar
+//removing of any element when previous item is tracked. itemptr and previtemptr CANNOT BE same expression as headvar
 #define ULINKLIST_REMOVE(itemptr, previtemptr, headvar, nextfld)	\
 	do {											\
 		if((itemptr)==headvar) {					\
@@ -114,7 +120,7 @@ uint32_t iot_parse_version(const char* s);
 		(itemptr)->nextfld=NULL;					\
 	} while(0)
 
-//removing of any element when previous item is not tracked. itemptr and previtemptr CANNOT BE same expression as headvar
+//removing of any element when previous item is tracked. itemptr and previtemptr CANNOT BE same expression as headvar
 #define ULINKLIST_REMOVE_NOCL(itemptr, previtemptr, headvar, nextfld)	\
 	do {											\
 		if((itemptr)==headvar) {					\
@@ -223,6 +229,33 @@ uint32_t iot_parse_version(const char* s);
 		(afteritemptr)->nextfld=itemptr;																	\
 	} while(0)
 
+//checks if item is at head of list
+#define BILINKLIST_ISHEAD(itemptr, prevfld) ((uintptr_t((itemptr)->prevfld) & 1)!=0)
+
+//replaces item at itemptr with item at newitemptr. newitemptr must be detached. itemptr IS NOT CLEARED, so nextfld and prevfld must be nullified manually is necessary!
+#define BILINKLIST_REPLACE(itemptr, newitemptr, nextfld, prevfld) \
+	do {																										\
+		assert((newitemptr)->prevfld==NULL);																	\
+		if(!(itemptr)->prevfld) break;																			\
+		(newitemptr)->nextfld=(itemptr)->nextfld;																\
+		(newitemptr)->prevfld=(itemptr)->prevfld;																\
+		if((itemptr)->nextfld) (itemptr)->nextfld->prevfld=newitemptr;											\
+		if((uintptr_t((itemptr)->prevfld) & 1)!=0) { /*is at head, so head pointer must be updated*/			\
+			assert(*((void**)(uintptr_t((itemptr)->prevfld) ^ 1)) == itemptr); /*head must point to itemptr*/	\
+			*((void**)(uintptr_t((itemptr)->prevfld) ^ 1)) = newitemptr;										\
+		} else { /*not at head, so just update prev item to point to new item */								\
+			(itemptr)->prevfld->nextfld=newitemptr;																\
+		}																										\
+	} while(0)
+
+//fixes back pointer to head for first item which must be already pointed to by headvar
+#define BILINKLIST_FIXHEAD(headvar, prevfld) \
+	do {																									\
+		/*address of headvar must be aligned to some non-zero power of 2 bytes*/							\
+		if(!(headvar)) break;																				\
+		assert((uintptr_t(&(headvar)) & 1)==0);																\
+		*((void**)(&((headvar)->prevfld)))=(void*)(uintptr_t(&(headvar)) | 1);								\
+	} while(0)
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////

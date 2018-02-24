@@ -13,6 +13,7 @@
 
 #include "iot_core.h"
 //#include "iot_memalloc.h"
+#include "iot_threadregistry.h"
 
 
 class iot_netcontype_metaclass;
@@ -24,25 +25,22 @@ class iot_netproto_config;
 //represents interface used by iot_netproto_session objects to read/write bytes id data. it is derived by iot_netcon class and can be derived by iot_netproto_session-derived classes
 class iot_netconiface {
 public:
-	bool is_passive; //shows if this connection is passive side of communication (i.e. it was created as server-side or is result of accepting incoming connection),
+	bool is_passive=false; //shows if this connection is passive side of communication (i.e. it was created as server-side or is result of accepting incoming connection),
 					//otherwise this connection is active side (i.e. it was created as client-side, initiating)
-	uv_thread_t worker_thread;
-	iot_thread_item_t* worker_thread_item;
-	uv_loop_t *loop;
-	iot_memallocator* allocator;
+	bool is_stream; //shows if connection type guarantees sequencing of packets (e.g. TCP). otherwise UDP or raw ip/ethernet is assumed
+	iot_thread_item_t* thread=NULL; //working thread
+	uv_loop_t *loop=NULL;
+	iot_memallocator* allocator=NULL;
 	iot_objref_ptr<iot_netproto_session> protosession; //protocol session instance (created after successful connection)
 
-	iot_netconiface(void) : is_passive(false), worker_thread{}, worker_thread_item(NULL), loop(NULL), allocator(NULL) {
-	}
-	iot_netconiface(const iot_netconiface* ref, bool is_passive=true) : is_passive(is_passive), worker_thread(ref->worker_thread), worker_thread_item(ref->worker_thread_item), loop(ref->loop), allocator(ref->allocator) {
-	}
-	virtual ~iot_netconiface();
-	//is called by iot_netproto_session::stop() after processing session stop or in iot_netproto_session destructor
-	void clear_session(void) {
-		protosession=NULL;
-		on_clear_session();
+	iot_netconiface(bool is_stream) : is_stream(is_stream) {
 	}
 
+//	iot_netconiface(const iot_netconiface* ref, bool is_passive=true) : is_passive(is_passive), is_stream(ref->is_stream) {
+//	}
+	virtual ~iot_netconiface(void) {
+		assert(protosession==NULL);
+	}
 	//ALL methods must be run in worker thread
 
 	//check if new write request can be added. must return:
@@ -53,7 +51,7 @@ public:
 
 	//try to add new write request. must return:
 	//0 - request successfully added. iot_netproto_session::on_write_data_status() will be called later after completion
-	//1 - request successfully added and ready, iot_netproto_session::on_write_data_status() was already called before return from write_data()
+	//1 - request successfully added and ready, possible for blocking mode   //CANCELLED::iot_netproto_session::on_write_data_status() was already called before return from write_data()
 	//IOT_ERROR_TRY_AGAIN - another request writing is in progress, so iot_netproto_session::on_write_data_status() must be waited
 	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
 	//IOT_ERROR_INVALID_ARGS - invalid arguments (databuf is NULL or datalen==0)
@@ -62,17 +60,28 @@ public:
 
 	//enable reading into specified data buffer or reconfigure previous buffer. NULL databuf and zero datalen disable reading.
 	//0 - reading successfully set. iot_netproto_session::on_read_data_status() will be called when data is available.
-	//1 - reading successfully set and ready, iot_netproto_session::on_read_data_status() was already called before return from read_data()
+	//1 - reading successfully set and ready, possible for blocking mode //CANCELLED::iot_netproto_session::on_read_data_status() was already called before return from read_data()
 	//IOT_ERROR_INVALID_ARGS - invalid arguments (databuf is NULL or datalen==0 but not simultaneously)
 	virtual int read_data(void *databuf, size_t datalen) = 0;
 
-	//stop reading side, wait for current write request to finish and then close connection
-	virtual void graceful_close(void) = 0;
-
+	//called by session when it can be detached from netconiface. CAN INITIATE DESTRUCTOR for session!!!
+	void session_closed(void) { //is inline at end of this file
+		assert(protosession!=NULL);
+		protosession=NULL;
+		on_session_closed();
+	}
+protected:
+//	void detach_session(void); //netconiface initiated session close (e.g. if connection is broken)
 private:
-	//called when session is stopped after being created
-	virtual void on_clear_session(void) = 0;
+	//called when session_closed() gets called, after zeroing protosession.
+	virtual void on_session_closed(void) = 0;
 };
+
+
+//temporary place for mesh sessions protocol IDs registry
+#define MESHSES_PROTO_IOTGW 1
+
+#define MESHSES_PROTO_MAX 1
 
 
 //metaclass which represents type of protocol for sessions
@@ -81,6 +90,9 @@ class iot_netprototype_metaclass {
 	iot_netprototype_metaclass* next;
 public:
 	const char* const type_name;
+	const uint16_t meshses_protoid; //non-zero protocol ID used for tunnelled connections over mesh network. zero value means that protocol has no registered ID and cannot be used over mesh.
+	const uint16_t meshses_maxport; //for mesh-able protocols determines maximum multiplicity of connections by this protocol between same pair of hosts over mesh network.
+									//so zero value means one connection is posssible, N means (N+1)*(N+1) connections
 
 private:
 	static iot_netprototype_metaclass*& get_listhead(void) {
@@ -90,7 +102,8 @@ private:
 	iot_netprototype_metaclass(const iot_netprototype_metaclass&) = delete; //block copy-construtors and default assignments
 
 protected:
-	iot_netprototype_metaclass(const char* type_name): type_name(type_name) {
+	iot_netprototype_metaclass(const char* type_name, uint16_t meshses_protoid=0, uint16_t meshses_maxport=0):
+					type_name(type_name), meshses_protoid(meshses_protoid), meshses_maxport(meshses_maxport) {
 		iot_netprototype_metaclass*& head=get_listhead();
 		next=head;
 		head=this;
@@ -111,17 +124,23 @@ class iot_netproto_config : public iot_objectrefable {
 protected:
 	const iot_netprototype_metaclass* meta; //keep reference to metaclass here to optimize (exclude virtual function call) requests which are redirected to metaclass
 
-	iot_netproto_config(const iot_netprototype_metaclass* meta, object_destroysub_t destroysub, bool is_dynamic): iot_objectrefable(destroysub, is_dynamic), meta(meta) { //only derived classes can create instances
+	iot_netproto_config(const iot_netprototype_metaclass* meta, object_destroysub_t destroysub, bool is_dynamic, void* customarg=NULL):
+				iot_objectrefable(destroysub, is_dynamic), meta(meta), customarg(customarg) { //only derived classes can create instances
 		assert(meta!=NULL);
 	}
 	virtual ~iot_netproto_config(void) {
 	}
 public:
+	void* const customarg; //custom pointer passed to constructor
 	const iot_netprototype_metaclass* get_metaclass(void) const {
 		return meta;
 	}
 	const char* get_typename(void) const {
 		return meta->type_name;
+	}
+	virtual uint8_t get_cpu_loading(void) { //must return maximal possible cpu loading caused by session of corresponding protocol with accounting of present config
+		//so if current protocol session can create one or several sessions of other protocols, maximal cpu loading of those protocols must be returned
+		return 0;
 	}
 //	void invalidate(void) { //config object can be invalidated if parent object (e.g. creator necassary for protocol activity) is destroyed to stop any interaction with it
 //		is_valid=false;
@@ -130,7 +149,7 @@ public:
 //		return is_valid;
 //	}
 //	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const = 0;
-	virtual int instantiate(iot_netconiface* con, iot_objref_ptr<iot_netproto_session> &ses) = 0; //must assign provided ses with new session object
+	virtual int instantiate(iot_netconiface* con) = 0; //must assign provided ses with new session object
 };
 
 
@@ -139,14 +158,30 @@ class iot_netproto_session : public iot_objectrefable {
 protected:
 	const iot_netprototype_metaclass* meta; //keep reference to metaclass here to optimize (exclude virtual function call) requests which are redirected to metaclass
 	iot_netconiface* coniface;
+	iot_thread_item_t *thread;
 
-	iot_netproto_session(const iot_netprototype_metaclass* meta, iot_netconiface* coniface, object_destroysub_t destroysub): iot_objectrefable(destroysub, true), meta(meta), coniface(coniface) { //only derived classes can create instances , is_slave(is_slave)
+	iot_netproto_session(const iot_netprototype_metaclass* meta, iot_netconiface* coniface, object_destroysub_t destroysub):
+				iot_objectrefable(destroysub, true), meta(meta), coniface(coniface) { //only derived classes can create instances , is_slave(is_slave)
 		assert(meta!=NULL);
 		assert(coniface!=NULL);
+		assert(coniface->protosession==NULL);
+
+		coniface->protosession=iot_objref_ptr<iot_netproto_session>(true, this);
+		thread=coniface->thread;
 	}
+
+	void self_closed(void) { //must be called by session code when session stopped and can be freed (destructor can be called during processing of this call if coniface holds the only reference)
+		assert(uv_thread_self()==thread->thread);
+		if(coniface) {
+			auto c=coniface;
+			coniface=NULL;
+			c->session_closed();
+		}
+	}
+
 public:
 	virtual ~iot_netproto_session(void) {
-		if(coniface) coniface->clear_session();
+//		if(coniface) coniface->clear_session();
 	}
 	const iot_netprototype_metaclass* get_metaclass(void) const {
 		return meta;
@@ -156,19 +191,32 @@ public:
 	}
 //	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const = 0;
 	virtual int start(void) = 0;
-	void stop(bool netcon_failed=false) { //netcon_failed shows if stop was called due to failed netcon. should be set by coniface
-		if(netcon_failed) coniface=NULL;
-		on_stop();
-		if(coniface) {
-			coniface->clear_session();
-			coniface=NULL;
+	bool stop(bool graceful=true) { //request session to stop. coniface will be notified by calling session_closed() if not detached (returns true in such case). session_closed() can be called immediately!!!
+		//returns false if coniface is already detached and thus session_closed() won't be called
+		bool rval = coniface!=NULL;
+		if(uv_thread_self()==thread->thread) {
+			on_stop(graceful);
+		} else {
+			assert(false);
+			//TODO
 		}
+		return rval;
 	}
+
+//	void coniface_detach(void) {
+//		assert(uv_thread_self()==thread->thread);
 //
+//		coniface=NULL;
+//		on_coniface_detached();
+//	}
+
 	virtual void on_write_data_status(int) = 0;
 	virtual void on_can_write_data(void) = 0;
 	virtual bool on_read_data_status(ssize_t nread, char* &databuf, size_t &databufsize) = 0;
-	virtual void on_stop(void) = 0;
+
+private:
+//	virtual void on_coniface_detached(void) = 0; //notification to session that coniface was nullified and cannot be interacted
+	virtual void on_stop(bool graceful) = 0; //request session to stop. coniface will be notified by calling session_closed() if not detached
 };
 
 #include "iot_core.h"
@@ -181,6 +229,7 @@ public:
 	virtual ~iot_netconregistryiface(void) {}
 
 	virtual int on_new_connection(iot_netcon *conobj) = 0;
+	virtual void on_destroyed_connection(iot_netcon *conobj) = 0;
 };
 
 
@@ -193,6 +242,7 @@ public:
 	const char* const type_name;
 	const bool is_uv; //true - uses iot_thread_item_t threads and its event loop, false - uses dedicated thread with custom (own) processing 
 					//(to use sync processing if no async possible or for better performance)
+	const bool is_stream; //shows if connection type guarantees sequencing of packets (e.g. TCP). otherwise UDP or raw ip/ethernet is assumed
 
 private:
 	static iot_netcontype_metaclass*& get_listhead(void) {
@@ -203,7 +253,7 @@ private:
 	iot_netcontype_metaclass(const iot_netcontype_metaclass&) = delete; //block copy-construtors and default assignments
 
 protected:
-	iot_netcontype_metaclass(const char* type_name, bool is_uv): type_name(type_name), is_uv(is_uv) {
+	iot_netcontype_metaclass(const char* type_name, bool is_uv, bool is_stream): type_name(type_name), is_uv(is_uv), is_stream(is_stream) {
 		iot_netcontype_metaclass*& head=get_listhead();
 		next=head;
 		head=this;
@@ -259,40 +309,63 @@ private:
 class iot_netcon : public iot_netconiface {
 	friend class iot_thread_registry_t;
 public:
-	iot_netcon *registry_next=NULL, *registry_prev=NULL; //can be used by any outer code (it should be code of registry) to put connections in list. on destruction must be NULL
-	uint32_t metric=0;
-	iot_objref_ptr<iot_netproto_config> const protoconfig; //protocol configuration pointer
-protected:
-	iot_netconregistryiface *registry=NULL;
-	iot_objid_t objid {iot_objid_t::OBJTYPE_PEERCON};
-	const iot_netcontype_metaclass* meta; //keep reference to metaclass here to optimize (exclude virtual function call) requests which are redirected to metaclass
-	iot_thread_item_t* const control_thread_item; //thread which does init, start and stop
-//	const bool is_slave; //for server connection means that this is accepted socked, not listening. for client must be false
-	volatile enum : uint8_t {
+	enum state_t : uint8_t {
 		STATE_UNINITED,
-		STATE_INITED,
-		STATE_STARTED,
-//		STATE_STOPPED
-	} state=STATE_UNINITED;
-	volatile bool stop_pending=false; //becomes true after stop() is called
-	bool destroy_pending=false; //becomes true after stop(true) is called
+		STATE_INITING,
+		STATE_INITED, //is changed either to DESTROYING or STARTING
+		STATE_DESTROYING, //final state
+		STATE_STARTING,
+		STATE_STARTED //final state
+	};
 
-//	iot_thread_item_t* worker_thread_item=NULL;
-	iot_threadmsg_t *start_msg=NULL;
+	const iot_netcontype_metaclass* const meta; //keep reference to metaclass here to optimize (exclude virtual function call) requests which are redirected to metaclass
+	iot_netcon *registry_next=NULL, *registry_prev=NULL; //can be used by any outer code (it should be code of registry) to put connections in list. on destruction must be NULL
+	iot_netcon *next_inthread=NULL, *prev_inthread=NULL;
+	uint32_t metric=0;
+	uint8_t cpu_loading; //keeps actual cpu_loading which was assigned to working thread
+	iot_objref_ptr<iot_netproto_config> const protoconfig; //protocol configuration pointer
+	iot_netconregistryiface *registry=NULL;
+//	iot_objid_t objid {iot_objid_t::OBJTYPE_PEERCON};
+private:
+	iot_threadmsg_t com_msg={};
+
+//	iot_spinlock statelock; //used to protect com_msg and stop_pending in started state
+	volatile bool destroy_pending=false; //becomes true after stop(true) is called
+	volatile std::atomic_flag stop_pending=ATOMIC_FLAG_INIT; //becomes true after stop() is called
+	volatile std::atomic<state_t> state={STATE_UNINITED};
+
+protected:
+
+//	iot_thread_item_t* const control_thread_item; //thread which does init, start and stop
+//	const bool is_slave; //for server connection means that this is accepted socked, not listening. for client must be false
+
+//	iot_thread_item_t* thread=NULL;
 
 	iot_netcon(const iot_netcon &) = delete; //disable copy constructor. it can cause problems if randomly used
 
-	iot_netcon(	const iot_netcontype_metaclass* meta,
-				iot_netproto_config* protoconfig,
-				iot_thread_item_t* ctrl_thread=NULL
-			);
-	//for initing slave netcons of server instances
-	iot_netcon(const iot_netcon *master):
-			iot_netconiface(master, true), protoconfig(master->protoconfig), meta(master->meta), control_thread_item(master->control_thread_item) { //only derived classes can create instances , is_slave(true)
+	iot_netcon(	const iot_netcontype_metaclass* meta_,
+				iot_netproto_config* protoconfig
+//				iot_thread_item_t* ctrl_thread=NULL
+			) : iot_netconiface(meta_->is_stream), meta(meta_), protoconfig(protoconfig) {
+		assert(meta!=NULL);
+		assert(protoconfig!=NULL);
+//		assert(control_thread_item!=NULL);
 	}
+/*	//for initing slave netcons of server instances
+	iot_netcon(const iot_netcon *master):
+			iot_netconiface(master, use_thread, true), protoconfig(master->protoconfig), meta(master->meta), control_thread_item(master->control_thread_item) { //only derived classes can create instances , is_slave(true)
+		if(use_thread) { //is thread provided, register current instance in it
+			cpu_loading=get_cpu_loading();
+			use_thread->add_netcon(this);
+		}
+	}
+*/
 public:
 	virtual ~iot_netcon(void) {
+//		assert(uv_thread_self()==control_thread_item->thread);
+
 		assert(registry_next==NULL && registry_prev==NULL);
+		assert(next_inthread==NULL && prev_inthread==NULL);
 	}
 	const iot_netcontype_metaclass* get_metaclass(void) const {
 		return meta;
@@ -307,19 +380,26 @@ public:
 		return metric;
 	}
 	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const = 0;
-	int start_uv(iot_thread_item_t* use_thread);
-	int stop(bool destroy=false);
-	int on_stopped(bool wasasync=false); //finishes STOP operation in control thread
+	int start_uv(iot_thread_item_t* use_thread=NULL, bool=false);
+	void on_startstop_msg(void);
+	int restart(void);
+	int destroy(void);
+	int on_stopped(void); //finishes STOP operation in control thread
 	int assign_registryiface(iot_netconregistryiface *iface) {
 		assert(registry==NULL && iface!=NULL);
+		int err=iface->on_new_connection(this);
+		if(err) return err;
 		registry=iface;
-		return registry->on_new_connection(this);
+		return 0;
 	}
-	void assign_objid(const iot_objid_t &id) {
-		assert(!objid);
-		assert(id.type==objid.type);
-		objid=id;
-	}
+//	void assign_objid(const iot_objid_t &id) {
+//		assert((!objid && id) || (objid && !id)); //allow to set or to clear
+//		assert(id.type==objid.type);
+//		objid=id;
+//	}
+//	const iot_objid_t& get_objid(void) const {
+//		return objid;
+//	}
 
 	bool has_sameparams(iot_netcon* ob) {
 		assert(false);
@@ -327,19 +407,50 @@ public:
 		return false;
 	}
 protected:
-	void mark_inited(void) { //must be called by from derived class after init is done to set proper state (and check for previous uninited state)
-		assert(state==STATE_UNINITED);
-		state=STATE_INITED;
+	bool trymark_initing(void) { //must be called from derived class before doing init to set proper state (and check for previous uninited state)
+	//returns true if state was atomically changed from UNINITED to INITING
+		state_t prevstate=STATE_UNINITED;
+		return state.compare_exchange_strong(prevstate, STATE_INITING, std::memory_order_acq_rel, std::memory_order_relaxed);
+	}
+	void mark_inited(void) { //must be called from derived class after finishing init. previous state must be INITING
+		state_t prevstate=STATE_INITING;
+		if(!state.compare_exchange_strong(prevstate, STATE_INITED, std::memory_order_acq_rel, std::memory_order_relaxed)) {
+			assert(false);
+		}
+	}
+	bool unmark_initing(bool destroy=false) { //must be called to reset state to UNINITED (or to destroy) from INITING. returns false if state was not initing
+		state_t prevstate=STATE_INITING;
+		if(state.compare_exchange_strong(prevstate, destroy ? STATE_DESTROYING : STATE_UNINITED, std::memory_order_acq_rel, std::memory_order_relaxed)) {
+			if(destroy) do_stop();
+			return true;
+		}
+		return false;
+	}
+	bool is_started(void) {
+		return state.load(std::memory_order_relaxed)==STATE_STARTED;
+	}
+	uint8_t get_cpu_loading(void) {
+		assert(protoconfig!=NULL);
+		uint8_t cfg_loading=protoconfig->get_cpu_loading();
+		uint8_t own_loading=p_get_cpu_loading();
+		return cfg_loading>=own_loading ? cfg_loading : own_loading;
 	}
 private:
+
+	virtual uint8_t p_get_cpu_loading(void)=0; //must return pure cpu loading of netcon layer implementation
 	virtual void do_start_uv(void) {
 		assert(false);
 	}
-	virtual void do_stop(void) {
+	virtual int do_stop(void) {
 		assert(false);
 	}
 };
 
+//inline void iot_netconiface::detach_session(void) { //netconiface initiated session close (e.g. if connection is broken)
+//		if(!protosession) return;
+//		protosession->coniface_detach(); //on_session_closed cannot be called because coniface pointer is nullified here
+//		protosession=NULL;
+//	}
 
 
 

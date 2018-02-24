@@ -123,6 +123,7 @@ struct iot_notify_inputsupdate : public iot_releasable {
 
 //models node with several inputs and several outputs. each input/output is iot_nodelinkmodel object, which is instanciated by some node output
 struct iot_nodemodel {
+	iot_gwinstance *gwinst; //always not NULL
 	const iot_node_moduleconfig_t *node_iface;  //will be NULL if module is not loaded
 	iot_node_module_item_t *module;     //will be NULL if module is not loaded
 
@@ -212,7 +213,7 @@ struct iot_nodemodel {
 
 
 public:
-	static iot_nodemodel* create(iot_config_item_node_t* cfgitem_);
+	static iot_nodemodel* create(iot_config_item_node_t* cfgitem_, iot_gwinstance *gwinst_);
 	static void destroy(iot_nodemodel* node);
 
 	static void on_instance_destroy(iot_nodemodel* node, iot_modinstance_item_t* modinst); //called when node instance is released

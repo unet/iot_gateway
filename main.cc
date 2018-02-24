@@ -51,6 +51,10 @@ struct daemon_setup_t {
 	int min_loglevel=-1;
 	json_object* listencfg=NULL;
 //	uint16_t listen_port=12000;
+
+	~daemon_setup_t(void) {
+		if(listencfg) {json_object_put(listencfg);listencfg=NULL;}
+	}
 } daemon_setup;
 
 
@@ -152,9 +156,10 @@ int main(int argn, char **arg) {
 	int err;
 	bool pidcreated=false;
 	json_object* cfg=NULL;
-	iot_gwinstance* gwinst=NULL;
 
 	assert(sizeof(iot_threadmsg_t)==64);
+
+	iot_init_systime();
 
 	if(!parse_args(argn, arg)) {
 		return 1;
@@ -229,24 +234,21 @@ int main(int argn, char **arg) {
 	iot_current_hostid=daemon_setup.host_id;
 	outlog_debug("Started, my host id is %" IOT_PRIhostid, iot_current_hostid);
 
-	gwinst=new iot_gwinstance(daemon_setup.guid, daemon_setup.host_id);
-	if(!gwinst || gwinst->error) {
+	gwinstance=new iot_gwinstance(daemon_setup.guid, daemon_setup.host_id, 0); //TODO: read saved system time offset
+	if(!gwinstance || gwinstance->error) {
 		outlog_error("Cannot allocate memory for initial data structures");
 		goto onexit;
 	}
-	err=gwinst->peers_registry->init();
+	err=gwinstance->peers_registry->init();
 	if(err) {
 		outlog_error("Error initializing peers registry: %s", kapi_strerror(err));
 		goto onexit;
 	}
 
-	config_registry=new iot_configregistry_t(gwinst);
-	assert(config_registry!=NULL); //TODO: move to iot_gwinstance
-
-	cfg=config_registry->read_jsonfile(conf_dir, IOTCONFIG_NAME, "config");
+	cfg=iot_configregistry_t::read_jsonfile(conf_dir, IOTCONFIG_NAME, "config");
 	if(!cfg) goto onexit;
 
-	err=config_registry->load_hosts_config(cfg);
+	err=gwinstance->config_registry->load_hosts_config(cfg);
 	if(err) {
 		outlog_error("Cannot load config: %s", kapi_strerror(err));
 		goto onexit;
@@ -255,7 +257,7 @@ int main(int argn, char **arg) {
 //	peers_conregistry=new iot_peers_conregistry("peers_conregistry", 100);
 //	assert(peers_conregistry!=NULL);
 	if(daemon_setup.listencfg) {
-		err=gwinst->peers_registry->add_listen_connections(daemon_setup.listencfg, true);
+		err=gwinstance->peers_registry->add_listen_connections(daemon_setup.listencfg, true);
 		if(err) {
 			outlog_error("Error adding connections to listen for peers: %s", kapi_strerror(err));
 			goto onexit;
@@ -279,7 +281,7 @@ int main(int argn, char **arg) {
 	//Here setup server connection to actualize config before instantiation
 	//
 
-	err=config_registry->load_config(cfg, true);
+	err=gwinstance->config_registry->load_config(cfg, true);
 	if(err) {
 		outlog_error("Cannot load config: %s", err==IOT_ERROR_NOT_FOUND ? "inconsistent data" : kapi_strerror(err));
 		//try to continue and get config from server or start with empty config
@@ -288,7 +290,7 @@ int main(int argn, char **arg) {
 
 	//Assume config was actualized or no server connection and some config got from file or we wait while server connection succeeds
 
-	cfg=config_registry->read_jsonfile(conf_dir, REGISTRYFILE_NAME, "registry");
+	cfg=iot_configregistry_t::read_jsonfile(conf_dir, REGISTRYFILE_NAME, "registry");
 	if(!cfg) goto onexit;
 	if(libregistry->apply_registry(cfg, true)) goto onexit;
 	json_object_put(cfg); //libregistry->apply_registry must increment references to necessary sub-objects
@@ -301,7 +303,7 @@ int main(int argn, char **arg) {
 //	uv_run(main_loop, UV_RUN_ONCE);
 
 
-	config_registry->start_config();
+	gwinstance->config_registry->start_config();
 
 
 
@@ -318,14 +320,21 @@ int main(int argn, char **arg) {
 				outlog_notice("Graceful shutdown timed out, terminating forcibly");
 				need_exit=2; //forces urgent shutdown
 				uv_stop (main_loop);
-			},5000 , 0);
+			},4000 , 0);
 
 			outlog_notice("Graceful shutdown initiated");
 
-			config_registry->free_config(); //must stop evaluation of configuration
-
-			//Do graceful stop
-			thread_registry->graceful_shutdown();
+//#ifdef IOT_SERVER
+//			Iterate through all guids in gwinstances:
+//#endif
+			gwinstance->graceful_shutdown([](void)->void{
+//#ifdef IOT_SERVER
+//				if(gwinst_registry->num_active==0) thread_registry->graceful_shutdown()
+				modules_registry->graceful_shutdown(); //causes stop signal to global detector instances
+//#else
+				thread_registry->graceful_shutdown(); //causes termination of unbusy threads
+//#endif
+			});
 
 			uv_run(main_loop, UV_RUN_DEFAULT);
 			break;
@@ -338,7 +347,11 @@ onexit:
 
 	if(cfg) {json_object_put(cfg); cfg=NULL;}
 
-	if(config_registry) config_registry->free_config(); //must stop evaluation of configuration
+	thread_registry->shutdown(); //causes termination of threads
+
+
+	//TODO: for server loop though all gwinstaces
+	if(gwinstance) {delete gwinstance; gwinstance=NULL;}
 
 //	stop all additional threads
 
@@ -347,8 +360,6 @@ onexit:
 //  close connections to all peers
 
 //	if(peers_conregistry) {delete peers_conregistry; peers_conregistry=NULL;}
-	if(daemon_setup.listencfg) {json_object_put(daemon_setup.listencfg); daemon_setup.listencfg=NULL;}
-	if(gwinst) {delete gwinst; gwinst=NULL;}
 
 	outlog_notice("Terminated%s",need_restart ? ", restart requested" : "");
 	close_log();

@@ -51,6 +51,7 @@ int hwdev_registry_t::list_action(const iot_miid_t &detmiid, iot_action_t action
 				return IOT_ERROR_TEMPORARY_ERROR;
 			}
 			memset(it, 0, sizeof(*it));
+			it->gwinst=gwinst;
 			it->custom_len_alloced=custom_len;
 
 			BILINKLIST_INSERTHEAD(it, actual_dev_head, next, prev);
@@ -132,7 +133,7 @@ void hwdev_registry_t::try_find_hwdev_for_driver(iot_driver_module_item_t* modul
 			}
 			if(err==IOT_ERROR_NOT_READY) return;
 		}
-		//else IOT_ERROR_DEVICE_NOT_SUPPORTED so just continue search
+		//else IOT_ERROR_NOT_SUPPORTED so just continue search
 	}
 }
 
@@ -167,7 +168,7 @@ int hwdev_registry_t::try_connect_local_driver(iot_device_connection_t* conn) { 
 			wastemperr=true;
 			continue;
 		}
-		assert(err==IOT_ERROR_DEVICE_NOT_SUPPORTED); //just continue
+		assert(err==IOT_ERROR_NOT_SUPPORTED); //just continue
 	}
 	return wastemperr ? IOT_ERROR_TEMPORARY_ERROR : IOT_ERROR_NOT_FOUND;
 }
@@ -178,12 +179,12 @@ void iot_hwdevregistry_item_t::on_driver_destroy(iot_modinstance_item_t* modinst
 
 		devdrv_modinstlk.unlock();
 		if(modinst->state==IOT_MODINSTSTATE_INITED) { //stopped successfully or not ever started
-			if(is_removed) hwdev_registry->finish_hwdev_removal(this);
+			if(is_removed) gwinst->hwdev_registry->finish_hwdev_removal(this);
 				else modules_registry->try_find_driver_for_hwdev(this);
 		} else { //hung
 			assert(modinst->state==IOT_MODINSTSTATE_HUNG);
 			if(is_removed) { //allow to clean removed devices from registry even with hung driver
-				hwdev_registry->finish_hwdev_removal(this);
+				gwinst->hwdev_registry->finish_hwdev_removal(this);
 			}
 		}
 	}

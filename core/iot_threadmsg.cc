@@ -8,7 +8,7 @@
 
 #include "iot_netcon.h"
 #include "iot_moduleregistry.h"
-#include "iot_threadregistry.h"
+//#include "iot_threadregistry.h"
 
 //Return values:
 //0 - success

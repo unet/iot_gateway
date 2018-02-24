@@ -12,7 +12,7 @@
 	XX(NOT_FOUND, -6, "not found")											\
 	XX(INVALID_ARGS, -7, "invalid args provided")							\
 	XX(TEMPORARY_ERROR, -8, "temporary error")								\
-	XX(DEVICE_NOT_SUPPORTED, -9, "device not supported")					\
+	XX(NOT_SUPPORTED, -9, "device not supported")							\
 	XX(INVALID_DEVICE_DATA, -10, "invalid device data")						\
 	XX(CRITICAL_ERROR, -11, "critical error")								\
 	XX(LIMIT_REACHED, -12, "limit reached")									\
@@ -28,6 +28,7 @@
 	XX(BAD_REQUEST, -22, "request is broken")								\
 	XX(BAD_DATA, -23, "request is broken")									\
 	XX(OBJECT_INVALIDATED, -24, "target object was freed (form of success)") \
+	XX(ADDRESS_INUSE, -25, "address is already busy or cannot be assigned")	\
 	XX(CRITICAL_BUG, -100, "bug in code")
 
 enum iot_error_t {

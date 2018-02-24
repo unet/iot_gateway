@@ -80,7 +80,7 @@ struct iot_device_connection_t {
 							   //value of client_host or driver_host show)
 	} state;
 	
-	std::atomic_flag acclock; //lock to protect connection structure when it can be accessed/modified during processing connect in non-main threads.
+	std::atomic_flag acclock=ATOMIC_FLAG_INIT; //lock to protect connection structure when it can be accessed/modified during processing connect in non-main threads.
 							//this lock MUST be obtained by main thread before destroying connection which has state>=IOT_DEVCONN_PENDING as there can be 
 							//messages in driver's or consumer's queue to work with same connection. Those async operations MUST use locking too.
 							//Other threads must check connkey first and treat old connnection as closed on non-match without prior locking acclock. After

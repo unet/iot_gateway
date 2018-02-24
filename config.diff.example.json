@@ -44,21 +44,33 @@
 		"prev_id": 9, //previous number of configuration (difference is against it) ?????do we need diffs for host config
 		"id": 10, //current number of hosts configuration
 		"cfgmanager_host": HOST_ID, //default id of host which can send configuration updates and keeps persistent states. can be changed on per-host basis (?). zero disables such functionality
-		"logger_host":HOST_ID, //default id of host where all events and status updates are directed. can be changed on per-host basis (?). zero disables this functionality
+		"logger_host":HOST_ID, //default id of host where all events and status updates are directed. can be changed on per-host basis (?). zero disables this functionality. absence of configuration option means to use cfgmanager_host.
+		"timesrc_host":HOST_ID, //id of host which is considered primary clock source. By default is equal to logger_host or cfgmanager_host (when no logger_host defined) or host with minimal id is used.
 		"hosts": {
 			HOST_ID: {
 				"cfg_id" : 1, //host config number when settings of host were changed last time
 				"publickey" : "kjhasdkjhasd",
 				"serial" : "S12345678", //???
-				"listen_port" : 12000, //reported by gateway port on listen_ips to accept connections from other gateways. will be reused if possible in case of restart
-				"listen_ips": [ //IPs where gateway is listening for connections, so other hosts from same network can try to make direct connection if no record in connect_map
+				"listens": [ //reported by gateway actual addresses where gateway is listening for connections, so other hosts from same network can try to make direct connection if no record in connect_map
 					{
-						"ip": IPV4 or IPV6 address,
-						"prefix": 24 //network address prefix size in ip (to calculate network address)
+						"type": "tcp" | "udp" | "bt",
+						"ip": IPV4 or IPV6 address, //type-specific param
+						"prefix": 24 //type-specific param; network address prefix size in ip (to calculate network address)
+						"gateway": { //type-specific param with information about local default gateway to make assumptions about same network
+							"local_ip": IPV4 or IPV6  //internal IP of default gateway
+							"ext_ip": IPV4 or IPV6 //external IP of default gateway
+						}
 					}
 				],
-				"connect_host" : "mygw.dyndns.org", //manually specified by user host/IP to allow connection to gateway. used after trying connect_map
-				"connect_port" : 12001, //manually specified by user to override listen_port to allow connection to gateway. Should be redirected to listen_port by some router.
+				"connect": [ //manually specified by user connection params to override "listens" to allow connection to gateway. used after trying connect_map
+					{
+						"type": "tcp" | "udp" | "bt",
+						"metric": 1,
+						"host": HOST or IPV[46], //type-specific param for TCP and UDP
+						"port": 12002,  for TCP and UDP
+					}
+				]
+
 				"cfgmanager_host": HOST_ID, //id of host which can send configuration updates to current host. (?) specified host will know from this record that it must proxy conf updates to current host if it isn't default cfgmanager
 				"logger_host": HOST_ID, //id of host where all events and status updates are directed. (?) specified host will know from this record that it must proxy notifications updates from current host if it isn't default logger
 			}

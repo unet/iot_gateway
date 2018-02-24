@@ -701,7 +701,7 @@ class detector : public iot_device_detector_base {
 	}
 
 public:
-	detector(uv_thread_t thread) : iot_device_detector_base(thread) {
+	detector(void) {
 		assert(detector_obj==NULL);
 		detector_obj=this;
 	}
@@ -716,10 +716,10 @@ public:
 		return 0;
 	}
 
-	static int init_instance(iot_device_detector_base**instance, uv_thread_t thread, json_object *json_cfg, json_object *manual_devices) {
+	static int init_instance(iot_device_detector_base**instance, json_object *json_cfg, json_object *manual_devices) {
 		assert(uv_thread_self()==main_thread);
 
-		detector *inst=new detector(thread);
+		detector *inst=new detector();
 		if(!inst) return IOT_ERROR_TEMPORARY_ERROR;
 
 		int err=inst->init();
@@ -747,10 +747,10 @@ public:
 		int err=stat("/dev/input", &statbuf);
 		if(!err) {
 			if(S_ISDIR(statbuf.st_mode)) return 0; //dir
-			return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			return IOT_ERROR_NOT_SUPPORTED;
 		}
 		if(err==ENOMEM) return IOT_ERROR_TEMPORARY_ERROR;
-		return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+		return IOT_ERROR_NOT_SUPPORTED;
 	}
 
 	//traverses all /dev/input/eventX devices and reads necessary props
@@ -789,11 +789,11 @@ public:
 
 iot_detector_moduleconfig_t IOT_DETECTOR_MODULE_CONF(det)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
-	.init_module = NULL,
-	.deinit_module = NULL,
 	.cpu_loading = 0,
 //	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
 
+	.init_module = NULL,
+	.deinit_module = NULL,
 	.init_instance = &detector::init_instance,
 	.deinit_instance = &detector::deinit_instance,
 	.check_system = &detector::check_system
@@ -871,7 +871,7 @@ struct input_drv_instance : public iot_device_driver_base {
 
 
 /////////////static fields/methods for driver instances management
-	static int init_instance(iot_device_driver_base**instance, uv_thread_t thread, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, iot_devifaces_list* devifaces) {
+	static int init_instance(iot_device_driver_base**instance, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, iot_devifaces_list* devifaces) {
 		assert(uv_thread_self()==main_thread);
 
 		//FILTER HW DEVICE CAPABILITIES
@@ -916,9 +916,9 @@ struct input_drv_instance : public iot_device_driver_base {
 		}
 //		if(bitmap32_test_bit(&devinfo->cap_bitmap, EV_SW)) {if(devifaces->add(IOT_DEVIFACETYPEID_HW_SWITCHES, NULL)==0) have_sw=true;}
 
-		if(!devifaces->num) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+		if(!devifaces->num) return IOT_ERROR_NOT_SUPPORTED;
 
-		input_drv_instance *inst=new input_drv_instance(thread, dev_ident, dev_data, have_kbd, have_leds, have_tone, have_sw);
+		input_drv_instance *inst=new input_drv_instance(dev_ident, dev_data, have_kbd, have_leds, have_tone, have_sw);
 		if(!inst) return IOT_ERROR_TEMPORARY_ERROR;
 
 		*instance=inst;
@@ -951,18 +951,18 @@ struct input_drv_instance : public iot_device_driver_base {
 		return 0;
 	}
 	static int check_device(const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data) {
-		if(!iot_hwdev_localident_linuxinput::cast(dev_ident->local)) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+		if(!iot_hwdev_localident_linuxinput::cast(dev_ident->local)) return IOT_ERROR_NOT_SUPPORTED;
 		if(!dev_data || !iot_hwdev_details_linuxinput::cast(dev_data)) return IOT_ERROR_INVALID_DEVICE_DATA; //devcontype_linuxinput_t has fixed size
 //		devcontype_linuxinput_t *devinfo=(devcontype_linuxinput_t*)(dev_data->custom_data);
-//		if(!(devinfo->cap_bitmap & (EV_KEY | EV_LED))) return IOT_ERROR_DEVICE_NOT_SUPPORTED; NOW SUPPORT ALL DEVICES DETECTED BY OUR DETECTOR
+//		if(!(devinfo->cap_bitmap & (EV_KEY | EV_LED))) return IOT_ERROR_NOT_SUPPORTED; NOW SUPPORT ALL DEVICES DETECTED BY OUR DETECTOR
 		return 0;
 	}
 /////////////public methods
 
 
 private:
-	input_drv_instance(uv_thread_t thread, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, bool have_kbd, bool have_leds, bool have_tone, bool have_sw): 
-			iot_device_driver_base(thread), have_kbd(have_kbd), have_leds(have_leds), have_tone(have_tone), have_sw(have_sw)
+	input_drv_instance(const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, bool have_kbd, bool have_leds, bool have_tone, bool have_sw): 
+			have_kbd(have_kbd), have_leds(have_leds), have_tone(have_tone), have_sw(have_sw)
 	{
 //		memcpy(&dev_ident, &dev_data->dev_ident, sizeof(dev_ident));
 
@@ -1024,7 +1024,7 @@ private:
 		kapi_notify_write_avail(conn, true);
 		const iot_devifacetype_metaclass* ifacetype=conn->deviface->get_metaclass();
 		if(ifacetype==&iot_devifacetype_metaclass_keyboard::object) {
-			if(!have_kbd) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			if(!have_kbd) return IOT_ERROR_NOT_SUPPORTED;
 			if(conn_kbd) return IOT_ERROR_LIMIT_REACHED;
 			conn_kbd=conn;
 
@@ -1032,7 +1032,7 @@ private:
 			int err=iface.send_set_state(keys_state);
 			assert(err==0);
 		} else if(ifacetype==&iot_devifacetype_metaclass_activatable::object) {
-			if(!have_leds) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			if(!have_leds) return IOT_ERROR_NOT_SUPPORTED;
 			if(conn_leds) return IOT_ERROR_LIMIT_REACHED;
 			conn_leds=conn;
 			want_leds_bitmap=want_leds_state=0;
@@ -1041,7 +1041,7 @@ private:
 			int err=iface.send_current_state(leds_state, dev_info.leds_bitmap);
 			assert(err==0);
 		} else if(ifacetype==&iot_devifacetype_metaclass_toneplayer::object) {
-			if(!have_tone) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			if(!have_tone) return IOT_ERROR_NOT_SUPPORTED;
 			if(conn_tone) return IOT_ERROR_LIMIT_REACHED;
 
 			//check current state of device
@@ -1067,7 +1067,7 @@ private:
 			conn_tone=conn;
 
 		} else {
-			return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			return IOT_ERROR_NOT_SUPPORTED;
 		}
 		return 0;
 	}
@@ -1579,8 +1579,6 @@ static const iot_devifacetype_metaclass* driver_ifaces[]={
 
 iot_driver_moduleconfig_t IOT_DRIVER_MODULE_CONF(drv)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
-	.init_module = NULL,
-	.deinit_module = NULL,
 
 	.cpu_loading = 3,
 	.num_hwdev_idents = sizeof(driver_devidents)/sizeof(driver_devidents[0]),
@@ -1588,6 +1586,9 @@ iot_driver_moduleconfig_t IOT_DRIVER_MODULE_CONF(drv)={
 
 	.hwdev_idents = driver_devidents,
 	.dev_ifaces = driver_ifaces,
+
+	.init_module = NULL,
+	.deinit_module = NULL,
 	.init_instance = &input_drv_instance::init_instance,
 	.deinit_instance = &input_drv_instance::deinit_instance,
 	.check_device = &input_drv_instance::check_device

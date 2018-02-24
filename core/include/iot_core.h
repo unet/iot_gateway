@@ -19,7 +19,7 @@ struct iot_gwinstance;
 struct iot_modinstance_item_t;
 struct iot_any_module_item_t;
 struct iot_threadmsg_t;
-struct iot_thread_item_t;
+class iot_thread_item_t;
 class iot_thread_registry_t;
 class iot_modules_registry_t;
 class iot_memallocator;
@@ -27,6 +27,9 @@ class iot_peer;
 class iot_peers_registry_t;
 struct iot_configregistry_t;
 class hwdev_registry_t;
+class iot_netcon;
+class iot_meshnet_controller;
+class iot_netproto_session_mesh;
 
 struct iot_node_module_item_t;
 struct iot_driver_module_item_t;
@@ -43,11 +46,44 @@ extern iot_thread_registry_t* thread_registry;
 extern volatile sig_atomic_t need_exit;
 extern iot_memallocator main_allocator;
 extern iot_modules_registry_t *modules_registry;
-extern iot_configregistry_t* config_registry;
-extern hwdev_registry_t* hwdev_registry;
+//extern iot_configregistry_t* config_registry;
+//extern hwdev_registry_t* hwdev_registry;
 
+#ifndef IOT_SERVER
+extern iot_gwinstance *gwinstance; //gateways have single gwinstance
+extern int64_t system_clock_offset; //TODO. preserve this var between restarts. nanoseconds to add to system real time clock to get event numerator
+extern uint32_t last_clock_sync; //timestamp of last clock sync (by clock of time source)
+extern uint16_t last_clock_sync_error; //error of last clock sync in ms
+#endif
+
+extern int64_t mono_clock_offset; //nanoseconds to add to monotonic clock to get real time. Is calculated on process start as difference between RT and Monotonic clock
+extern clockid_t mono_clockid;
 
 #include "iot_threadmsg.h"
+
+void iot_init_systime(void);
+
+inline uint64_t iot_get_systime(void) { //gets real time synchronized within hosts (in nanoseconds)
+	struct timespec ts;
+	clock_gettime(mono_clockid, &ts);
+	return uint64_t(ts.tv_sec*1000000000+ts.tv_nsec)+mono_clock_offset+system_clock_offset;
+}
+
+inline uint64_t iot_get_reltime(void) { //gets relative monotonic time not affected by time correction.
+										//Only difference between two consecutive values taken IN SAME PROCESS is meaningful
+	struct timespec ts;
+	clock_gettime(mono_clockid, &ts);
+	return uint64_t(ts.tv_sec*1000000000+ts.tv_nsec);
+}
+
+
+inline uint16_t iot_get_systime_error(void) {
+#ifndef IOT_SERVER
+	return last_clock_sync_error; //TODO. add theoretical time difference on basis of value of time correction made last time
+#else
+	return 0;
+#endif
+}
 
 
 //void kern_notifydriver_removedhwdev(iot_hwdevregistry_item_t*);
@@ -95,14 +131,44 @@ struct iot_modinstance_locker {
 
 
 struct iot_gwinstance { //represents IOT gateway per-user state instance
-	const uint32_t guid=0;
-	const iot_hostid_t this_hostid=0; //ID of current host in user config
+	const uint32_t guid;
+	const iot_hostid_t this_hostid; //ID of current host in user config
 
-	iot_peers_registry_t *const peers_registry=NULL;
+	iot_peers_registry_t *const peers_registry;
+	iot_configregistry_t *const config_registry;
+	hwdev_registry_t *const hwdev_registry;
+	iot_meshnet_controller *const meshcontroller;
+	iot_spinlock event_lock;
+
+	iot_modinstance_item_t *node_instances_head=NULL, *driver_instances_head=NULL, *detector_instances_head=NULL;
+
+	uint64_t last_eventid_numerator=0; //must be preserved during restarts
+
 	int error=0;
+	bool is_shutdown=false;
+	void (*on_shutdown)(void)=NULL; //will be called after finishing graceful shutdown sequence
 
-	iot_gwinstance(uint32_t guid, iot_hostid_t hostid);
+
+	iot_gwinstance(uint32_t guid, iot_hostid_t hostid, uint64_t eventid_numerator);
 	~iot_gwinstance(void);
+
+	uint64_t next_event_numerator(void) { //returns next event numerator
+		uint64_t low=iot_get_systime()-1'000'000'000ull*1'000'000'000ull; //decrease number of seconds since EPOCH by 1e9 seconds for cases of event id
+		low-=low % 1000; //zero nanoseconds part to get microseconds multiplied by 1000
+
+		event_lock.lock();
+		if(last_eventid_numerator < low) last_eventid_numerator=low;
+			else last_eventid_numerator++;
+		uint64_t rval=last_eventid_numerator;
+		event_lock.unlock();
+printf("EVENT %" PRIu64 " allocated\n", rval);
+		return rval;
+	}
+
+	void remove_modinstance(iot_modinstance_item_t *modinst);
+	void graceful_shutdown(void (*on_shutdown_)(void));
+	void graceful_shutdown_step2(void);
+	void graceful_shutdown_step3(void);
 };
 
 

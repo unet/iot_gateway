@@ -46,10 +46,12 @@ struct iot_memobject {
 class /*alignas(IOT_MEMOBJECT_PARENT_ALIGN)*/ iot_memallocator {
 	static const uint32_t objsizes[15]; //size of allocated objects for corresponding freelist
 	static const uint32_t objoptblock[15]; //optimal size of OS-allocated block for corresponding freelist
+	iot_memallocator *slaves_head=NULL, *next_slave=NULL, *prev_slave=NULL; //allocators of non-main thread cannot be deallocated while process finished termination
+																				//phase, so are connected to main allocator as slaves to be deinit together with it
 	mpsc_queue<iot_memobject, iot_memobject, &iot_memobject::next> freelist[15];
 
 	volatile std::atomic<int32_t> totalinfly={0}; //incremented during block allocation and decremented during release
-	uv_thread_t thread={}; //which thread can do allocations
+	uv_thread_t *thread=NULL; //which thread can do allocations
 
 	void **memchunks; //array of OS-allocated memory chunks
 	int32_t *memchunks_refs; //for each OS-allocated chunk keeps total number of blocks in use and in freelist, so 0 means that chunk can be freed. for holes == -2
@@ -61,13 +63,19 @@ public:
 	iot_memallocator(void) :
 //		totalinfly({0}),
 		memchunks(NULL),  memchunks_refs(NULL), nummemchunks(0), maxmemchunks(0), numholes({0}) {
-			if(this==&main_allocator) thread=uv_thread_self();
+			if(this==&main_allocator) thread=&main_thread;
 	}
 	~iot_memallocator(void) {
 		deinit();
 	}
-	void set_thread(uv_thread_t th) {
+	void set_thread(uv_thread_t *th) {
 		thread=th;
+	}
+	void add_slave(iot_memallocator *slv) {
+		assert(memchunks!=NULL); //master must not be deinited
+		assert(uv_thread_self()==*thread);
+
+		BILINKLIST_INSERTHEAD(slv, slaves_head, next_slave, prev_slave);
 	}
 	iot_membuf_chain* allocate_chain(uint32_t size);
 	void* allocate(uint32_t size, bool allow_direct=false); //true allow_direct says that block can be malloced directly without going to freelist on release. can be used for rarely realloced buffers
@@ -76,8 +84,8 @@ public:
 
 	iot_threadmsg_t *allocate_threadmsg(void); //allocates threadmsg structure as memblock and inits it properly
 
+	bool deinit(void); //free all OS-allocated chunks
 private:
-	void deinit(void); //free all OS-allocated chunks
 	void do_free_direct(uint16_t &chunkindex);
 	void *do_allocate_direct(uint32_t size, uint16_t &chunkindex); //returns NULL on allocation error
 	bool do_allocate_freelist(uint32_t &n, uint32_t sz, iot_memobject * &ret, uint32_t OPTIMAL_BLOCK=64*1024, uint32_t MAX_BLOCK=2*1024*1024,unsigned maxn=0xFFFFFFFF);

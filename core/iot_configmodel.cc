@@ -9,8 +9,9 @@
 #include "iot_peerconnection.h"
 
 
-iot_nodemodel* iot_nodemodel::create(iot_config_item_node_t* cfgitem) {
+iot_nodemodel* iot_nodemodel::create(iot_config_item_node_t* cfgitem, iot_gwinstance *gwinst_) {
 		assert(cfgitem->nodemodel==NULL);
+		assert(gwinst_!=NULL);
 
 		iot_nodemodel* m;
 		size_t sz=sizeof(iot_nodemodel);
@@ -18,6 +19,7 @@ iot_nodemodel* iot_nodemodel::create(iot_config_item_node_t* cfgitem) {
 		if(!m) return NULL; //no memory
 		memset(m, 0, sz);
 
+		m->gwinst=gwinst_;
 		m->node_id=cfgitem->node_id;
 
 		m->cfgitem=cfgitem;
@@ -522,7 +524,7 @@ int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8
 				main_thread_item->send_msg(syncexec.msg);
 				syncexec.msg=NULL;
 				syncexec.clear_result();
-			} //else do nothing special. instance can send correct reply later ot in another call
+			} //else do nothing special. instance can send correct reply later or in another call
 			syncexec.clear();
 		}
 	} else sync=false;

@@ -118,13 +118,13 @@ private:
 		for (; lim != 0; lim >>= 1) {//size of current range, divided by 2 after each step
 			p = base + (lim >> 1);//pointer to middle of current range
 			if(p->key==key) {index=p-bl->branch.data;return true;}//check that we found our key
-			if(key > p->key) {  /* key > p: move right */
+			if(p->key < key) {  /* key > p: move right */
 				base = p + 1;
 				lim--;
 			}               /* else move left */
 		}
 		index=p-bl->branch.data;
-		if(p->key > key) index--;
+		if(key < p->key) index--;
 		return false;
 	}
 //if not found returns index of element, after which a new one must be inserted(-1 mean before all)
@@ -135,13 +135,13 @@ private:
 		for (; lim != 0; lim >>= 1) {//size of current range, divided by 2 after each step
 			p = base + (lim >> 1);//pointer to middle of current range
 			if(p->key==key) {index=p-bl->leaf.leaf;return true;}//check that we found our key
-			if(key > p->key) {  /* key > p: move right */
+			if(p->key < key) {  /* key > p: move right */
 				base = p + 1;
 				lim--;
 			}               /* else move left */
 		}
 		index=p-bl->leaf.leaf;
-		if(p->key > key) index--;
+		if(key < p->key) index--;
 		return false;
 	}
 	treeblock* get_freeblock(void) {
@@ -282,7 +282,7 @@ public:
 	}
 
 	int find(Key_t const &key,Val_t** old_data,treepath* path=NULL,uint32_t *treeidx=NULL) { //treeidx - specific parameter for find_mult realization, selects specific root not accounting key
-		//looks for key. if found and sizeof(Val_t)>0 then saves pointer to data to old_data
+		//looks for key. if found and sizeof(Val_t)>0 and old_data!=NULL then saves pointer to data to old_data
 		//returns 1-found,0-not found,-2 - error to large depth;
 		//path.pathway contains pairs of numbers: [block offset, record offset inside the block(signed, equal -1 if new elem should be inserted before all)]
 		//path.pathlen is index of last valid element in pathway
@@ -389,7 +389,7 @@ public:
 		path->pathlen=-1;
 		return -2;
 	}
-	int64_t find_mult(Key_t const &key_from,Key_t const &key_to,leafitem**buf, int64_t numbuf, int isotropic=0) {//finds all records starting from key_from 
+	int64_t find_mult(Key_t const &key_from,Key_t const &key_to,leafitem**buf, int64_t numbuf, bool isotropic=false) {//finds all records starting from key_from 
 	//(including) up to key_to (not including). not more than numbuf leafitem structs will be saved in buf.
 	//if isotropic is true then all keys between [key_from; key_to) are assumed to have the same hash (key & mask) which is calculated from key_from. This can
 	//greatly speedup this function if mask is wide

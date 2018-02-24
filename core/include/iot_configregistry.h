@@ -309,9 +309,9 @@ struct iot_config_item_host_t {
 
 	iot_config_item_host_t(const iot_config_item_host_t&) = delete;
 
-	iot_config_item_host_t(bool is_current, iot_hostid_t host_id, iot_peer *peer_): is_current(is_current), host_id(host_id), peer(peer_) {
+	iot_config_item_host_t(bool is_current, iot_hostid_t host_id, const iot_objref_ptr<iot_peer> &peer_): is_current(is_current), host_id(host_id), peer(peer_) {
 		assert(host_id!=0);
-		assert(peer!=NULL);
+		assert((peer!=NULL && !is_current) || (peer==NULL && is_current));
 	}
 
 	~iot_config_item_host_t(void) {
@@ -342,6 +342,8 @@ private:
 	MemHBTree<iot_config_item_rule_t*, iot_id_t, 0, 0, true, 10> rules_index;
 
 	uint32_t nodecfg_id=0, hostcfg_id=0, modecfg_id=0, owncfg_modtime=0; //current numbers of config parts
+	iot_hostid_t logger_host_id=0;
+	std::atomic<uint32_t> num_hosts={0}; //current number of entries in hosts_head list. (will become unnecessary if linked list will be changed to a tree)
 
 	iot_modelevent eventsbuf[100]; //preallocated model event structs
 	iot_modelevent *events_freelist=NULL; //only ->qnext is used for list iterating
@@ -353,8 +355,8 @@ private:
 
 	iot_modelevent *current_events_head=NULL; //list of events being currently processed in parallel. qnext and qprev fields are used, but no tail
 
-	uint64_t last_eventid_numerator=0; //last used numerator. it is timestamp with microseconds decremented by 1e15 mcs and multiplied by 1000. least 3 
-									//decimal digits are just incremented when number of microsends is not changed (i.e. events appear during same microsecond)
+//	uint64_t last_eventid_numerator=0; //last used numerator. it is timestamp with microseconds decremented by 1e15 mcs and multiplied by 1000. least 3 
+//									//decimal digits are just incremented when number of microsends is not changed (i.e. events appear during same microsecond)
 
 //	iot_threadmsg_t *freemsg_head=NULL; //list of free msg structs allocated as memblocks
 //	uint32_t num_freemsgs=0; //number of items in freemsg_head
@@ -384,6 +386,9 @@ public:
 	void free_config(void); //main thread
 	void clean_config(void); //main thread. free all config items marked for deletion
 
+	uint32_t get_num_hosts(void) {
+		return num_hosts.load(std::memory_order_relaxed);
+	}
 //host management
 	void host_add(iot_config_item_host_t* h) {
 		assert(uv_thread_self()==main_thread);
@@ -393,10 +398,11 @@ public:
 		hosts_lock.wrlock();
 
 		BILINKLIST_INSERTHEAD(h, hosts_head, next, prev);
+		num_hosts.fetch_add(1, std::memory_order_relaxed);
 
 		hosts_lock.wrunlock();
 
-		if(h->host_id==iot_current_hostid) {
+		if(h->host_id==gwinst->this_hostid) {
 			assert(current_host==NULL);
 			current_host=h;
 		}
@@ -449,6 +455,8 @@ public:
 
 		//do exclusive work
 		BILINKLIST_REMOVE_NOCL(h, next, prev);
+		assert(num_hosts>0);
+		num_hosts.fetch_sub(1, std::memory_order_relaxed);
 
 		if(!skiplock) {
 			//release lock
@@ -559,15 +567,6 @@ public:
 
 
 //Modelling
-	uint64_t next_event_numerator(void) { //returns next event numerator
-		timeval tv;
-		gettimeofday(&tv, NULL);
-		uint64_t low=((tv.tv_sec-1000000000)*1000000+tv.tv_usec)*1000;
-		if(last_eventid_numerator < low) last_eventid_numerator=low;
-			else last_eventid_numerator++;
-printf("EVENT %" PRIu64 " allocated\n", last_eventid_numerator);
-		return last_eventid_numerator;
-	}
 	void inject_negative_signal(iot_modelnegsignal* neg) { //notification from sync node about 'no updates'
 		assert(neg!=NULL);
 		auto node=node_find(neg->node_id);
@@ -581,7 +580,7 @@ printf("EVENT %" PRIu64 " allocated\n", last_eventid_numerator);
 	}
 	void inject_signals(iot_modelsignal* sig) {
 		assert(sig!=NULL);
-		if(sig->out_label[0]=='v' && strcmp(sig->out_label+1, IOT_CONFIG_NODE_ERROUT_LABEL)==0) {
+		if(sig->out_label[0]=='v' && strcmp(sig->out_label+1, IOT_CONFIG_NODE_ERROUT_LABEL)==0) { //put error signals to separate event
 			assert(sig->next==NULL); //error output is only one per node
 
 			if(new_errevent) {
@@ -604,7 +603,7 @@ printf("EVENT %" PRIu64 " allocated\n", last_eventid_numerator);
 				}
 				new_errevent=events_freelist;
 				events_freelist=events_freelist->qnext;
-				new_errevent->init(next_event_numerator());
+				new_errevent->init(gwinst->next_event_numerator());
 			}
 			new_errevent->add_signals(sig);
 			return;
@@ -646,7 +645,7 @@ printf("EVENT %" PRIu64 " allocated\n", last_eventid_numerator);
 		if(new_event) {
 			if(sig->reltime > new_event->signals_tail->reltime) { //we have unfinished event and millisecond changed
 				commit_event();
-			} else if(new_event->signals_head) { //check if any signal already present in event
+			} else if(new_event->signals_head) { //check if any signal already present in event to prevent same signals in one event
 				for(iot_modelsignal* cursig=new_event->signals_head; cursig; cursig=cursig->next) {
 					if(cursig->node_id!=sig->node_id) continue;
 					csig=sig;
@@ -669,7 +668,7 @@ printf("EVENT %" PRIu64 " allocated\n", last_eventid_numerator);
 			}
 			new_event=events_freelist;
 			events_freelist=events_freelist->qnext;
-			new_event->init(next_event_numerator());
+			new_event->init(gwinst->next_event_numerator());
 		}
 		new_event->add_signals(sig);
 	}
@@ -698,7 +697,8 @@ private:
 	void start_executor(void) {
 		if(uv_is_active((uv_handle_t*)&events_executor)) return;
 		uv_check_start(&events_executor, [](uv_check_t* handle)->void {
-			config_registry->process_events();
+			iot_configregistry_t *reg=(iot_configregistry_t*)(handle->data);
+			reg->process_events();
 		});
 	}
 	void process_events(void) { //for now process first event from queue
@@ -713,7 +713,7 @@ private:
 		if(!events_qhead) stop_executor();
 			else start_executor();
 	}
-	bool event_start(iot_modelevent* ev) { //checks if event processing concerns any blocked node or rule. if no, then starts processing and returns true
+	bool event_start(iot_modelevent* ev) { //checks if event processing involves any blocked node or rule. if no, then starts processing and returns true
 		if(ev->is_blocked) return false;
 printf("CHECKING EVENT %" PRIu64 " CAN BE STARTED\n", ev->id.numerator);
 
@@ -757,7 +757,7 @@ printf("CHECKING EVENT %" PRIu64 " CAN BE STARTED\n", ev->id.numerator);
 					if(out) continue; //was break after recursive_checkblocked call, so path is blocked
 				}
 				//here node signal path is not blocked, so input signal can be added to current event
-				//we can block node and its path right here (no exit conditions later, before blocking ev->signals_head dependent nodes)
+				//we can block node and its path right here (there must be no exit conditions later, before blocking ev->signals_head dependent nodes!!!) POINT1
 				node->blockedby=ev;
 				for(iot_config_node_out_t *out=node->outputs; out; out=out->next) //loop by outputs of node
 					if(out->is_connected) recursive_block(out, ev, 1);
@@ -766,6 +766,8 @@ printf("CHECKING EVENT %" PRIu64 " CAN BE STARTED\n", ev->id.numerator);
 					node->set_initial(ev); //select this node as initial as it is in signalled state
 			}
 		}
+
+		//NO EXIT conditions must be after POINT1 till this point!!!
 
 		//now block all nodes involved by signals
 		for(sig=ev->signals_head; sig; sig=sig->next) {
@@ -931,7 +933,7 @@ printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numer
 					}
 
 					link->in->is_undelivered=true;
-					if(!dnode->needs_exec()) config_registry->set_needexec(dnode);
+					if(!dnode->needs_exec()) set_needexec(dnode);
 
 					if(!dnode->acted && dnode->outputs_connected && dnode->is_sync() && !dnode->is_initial())
 						dnode->set_initial(ev); //not already executed and has connected outputs and IS SYNC and not already in initial list

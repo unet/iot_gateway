@@ -110,9 +110,14 @@ struct iot_modinstance_item_t {
 	friend struct iot_modinstance_locker;
 
 	iot_modinstance_item_t *next_inmod, *prev_inmod; //next instance of same type and module_id  for the list with head in iot_[node|driver|detector]_module_item_t::[node|driver|detector]_instance[s_head|]
-	iot_modinstance_item_t *next_inthread, *prev_inthread; //next instance for the list with head in iot_thread_item_t::instances_head
 	iot_any_module_item_t *module;
+
+	iot_modinstance_item_t *next_inthread, *prev_inthread; //next instance for the list with head in iot_thread_item_t::instances_head
 	iot_thread_item_t *thread;
+
+	iot_modinstance_item_t *next_ingwinst, *prev_ingwinst; //next instance for the list with head in iot_gwinstance::[node|driver|detector]_instances_head
+	iot_gwinstance *gwinst;
+
 	iot_module_instance_base *instance;
 	uint64_t started; //non-zero if instance was requested to start. this property is assigned in main thread.
 	uint64_t state_timeout; //for state-related delayed tasks time of recheck (exact task is determined by state/target_state)
@@ -123,7 +128,7 @@ struct iot_modinstance_item_t {
 	volatile iot_modinstance_state_t target_state; //assigned in main or working thread
 	iot_module_type_t type;
 	uint8_t cpu_loading; //copied from corresponding iface from module's config
-	volatile std::atomic_flag stopmsglock; //lock protecting access to msgp.stop
+	volatile std::atomic_flag stopmsglock=ATOMIC_FLAG_INIT; //lock protecting access to msgp.stop
 	union {
 		struct {
 			iot_threadmsg_t *start, //for start (from main thread) and for start status (from working thread)
@@ -143,7 +148,7 @@ struct iot_modinstance_item_t {
 			uint8_t announce_connfree_once:1, //flag that after clearing any conn[] pointer search for other clients must be reattempted ONCE (like after driver start)
 											//before this retry_clients must be cleared from special values 0xFFFFFFFE. other hosts must be notified using some
 											//special event to clear same special values and recheck their clients 
-					announce_connclose:1, //flag that after closing any establixhed connection search for other clients must be reattempted (like after driver start)
+					announce_connclose:1, //flag that after closing any established connection, search for other clients must be reattempted (like after driver start)
 											//before this retry_clients must be cleared from special values 0xFFFFFFFD. other hosts must be notified using some
 											//special event to clear same special values and recheck their clients. This flag is NOT
 											//cleared until moment when ALL client connections are closed
@@ -159,7 +164,7 @@ struct iot_modinstance_item_t {
 		~modinsttype_data_t(void) {} //to make compiler happy
 	} data;
 private:
-	volatile std::atomic_flag acclock; //lock protecting access to next 2 fields
+	volatile std::atomic_flag acclock=ATOMIC_FLAG_INIT; //lock protecting access to next 2 fields
 	int8_t refcount; //how many times this struct was locked. can be accessed under acclock only
 	uint8_t pendfree; //flag that this struct in waiting for zero in refcount to be freed. can be accessed under acclock only
 	iot_miid_t miid; //module instance id (index in iot_modinstances array and creation time). zero iid field indicates unused structure.
@@ -168,7 +173,7 @@ private:
 public:
 	iot_modinstance_item_t(void) {
 	}
-	bool init(const iot_miid_t &miid_, iot_any_module_item_t* module_, iot_module_type_t type_, iot_thread_item_t *thread_, iot_module_instance_base* instance_);
+	bool init(iot_gwinstance* gwinst_, const iot_miid_t &miid_, iot_any_module_item_t* module_, iot_module_type_t type_, iot_thread_item_t *thread_, iot_module_instance_base* instance_, uint8_t cpu_loading_);
 	void deinit(void);
 
 	const iot_miid_t& get_miid(void) const {return miid;}
@@ -333,8 +338,6 @@ class iot_modules_registry_t {
 	iot_node_module_item_t *node_head=NULL;
 
 public:
-	bool is_shutdown=false;
-
 	iot_modules_registry_t(void) {
 		assert(modules_registry==NULL);
 		modules_registry=this;
@@ -367,13 +370,20 @@ public:
 	int create_driver_modinstance(iot_driver_module_item_t* module, iot_hwdevregistry_item_t* devitem); //main thread
 
 	int create_node_modinstance(iot_node_module_item_t* module, iot_nodemodel* nodemodel); //main thread
-	void create_detector_modinstance(iot_detector_module_item_t* module); //main thread
 
-	void graceful_shutdown(void) { //must be called by hwdev_registry->graceful_shutdown after stopping all modinstances
-		assert(!is_shutdown);
-		is_shutdown=true;
-		outlog_debug("in graceful_shutdown");
-		uv_stop (main_loop);
+	void create_detector_modinstance(iot_detector_module_item_t* module, iot_gwinstance* gwinst=NULL); //main thread. on server detectors can (or always are?) gwinstance-independent (so gwinst is NULL)
+
+	void graceful_shutdown(void) {
+//		assert(!is_shutdown);
+//		is_shutdown=true;
+		outlog_debug("module registry in graceful_shutdown");
+
+		//stop global detector instances
+		iot_detector_module_item_t *mod=detectors_head;
+		while(mod) {
+			if(mod->detector_instance && !mod->detector_instance->gwinst) mod->detector_instance->stop(false);
+			mod=mod->next_detector;
+		}
 	}
 
 
@@ -387,7 +397,7 @@ private:
 	int register_module(iot_driver_moduleconfig_t* cfg, iot_regitem_module_t *dbitem); //main thread
 	int register_module(iot_detector_moduleconfig_t* cfg, iot_regitem_module_t *dbitem); //main thread
 
-	iot_modinstance_item_t* register_modinstance(iot_any_module_item_t* module, iot_module_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance); //main thread
+	iot_modinstance_item_t* register_modinstance(iot_gwinstance* gwinst_, iot_any_module_item_t* module, iot_module_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance, uint8_t cpu_loading); //main thread
 	iot_modinstance_item_t* find_modinstance_byid(const iot_miid_t &miid); //core code in main thread
 
 };

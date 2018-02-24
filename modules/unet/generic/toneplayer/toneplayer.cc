@@ -46,9 +46,9 @@ struct basic_instance : public iot_node_base {
 	} device={}; //per device connection state
 
 /////////////static fields/methods for module instances management
-	static int init_instance(iot_node_base** instance, uv_thread_t thread, uint32_t node_id, json_object *json_cfg) {
+	static int init_instance(iot_node_base** instance, uint32_t node_id, json_object *json_cfg) {
 
-		basic_instance *inst=new basic_instance(thread, node_id, json_cfg);
+		basic_instance *inst=new basic_instance(node_id, json_cfg);
 		*instance=inst;
 		return 0;
 	}
@@ -59,7 +59,7 @@ struct basic_instance : public iot_node_base {
 		return 0;
 	}
 private:
-	basic_instance(uv_thread_t thread, uint32_t node_id, json_object *json_cfg) : iot_node_base(thread), node_id(node_id)
+	basic_instance(uint32_t node_id, json_object *json_cfg) : node_id(node_id)
 	{
 		int numsongs=0;
 		if(json_cfg) {
@@ -223,8 +223,6 @@ static const iot_deviface_params* basic_devifaces[]={
 
 iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(basic)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
-	.init_module = NULL,
-	.deinit_module = NULL,
 	.cpu_loading = 0,
 	.num_devices = 1,
 	.num_valueoutputs = 0,
@@ -255,6 +253,8 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(basic)={
 	.msginput={},
 
 	//methods
+	.init_module = NULL,
+	.deinit_module = NULL,
 	.init_instance = &basic_instance::init_instance,
 	.deinit_instance = &basic_instance::deinit_instance
 

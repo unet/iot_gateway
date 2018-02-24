@@ -333,7 +333,7 @@ int iot_device_connection_t::connect_remote(iot_miid_t& driver_inst) {//, const 
 //	IOT_ERROR_TEMPORARY_ERROR - some temporary error (like no memory). for local client means that another try IS SCHEDULED later (so nothing to do).
 //								for remote such status is just returned and must be transfered to client host AND RETRY BE SCHEDULED THERE
 //	IOT_ERROR_NO_MEMORY
-//	IOT_ERROR_DEVICE_NOT_SUPPORTED
+//	IOT_ERROR_NOT_SUPPORTED
 //	IOT_ERROR_HARD_LIMIT_REACHED - for remote clients tells that retry must be blocked until driver frees connection slot (retry time is special value 0xFFFFFFFE on client side)
 //								for local clients block will be already set (so can be used to break early loop through consumers)
 //	IOT_ERROR_LIMIT_REACHED - for remote clients tells that retry must be blocked until driver closes any of its established connections (retry time is special value 0xFFFFFFFD on client side)
@@ -347,7 +347,7 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 		assert(driver_inst->type==IOT_MODTYPE_DRIVER);
 		if(!driver_inst->is_working()) {
 			assert(false);
-			return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			return IOT_ERROR_NOT_SUPPORTED;
 		}
 		uint32_t now32=uint32_t((uv_now(main_loop)+500)/1000);
 
@@ -363,7 +363,7 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 			//DEVICE IN hwdev IS LOCAL, so no addtional check for client_devifaceclassfilter->flag_localonly
 			int i;
 			for(i=0;i<client_numhwdevidents;i++) if(client_hwdevidents[i].matches(&hwdev->dev_ident)) break;
-			if(i>=client_numhwdevidents) return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			if(i>=client_numhwdevidents) return IOT_ERROR_NOT_SUPPORTED;
 		}
 
 		//check if driver provides any of interfaces requested by node module
@@ -384,7 +384,7 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 				selected_iface=0;
 				assert(driver_inst->data.driver.devifaces[0].is_valid());
 			}
-			else return IOT_ERROR_DEVICE_NOT_SUPPORTED;
+			else return IOT_ERROR_NOT_SUPPORTED;
 		}
 
 		if(!clientclose_msg) { //preallocate msg struct if necessary
@@ -491,7 +491,7 @@ on_no_mem:
 //	IOT_ERROR_NO_MEMORY
 //	IOT_ERROR_LIMIT_REACHED - only for remote client (local get IOT_ERROR_TEMPORARY_ERROR)
 //	IOT_ERROR_TEMPORARY_ERROR - some temporary error. another try can be attempted later
-//	IOT_ERROR_DEVICE_NOT_SUPPORTED
+//	IOT_ERROR_NOT_SUPPORTED
 int iot_device_connection_t::on_drvconnect_status(int err, bool isasync) {
 	assert(uv_thread_self()==main_thread);
 
@@ -550,7 +550,7 @@ int iot_device_connection_t::on_drvconnect_status(int err, bool isasync) {
 			drvinst->module->state=IOT_MODULESTATE_DISABLED;
 			static_cast<iot_driver_module_item_t*>(drvinst->module)->stop_all_drivers(true);
 		}
-		err=IOT_ERROR_DEVICE_NOT_SUPPORTED;
+		err=IOT_ERROR_NOT_SUPPORTED;
 	}
 
 	if(!isasync) return err;
@@ -572,7 +572,7 @@ int iot_device_connection_t::on_drvconnect_status(int err, bool isasync) {
 //	IOT_ERROR_NO_MEMORY
 /////	IOT_ERROR_ACTION_CANCELLED
 //	IOT_ERROR_TEMPORARY_ERROR - some temporary error. another try can be attempted later
-//	IOT_ERROR_DEVICE_NOT_SUPPORTED
+//	IOT_ERROR_NOT_SUPPORTED
 int iot_device_connection_t::process_connect_local(bool isasync) { //called in working thread of driver instance with acquired acclock or in main thead
 	//isasync show if call was made while processing IOT_MSG_OPEN_CONNECTION message
 	assert(state==IOT_DEVCONN_PENDING && driver_host==iot_current_hostid);
@@ -671,7 +671,7 @@ int iot_device_connection_t::process_connect_local(bool isasync) { //called in w
 		if(err==IOT_ERROR_CRITICAL_BUG) {
 			outlog_error("Critical bug opening connection to driver module '%s::%s' with ID %u. Module will be blocked.", module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id);
 		}
-		else if(err!=IOT_ERROR_DEVICE_NOT_SUPPORTED && err!=IOT_ERROR_TEMPORARY_ERROR && err!=IOT_ERROR_LIMIT_REACHED) {
+		else if(err!=IOT_ERROR_NOT_SUPPORTED && err!=IOT_ERROR_TEMPORARY_ERROR && err!=IOT_ERROR_LIMIT_REACHED) {
 			outlog_error("Illegal error opening connection to driver module '%s::%s' with ID %u: %s. This is buf. Module will be blocked.", module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
 			err=IOT_ERROR_CRITICAL_BUG;
 		}

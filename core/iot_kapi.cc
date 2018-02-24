@@ -46,6 +46,27 @@ uint32_t iot_parse_version(const char* s) {
 	return IOT_VERSION_COMPOSE(vers, patch, rev);
 }
 
+
+void iot_gen_random(char* buf, uint16_t len) { //temporary, gives very bad random
+	static bool inited=false;
+	if(!inited) {
+		time_t t=time(NULL);
+		srandom((unsigned int)(t));
+		inited=true;
+	}
+	long int r;
+	while(len>sizeof(int)) {
+		r=random();
+		memcpy(buf, &r, sizeof(int));
+		buf+=sizeof(int);
+		len-=sizeof(int);
+	}
+	if(len>0) {
+		r=random();
+		memcpy(buf, &r, len);
+	}
+}
+
 int iot_devifaces_list::add(const iot_deviface_params *cls) {
 		if(num>=IOT_CONFIG_MAX_IFACES_PER_DEVICE) return IOT_ERROR_LIMIT_REACHED;
 		if(!cls) return IOT_ERROR_INVALID_ARGS;
@@ -70,24 +91,27 @@ int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t actio
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk) return IOT_ERROR_INVALID_ARGS;
 
+	hwdev_registry_t* reg;
+
+	if(!modinstlk.modinst->gwinst) { //or may be just look at ident->guid?
+		assert(false);
+#ifdef IOT_SERVER
+		//TODO. allow detectors on server to find devices for any instance
+		//reg=iot_gwinstance::find(ident->guid)->hwdev_registry;
+#endif
+	} else {
+		reg=modinstlk.modinst->gwinst->hwdev_registry;
+	}
+
 	//TODO make inter-thread message, not direct call !!!
 	if(uv_thread_self()==main_thread) {
-		return hwdev_registry->list_action(miid, action, ident, custom_data);
+		return reg->list_action(miid, action, ident, custom_data);
 	} else {
 		assert(false);
 		//TODO
 	}
 	return 0;
 }
-
-
-iot_module_instance_base::iot_module_instance_base(uv_thread_t thread) : thread(thread), miid(0,0) {
-	iot_thread_item_t* th=thread_registry->find_thread(thread);
-	assert(th!=NULL);
-//	memallocator=th->allocator;
-	loop=th->loop;
-}
-
 
 //accepted error codes:
 //	0 - for case of delayed stop (state of modinst must be IOT_MODINSTSTATE_STOPPING)

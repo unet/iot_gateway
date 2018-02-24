@@ -9,9 +9,20 @@
 #include <sched.h>
 #include <assert.h>
 
+#ifndef NDEBUG
+	#include <execinfo.h>
+#endif
+
 #include "uv.h"
 //#include "ecb.h"
-//#include "iot_daemonlib.h"
+#include "iot_daemonlib.h"
+
+enum h_state_t : uint8_t { //libuv handle state
+	HS_UNINIT=0,
+	HS_CLOSING,
+	HS_INIT,
+	HS_ACTIVE
+}; //activation way: UNINIT -> INIT -> ACTIVE  , stop: ACTIVE -> CLOSING -> UNINIT   , reactivation: (stop) -> (activate)
 
 
 #define IOT_JSONPARSE_UINT(jsonval, typename, varname) { \
@@ -82,6 +93,34 @@ public:
 		return (prevtail==stub);
 	}
 
+	void unshift(Node* newnode) { //operation for Consumer to put item at head of queue
+		if(head==stub) { //head points to stub, so queue can be empty (and push, which will modify next in stub, can begin at any moment) or not (no race possible)
+			NodeBase* next=(head->*NextPtr).load(std::memory_order_acquire);
+			if(next) { //stub is not the only item, so no race possible, just remove stub
+				(newnode->*NextPtr).store(next, std::memory_order_relaxed);
+				head=newnode;
+			} else { //stub was the only item, so head must be equal to tail. try to make newnode new tail
+				NodeBase* oldhead=head;
+				(newnode->*NextPtr).store(NULL, std::memory_order_release); //init newnode as new tail
+				if(tail.compare_exchange_strong(head, newnode, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue becomes with only newnode
+											/*  head will be modified if FALSE!!! */
+					head=newnode;
+				} else { //push is right in progress. it can be at critial point so we must wait when it will be passed and 'next' gets non-NULL value
+					uint16_t c=1;
+					while(!(oldhead->*NextPtr).load(std::memory_order_acquire)) {
+						if(!(c++ & 1023)) sched_yield();
+					}
+					next=(oldhead->*NextPtr).load(std::memory_order_relaxed);
+					(newnode->*NextPtr).store(next, std::memory_order_relaxed);
+					head=newnode;
+				}
+			}
+		} else {
+			(newnode->*NextPtr).store(head, std::memory_order_relaxed);
+			head=newnode;
+		}
+	}
+
 	Node* pop(void) {
 		NodeBase* oldhead=head;
 		NodeBase* next=(oldhead->*NextPtr).load(std::memory_order_acquire);
@@ -145,7 +184,7 @@ public:
 
 //Thread-safe Single Producer Single Consumer circular byte buffer.
 class byte_fifo_buf {
-	volatile uint32_t readpos, writepos;
+	volatile std::atomic<uint32_t> readpos, writepos;
 	uint32_t bufsize, mask;
 	char* buf;
 
@@ -160,7 +199,8 @@ public:
 	}
 	void clear(void) {
 		std::atomic_thread_fence(std::memory_order_release);
-		readpos=writepos=0;
+		readpos.store(0, std::memory_order_relaxed);
+		writepos.store(0, std::memory_order_relaxed);
 	}
 	uint32_t getsize(void) {
 		return bufsize;
@@ -174,32 +214,58 @@ public:
 		uint32_t ws;
 		if(buf && (ws=pending_read())>0) {
 			if(ws>newsize) return false; //do not allow to loose data
-			writepos=read(newbuf, newsize);
+			ws=read(newbuf, newsize);
 		} else {
-			writepos=0;
+			ws=0;
 		}
 		buf=newbuf;
 		bufsize=newsize;
-		readpos=0;
 		mask=newmask;
+		std::atomic_thread_fence(std::memory_order_release);
+		readpos.store(0, std::memory_order_relaxed);
+		writepos.store(ws, std::memory_order_relaxed);
 		return true;
 	}
 	uint32_t pending_read(void) { //returns unread bytes
-		assert(writepos>=readpos && writepos-readpos<=bufsize);
-		uint32_t res=writepos-readpos;
+//		assert(/*writepos>=readpos && */writepos-readpos<=bufsize); //?? writepos can become < readpos after 32 bit overflow, but this must be OK while difference <= bufsize
+		uint32_t res=writepos.load(std::memory_order_relaxed)-readpos.load(std::memory_order_relaxed); //32 bit overflow here is normal
 		std::atomic_thread_fence(std::memory_order_acquire); //to be in sync with update of writepos in write() and write_zero()
+		assert(res<=bufsize);
 		return res;
 	}
 	uint32_t avail_write(void) { //returns available space
 		return bufsize-pending_read();
 	}
+	uint32_t get_readbuf_iovec(iovec *iovecbuf, int &veclen) { //can be used to obtain direct addresses of data to read. after such direct read. a call to read() with NULL
+															//dstbuf and dstsize==[return value of get_readbuf_iovec] must be done to update read position
+		//iovecbuf must point to array of veclen structures. on exit veclen will be updated to actual number of filled
+		//structures. maximum 2 structures can be filled!!! so no need to provide more than 2.
+		//return value shows number of available bytes. it will be the sum of lengths of returned iovec structures
+		if(veclen<=0 || !iovecbuf) {veclen=0;return 0;}
+		uint32_t ws=pending_read();
+		if(!ws) {veclen=0;return 0;}
+		uint32_t readpos1=readpos.load(std::memory_order_relaxed) & mask;
+		if(readpos1+ws <= bufsize) { //no buffer border crossed, move single block
+			iovecbuf[0]={.iov_base=&buf[readpos1], .iov_len=ws};
+			veclen=1;
+		} else { //buffer border crossed, move two blocks
+			uint32_t ws1 = bufsize - readpos1;
+			iovecbuf[0]={.iov_base=&buf[readpos1], .iov_len=ws1};
+			if(veclen==1) return ws1; //only one iovec supplied, so return only partial size of available read
+			//here veclen>1
+			iovecbuf[1]={.iov_base=buf, .iov_len=ws - ws1};
+			veclen=2;
+		}
+		return ws;
+	}
+
 	uint32_t read(void* dstbuf, size_t dstsize) { //read at most dstsize bytes. returns number of copied bytes
 		//NULL dstbuf means that data must be discarded
 		uint32_t avail=pending_read();
 		uint32_t ws=avail < dstsize ? avail : dstsize; //working size
 		if(!ws) return 0;
 		if(dstbuf) {
-			uint32_t readpos1=readpos & mask;
+			uint32_t readpos1=readpos.load(std::memory_order_relaxed) & mask;
 			if(readpos1+ws <= bufsize) { //no buffer border crossed, move single block
 				memcpy(dstbuf, &buf[readpos1], ws);
 			} else { //buffer border crossed, move two blocks
@@ -209,7 +275,7 @@ public:
 			}
 		}
 		std::atomic_thread_fence(std::memory_order_release);
-		readpos+=ws;
+		readpos.fetch_add(ws, std::memory_order_relaxed);
 		return ws;
 	}
 	uint32_t peek(void* dstbuf, size_t dstsize, uint32_t offset=0) { //read at most dstsize bytes. returns number of copied bytes
@@ -221,7 +287,7 @@ public:
 		uint32_t ws=avail < dstsize ? avail : dstsize; //working size
 		if(!ws) return 0;
 		if(dstbuf) {
-			uint32_t readpos1=(readpos+offset) & mask;
+			uint32_t readpos1=(readpos.load(std::memory_order_relaxed)+offset) & mask;
 			if(readpos1+ws <= bufsize) { //no buffer border crossed, move single block
 				memcpy(dstbuf, &buf[readpos1], ws);
 			} else { //buffer border crossed, move two blocks
@@ -236,30 +302,32 @@ public:
 		uint32_t avail=avail_write();
 		uint32_t ws=avail < srcsize ? avail : srcsize; //working size
 		if(!ws) return 0;
-		if((writepos & mask)+ws <= bufsize) { //no buffer border crossed, move single block
-			memcpy(&buf[writepos & mask], srcbuf, ws);
+		uint32_t writepos1=writepos.load(std::memory_order_relaxed) & mask;
+		if(writepos1+ws <= bufsize) { //no buffer border crossed, move single block
+			memcpy(&buf[writepos1], srcbuf, ws);
 		} else { //buffer border crossed, move two blocks
-			uint32_t ws1 = bufsize - (writepos & mask);
-			memcpy(&buf[writepos & mask], srcbuf, ws1);
+			uint32_t ws1 = bufsize - writepos1;
+			memcpy(&buf[writepos1], srcbuf, ws1);
 			memcpy(buf, (char*)srcbuf + ws1, ws - ws1);
 		}
 		std::atomic_thread_fence(std::memory_order_release);
-		writepos+=ws;
+		writepos.fetch_add(ws, std::memory_order_relaxed);
 		return ws;
 	}
 	uint32_t write_zero(size_t srcsize) { //write at most srcsize zero bytes. returns number of written bytes
 		uint32_t avail=avail_write();
 		uint32_t ws=avail < srcsize ? avail : srcsize; //working size
 		if(!ws) return 0;
-		if((writepos & mask)+ws <= bufsize) { //no buffer border crossed, fill single block
-			memset(&buf[writepos & mask], 0, ws);
+		uint32_t writepos1=writepos.load(std::memory_order_relaxed) & mask;
+		if(writepos1+ws <= bufsize) { //no buffer border crossed, fill single block
+			memset(&buf[writepos1], 0, ws);
 		} else { //buffer border crossed, move two blocks
-			uint32_t ws1 = bufsize - (writepos & mask);
-			memset(&buf[readpos & mask], 0, ws1);
+			uint32_t ws1 = bufsize - writepos1;
+			memset(&buf[writepos1], 0, ws1);
 			memset(buf, 0, ws - ws1);
 		}
 		std::atomic_thread_fence(std::memory_order_release);
-		writepos+=ws;
+		writepos.fetch_add(ws, std::memory_order_relaxed);
 		return ws;
 	}
 };
@@ -268,6 +336,43 @@ struct iot_releasable {
 	virtual void releasedata(void) = 0; //called to free/release dynamic data connected with object
 };
 
+
+class iot_spinlock {
+	mutable volatile std::atomic_flag _lock=ATOMIC_FLAG_INIT; //lock to protect critical sections
+	mutable volatile uint8_t lock_recurs=0;
+	mutable volatile uv_thread_t locked_by={};
+
+public:
+	void lock(void) const { //wait for lock mutex
+		if(locked_by==uv_thread_self()) { //this thread already owns lock, just increase recursion level
+			lock_recurs++;
+			assert(lock_recurs<5); //limit recursion to protect against endless loops
+			return;
+		}
+		uint16_t c=1;
+		while(_lock.test_and_set(std::memory_order_acquire)) {
+			//busy wait
+			if(!(c++ & 1023)) sched_yield();
+		}
+		locked_by=uv_thread_self();
+		assert(lock_recurs==0);
+	}
+	void unlock(void) const { //free lock mutex
+		if(locked_by!=uv_thread_self()) {
+			assert(false);
+			return;
+		}
+		if(lock_recurs>0) { //in recursion
+			lock_recurs--;
+			return;
+		}
+		locked_by={};
+		_lock.clear(std::memory_order_release);
+	}
+	void assert_is_locked(void) { //ensures lock is locked
+		assert(_lock.test_and_set(std::memory_order_acquire));
+	}
+};
 
 class iot_objectrefable;
 typedef void (*object_destroysub_t)(iot_objectrefable*);
@@ -278,12 +383,16 @@ void object_destroysub_delete(iot_objectrefable*);
 
 //object which can be referenced by iot_objid_t - derived struct, has reference count and delayed destruction
 class iot_objectrefable {
-	mutable volatile std::atomic_flag reflock=ATOMIC_FLAG_INIT; //lock to protect critical sections
+protected:
+	iot_spinlock reflock;
+private:
 //reflock protected:
 	mutable volatile bool pend_destroy; //flag that this struct in waiting for zero in refcount to be freed. can be accessed under acclock only
-	mutable volatile uint8_t reflock_recurs=0;
 	mutable volatile int32_t refcount; //how many times address of this object is referenced. value -1 together with true pend_destroy means that destroy_sub was already called (or is right to be called)
-	mutable volatile uv_thread_t reflocked_by={};
+#ifndef NDEBUG
+public:
+	mutable bool debug=false;
+#endif
 ///////////////////
 
 	object_destroysub_t destroy_sub; //can be NULL if no specific destruction required (i.e. object is statically allocated). this function MUST call iot_objectrefable desctuctor (explicitely or doing delete)
@@ -298,32 +407,6 @@ protected:
 			pend_destroy=false;
 		}
 	}
-	void lock_refdata(void) const { //wait for reflock mutex
-		if(reflocked_by==uv_thread_self()) { //this thread already owns lock, just increase recursion level
-			reflock_recurs++;
-			assert(reflock_recurs<5); //limit recursion to protect against endless loops
-			return;
-		}
-		uint16_t c=1;
-		while(reflock.test_and_set(std::memory_order_acquire)) {
-			//busy wait
-			if(!(c++ & 1023)) sched_yield();
-		}
-		reflocked_by=uv_thread_self();
-		assert(reflock_recurs==0);
-	}
-	void unlock_refdata(void) const { //free reflock mutex
-		if(reflocked_by!=uv_thread_self()) {
-			assert(false);
-			return;
-		}
-		if(reflock_recurs>0) { //in recursion
-			reflock_recurs--;
-			return;
-		}
-		reflocked_by={};
-		reflock.clear(std::memory_order_release);
-	}
 public:
 	virtual ~iot_objectrefable(void) {
 		if(!destroy_sub) { //statically allocated global object, so no explicit try_destroy call required to be done and refcount must be 0 on destruction in such case
@@ -337,51 +420,77 @@ public:
 	}
 	void ref(void) const { //increment refcount if destruction is not pending. returns false in last case
 //outlog_error("%x ref increased", unsigned(uintptr_t(this)));
-		lock_refdata();
+		reflock.lock();
 		assert(refcount>=0);
 //		if(refcount<0) {
 //			assert(false);
 //			pend_destroy=true; //set to make guaranted exit by next condition
 //		}
 //		if(pend_destroy) { //cannot be referenced ones more
-//			unlock_refdata();
+//			reflock.unlock();
 //			return false;
 //		}
 		refcount++;
-		unlock_refdata();
+
+#ifndef NDEBUG
+		if(debug) {
+			void* tmp[4]; //we need to abandon first value. it is always inside this func
+			int nback;
+			nback=backtrace(tmp, 4);
+			if(nback>1) {
+				char **symb=backtrace_symbols(tmp+1,3);
+				outlog_notice("Object 0x%lx reffered (now %d times) from %s <- %s <- %s", long(uintptr_t(this)), refcount, symb[0] ? symb[0] : "NULL", symb[1] ? symb[1] : "NULL", symb[2] ? symb[2] : "NULL");
+				free(symb);
+			}
+		}
+#endif
+		reflock.unlock();
 		return;// true;
 	}
 	void unref(void) {
 //outlog_error("%x unref", unsigned(uintptr_t(this)));
-		lock_refdata();
+		reflock.lock();
 		if(refcount<=0) {
 			assert(false);
-			unlock_refdata();
+			reflock.unlock();
 			return;
 		}
 		refcount--;
+#ifndef NDEBUG
+		if(debug) {
+			void* tmp[4]; //we need to abandon first value. it is always inside this func
+			int nback;
+			nback=backtrace(tmp, 4);
+			if(nback>1) {
+				char **symb=backtrace_symbols(tmp+1,3);
+				outlog_notice("Object 0x%lx UNreffered (now %d times) from %s <- %s <- %s", long(uintptr_t(this)), refcount, symb[0] ? symb[0] : "NULL", symb[1] ? symb[1] : "NULL", symb[2] ? symb[2] : "NULL");
+				free(symb);
+			}
+		}
+#endif
 		if(refcount>0 || !pend_destroy) {
-			unlock_refdata();
+			reflock.unlock();
 			return;
 		}
 		//here refcount==0 and pend_destroy==true
 		//mark as destroyed by setting refcount to -1
 		refcount=-1;
-		unlock_refdata();
+
+		reflock.unlock();
 		if(destroy_sub) destroy_sub(this);
 	}
 	bool try_destroy(void) { //destroys object by calling destroy_sub and returns true if refcount is zero. otherwise marks object to be destroyed on last reference free and returns false
-		lock_refdata();
+		reflock.lock();
 		pend_destroy=true;
 		if(refcount==0) {
 			//mark as destroyed by setting refcount to -1
 			refcount=-1;
-			unlock_refdata();
+			reflock.unlock();
 			if(destroy_sub) destroy_sub(this);
 			return true;
 		}
 		assert(refcount>0);
-		unlock_refdata();
+		reflock.unlock();
 		return false;
 	}
 };
@@ -452,10 +561,10 @@ public:
 		src.ptr=NULL;
 		return *this;
 	}
-	bool operator==(const T& rhs) const{
+	bool operator==(const iot_objref_ptr& rhs) const{
 		return ptr==rhs.ptr;
 	}
-	bool operator!=(const T& rhs) const{
+	bool operator!=(const iot_objref_ptr& rhs) const{
 		return ptr!=rhs.ptr;
 	}
 	bool operator==(const T *rhs) const{
@@ -470,7 +579,7 @@ public:
 	bool operator !(void) const {
 		return ptr==NULL;
 	}
-	operator T*() const {
+	explicit operator T*() const {
 		return ptr;
 	}
 	T* operator->() const {
@@ -483,6 +592,7 @@ public:
 
 
 //can be used with single writer only! no recursion allowed!
+//writer has preference (no new reader can gain lock if writer is waiting)
 class iot_spinrwlock {
 	volatile std::atomic<uint32_t> lockobj={0};
 public:
@@ -503,7 +613,8 @@ public:
 		assert(lockval<0x20000); //limit maximum number of reader to 65536*2
 	}
 	void rdunlock(void) {
-		lockobj.fetch_sub(1, std::memory_order_release);
+		uint32_t lockval=lockobj.fetch_sub(1, std::memory_order_release);
+		assert(lockval!=0 && lockval!=0x80000000u);
 	}
 	void wrlock(void) {
 		uint32_t lockval=lockobj.fetch_add(0x80000000u, std::memory_order_acq_rel);
@@ -518,7 +629,8 @@ public:
 		//here lockval==0x80000000u so no readers active and cannot become active
 	}
 	void wrunlock(void) {
-		lockobj.fetch_sub(0x80000000u, std::memory_order_release);
+		uint32_t lockval=lockobj.fetch_sub(0x80000000u, std::memory_order_release);
+		assert(lockval>=0x80000000u); //previous state must be 'write lock'
 	}
 };
 

@@ -2,6 +2,7 @@
 #define IOT_NETCON_TCP_H
 
 #include<stdint.h>
+#include<unistd.h>
 #include<assert.h>
 //#include<time.h>
 //#include <atomic>
@@ -13,18 +14,21 @@
 #include "iot_netcon.h"
 #include "iot_threadregistry.h"
 
+class iot_netcon_tcp;
 
 //metaclass for TCP network connection type
 class iot_netcontype_metaclass_tcp: public iot_netcontype_metaclass {
-	iot_netcontype_metaclass_tcp(void) : iot_netcontype_metaclass("tcp", true) {
+	iot_netcontype_metaclass_tcp(void) : iot_netcontype_metaclass("tcp", true, true) {
 	}
 
 public:
 	static iot_netcontype_metaclass_tcp object;
 
 	virtual void destroy_netcon(iot_netcon* obj) const { //must destroy netcon object in correct way (metaclass knows how its netcon objects are created)
-		delete obj;
+		obj->~iot_netcon();
+		iot_release_memblock(obj);
 	}
+	static iot_netcon_tcp* allocate_netcon(iot_netproto_config* protoconfig);
 
 private:
 	virtual int p_from_json(json_object* json, iot_netproto_config* config, iot_netcon*& obj, bool is_server, iot_netconregistryiface* registry, uint32_t metric) const override;
@@ -46,18 +50,6 @@ class iot_netcon_tcp : public iot_netcon {
 			struct addrinfo* cur_addr; //is cycled through items in addr
 		} client;
 	};
-	enum : uint8_t {
-		PHASE_UNINITED,		//server or client
-		PHASE_INITIAL,		//server or client
-		PHASE_RESOLVING,	//server or client
-		PHASE_PREPLISTEN,	//server
-		PHASE_PREPLISTEN2,	//server
-		PHASE_LISTENING,	//server (final phase for accepting connection)
-		PHASE_CONNECTING,	//client
-		PHASE_CONNECTED,	//common
-		PHASE_RUNNING		//common
-	} phase=PHASE_UNINITED; //phase is used inside worker thread
-	bool is_server; //flag if connection was inited as server (i.e. listening), otherwise client (connecting)
 	union {
 		struct {
 			uv_getaddrinfo_t addr_req;
@@ -72,76 +64,144 @@ class iot_netcon_tcp : public iot_netcon {
 			uv_connect_t conn_req;
 		} connecting;
 	} phasedata;
-	struct addrinfo* addr=NULL; //result of resolving, for both client and server (unconnected) mode
-	uint32_t resolve_errors=0,
-		connect_errors=0,
-		listen_errors=0;
 	uint64_t retry_delay=0;
-	uv_timer_t retry_phase_timer;
-	uv_tcp_t h_tcp; //connected handle, for both client and server (both connected and unconnected) mode
-	uv_write_t h_writereq;
-	uv_shutdown_t h_shutdownreq;
-	bool h_tcp_valid=false;
-	bool h_writereq_valid=false;
-	bool h_shutdownreq_valid=false;
-	bool read_enabled=false;
+	struct addrinfo* addr=NULL; //result of resolving, for both client and server (unconnected) mode
 	char* readbuf=NULL;
 	size_t readbufsize=0;
 
+	uv_timer_t retry_phase_timer={};
+	uv_tcp_t h_tcp={}; //connected handle, for both client and server (both connected and unconnected) mode
+	uv_write_t h_writereq={};
+
+	uint32_t resolve_errors=0,
+		connect_errors=0,
+		listen_errors=0;
+	uv_os_fd_t accepted_fd=INVALID_SOCKET;
+
+	bool is_server; //flag if connection was inited as server (i.e. listening), otherwise client (connecting)
+	bool h_writereq_valid=false;
+	bool read_enabled=false;
+	bool peer_closed_restart=false; //becomes true if established connection is closed by peer (meaningful for restarts of client connections)
+
+	enum : uint8_t {
+		PHASE_UNINITED,		//server or client
+		PHASE_INITIAL,		//server or client
+		PHASE_RESOLVING,	//server or client
+		PHASE_PREPLISTEN,	//server
+		PHASE_PREPLISTEN2,	//server
+		PHASE_LISTENING,	//server (final phase for accepting connection)
+		PHASE_CONNECTING,	//client
+		PHASE_CONNECTED,	//common
+		PHASE_RUNNING		//common
+	} phase=PHASE_UNINITED; //phase is used inside worker thread
+//	bool retry_phase_timer_active=false;
+//	bool h_tcp_valid=false;
+//	bool h_tcp_closing=false;
+	h_state_t h_tcp_state=HS_UNINIT;
+	h_state_t h_phase_timer_state=HS_UNINIT;
+	h_state_t session_state=HS_UNINIT;
+	h_state_t h_addr_req_state=HS_UNINIT; //resolving
+
+//	uv_shutdown_t h_shutdownreq={};
+//	bool h_shutdownreq_valid=false;
+
 	//for creating slaves
-	iot_netcon_tcp(const iot_netcon_tcp *master): iot_netcon(master) {
-	}
+//	iot_netcon_tcp(const iot_netcon_tcp *master): iot_netcon(master) {
+//	}
 
 	static int duplicate_server(const iot_netcon_tcp* srv, sockaddr* saddr, socklen_t addrlen) { //duplicates server connection but with specific sockaddr. used when, e.g. one host resolves to several IPs
 		if(!srv->is_server || !saddr || (saddr->sa_family!=AF_INET && saddr->sa_family!=AF_INET6)) return IOT_ERROR_INVALID_ARGS;
-		iot_netcon_tcp* rep=new iot_netcon_tcp(srv);
+		iot_netcon_tcp* rep=iot_netcontype_metaclass_tcp::allocate_netcon((iot_netproto_config*)srv->protoconfig);
 		if(!rep) return IOT_ERROR_NO_MEMORY;
 
-		int err=rep->init_server(srv->server.bindhost, srv->server.bindport, srv->server.bindiface, srv->registry);
+		int err=rep->init_server(srv->server.bindhost, srv->server.bindport, srv->server.bindiface, srv->registry, true);
 		if(err) {
 			delete rep;
 			return err;
 		}
 		memcpy(&rep->server.cur_sockaddr, saddr, addrlen);
-		rep->state=STATE_STARTED;
 		rep->phase=PHASE_LISTENING;
 
-		rep->do_start_uv();
-		return 0;
+		err=rep->start_uv(srv->thread, true); //listening socket creates too small load, so use the same thread as master
+		if(err && err!=IOT_ERROR_NOT_READY) {
+			if(!rep->unmark_initing(true)) {
+				assert(false);
+			}
+		}
+		return err;
 	}
 	static int accept_server(const iot_netcon_tcp* srv) { //creates server instance in connected state (accepts incoming connection)
 		if(!srv || !srv->is_server || srv->phase!=PHASE_LISTENING) return IOT_ERROR_INVALID_ARGS;
-		iot_netcon_tcp* rep=new iot_netcon_tcp(srv);
+
+		iot_netcon_tcp* rep=iot_netcontype_metaclass_tcp::allocate_netcon((iot_netproto_config*)srv->protoconfig);
 		if(!rep) return IOT_ERROR_NO_MEMORY;
 
-		int err=rep->init_server(NULL, 0, NULL, srv->registry);
+		int err=rep->init_server(NULL, 0, NULL, srv->registry, true);
 		if(err) {
 			delete rep;
 			return err;
 		}
-		rep->state=STATE_STARTED;
-		rep->phase=PHASE_CONNECTED;
-
-		err=uv_tcp_init(rep->loop, &rep->h_tcp);
+		err=uv_tcp_init(srv->loop, &rep->h_tcp);
 		assert(err==0);
 		rep->h_tcp.data=rep;
-		rep->h_tcp_valid=true;
+		rep->h_tcp_state=HS_INIT;
 
 		err=uv_accept((uv_stream_t*)&srv->h_tcp, (uv_stream_t*)&rep->h_tcp);
 		if(err) { //must not happen
-			delete rep;
 			assert(false);
-			return IOT_ERROR_TRY_AGAIN;
+			err=IOT_ERROR_TRY_AGAIN;
+			goto onexit;
 		}
 
-		rep->do_start_uv();
-		return 0;
+		rep->phase=PHASE_CONNECTED;
+		if(srv->thread->is_overloaded(rep->get_cpu_loading())) {
+			uv_os_fd_t tmpfd=INVALID_SOCKET;
+			err=uv_fileno((uv_handle_t*)&rep->h_tcp, &tmpfd);
+			if(err!=0) { //must not happen
+				assert(false);
+				err=IOT_ERROR_TRY_AGAIN;
+				goto onexit;
+			}
+#ifdef _WIN32
+			WSAPROTOCOL_INFO info;
+			err=WSADuplicateSocketW(tmpfd, GetCurrentProcessId, &info);
+			if(err!=0) { //must not happen
+				assert(false);
+				err=IOT_ERROR_TRY_AGAIN;
+				goto onexit;
+			}
+			rep->accepted_fd=WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, &info, 0, WSA_FLAG_OVERLAPPED);
+#else
+			rep->accepted_fd=dup(tmpfd);
+#endif
+			if(rep->accepted_fd==INVALID_SOCKET) {err=IOT_ERROR_TRY_AGAIN;goto onexit;}
+			rep->h_tcp_state=HS_CLOSING;
+			uv_close((uv_handle_t*)&rep->h_tcp, [](uv_handle_t* handle) -> void {
+				iot_netcon_tcp* obj=(iot_netcon_tcp*)(handle->data);
+				assert(obj->h_tcp_state==HS_CLOSING);
+				obj->h_tcp_state=HS_UNINIT;
+				obj->start_uv(NULL, true);
+			});
+			err=0;
+		} else {
+			rep->h_tcp_state=HS_ACTIVE;
+
+			err=rep->start_uv(srv->thread, true); //listening socket creates too small load, so use the same thread as master
+		}
+onexit:
+		if(err && err!=IOT_ERROR_NOT_READY) {
+			if(!rep->unmark_initing(true)) {
+				assert(false);
+			}
+		}
+		return err;
 	}
 public:
 	iot_netcon_tcp(iot_netproto_config* protoconfig)
 			: iot_netcon(&iot_netcontype_metaclass_tcp::object, protoconfig) {
 	}
 	~iot_netcon_tcp(void) {
+		assert(h_tcp_state==HS_UNINIT && h_phase_timer_state==HS_UNINIT && session_state==HS_UNINIT && !h_writereq_valid && h_addr_req_state==HS_UNINIT);
 		if(is_server) {
 			if(server.bindhost) {free(server.bindhost); server.bindhost=NULL;}
 			if(server.bindiface) {free(server.bindiface); server.bindiface=NULL;}
@@ -151,28 +211,42 @@ public:
 		if(addr) {
 			uv_freeaddrinfo(addr); addr=NULL;
 		}
+		if(accepted_fd!=INVALID_SOCKET) {
+#ifdef _WIN32
+			closesocket(accepted_fd);
+#else
+			close(accepted_fd);
+#endif
+			accepted_fd=INVALID_SOCKET;
+		}
 	}
-	int init_server(const char *host_, uint16_t port_, const char *iface_, iot_netconregistryiface* registryiface) {
-		assert(state==STATE_UNINITED && phase==PHASE_UNINITED);
-		assert(uv_thread_self()==control_thread_item->thread || uv_thread_self()==worker_thread);
+	int init_server(const char *host_, uint16_t port_, const char *iface_, iot_netconregistryiface* registryiface, bool noinit=false) { //true noinit to leave object in INITING state on success
+//		assert(uv_thread_self()==control_thread_item->thread || uv_thread_self()==thread->thread);
+		if(!registryiface) return IOT_ERROR_INVALID_ARGS; //required for server mode
+
+		if(!trymark_initing()) {
+			//must not fail if init is done in one thread just after construction
+			assert(false);
+			return IOT_ERROR_CRITICAL_BUG;
+		}
+		//now state is INITING and only current thread will do it
+		assert(phase==PHASE_UNINITED);
 
 		is_passive=true;
 		is_server=true;
 		server={};
 		server.bindport=port_;
-
-		if(!registryiface) return IOT_ERROR_INVALID_ARGS; //required for server mode
+		int err=IOT_ERROR_NO_MEMORY;
+		size_t ifacelen;
 
 		size_t hostlen;
 		hostlen=host_ ? strlen(host_) : 0;
 
 		if(hostlen>1 || (hostlen==1 && host_[0]!='*')) { //host provided
 			server.bindhost=(char*)malloc(hostlen+1);
-			if(!server.bindhost) return IOT_ERROR_NO_MEMORY;
+			if(!server.bindhost) goto onerror;
 			memcpy(server.bindhost, host_, hostlen+1);
 		}
-		size_t ifacelen;
-		int err=IOT_ERROR_NO_MEMORY;
 		ifacelen=iface_ ? strlen(iface_) : 0;
 
 		if(ifacelen>1 || (ifacelen==1 && iface_[0]!='*')) { //iface provided
@@ -181,28 +255,22 @@ public:
 			memcpy(server.bindiface, iface_, ifacelen+1);
 		}
 
-		mark_inited();
 		phase=PHASE_INITIAL;
 		err=assign_registryiface(registryiface);
 		if(err) goto onerror;
 
+		if(!noinit) mark_inited();
 		return 0;
 onerror:
 		if(server.bindhost) {free(server.bindhost); server.bindhost=NULL;}
 		if(server.bindiface) {free(server.bindiface); server.bindiface=NULL;}
+		unmark_initing();
 		return err;
 	}
 
 	int init_client(uint32_t metric_, const char *host_, uint16_t port_, iot_netconregistryiface* registryiface) {
-		assert(state==STATE_UNINITED && phase==PHASE_UNINITED);
-		assert(uv_thread_self()==control_thread_item->thread);
-
-		is_passive=false;
-		is_server=false;
-		client={};
-		client.dstport=port_;
-		metric=metric_;
-
+//		assert(state==STATE_UNINITED && phase==PHASE_UNINITED);
+//		assert(uv_thread_self()==control_thread_item->thread);
 		size_t hostlen;
 		if(host_) {
 			hostlen=strlen(host_);
@@ -213,50 +281,170 @@ onerror:
 			outlog_error("'host' field is missing in %s connection spec", get_typename());
 			return IOT_ERROR_BAD_DATA;
 		}
-		client.dsthost=(char*)malloc(hostlen+1);
-		if(!client.dsthost) return IOT_ERROR_NO_MEMORY;
-		memcpy(client.dsthost, host_, hostlen+1);
+		if(!port_) { //no port
+			outlog_error("'port' field is missing or invalid in %s connection spec", get_typename());
+			return IOT_ERROR_BAD_DATA;
+		}
 
-		int err=0;
-		mark_inited();
-		phase=PHASE_INITIAL;
+		if(!trymark_initing()) {
+			//must not fail if init is done in one thread
+			assert(false);
+			return IOT_ERROR_CRITICAL_BUG;
+		}
+		//now state is INITED and only current thread will do it
+		assert(phase==PHASE_UNINITED);
+
+		is_passive=false;
+		is_server=false;
+		client={};
+		client.dstport=port_;
+		int err;
+
+		metric=metric_;
+
+		client.dsthost=(char*)malloc(hostlen+1);
+		if(!client.dsthost) {
+			err=IOT_ERROR_NO_MEMORY;
+			goto onerror;
+		}
+		memcpy(client.dsthost, host_, hostlen+1);
 
 		if(registryiface) {
 			err=assign_registryiface(registryiface);
 			if(err) goto onerror;
 		}
 
+		phase=PHASE_INITIAL;
+		mark_inited();
+
 		return 0;
 onerror:
 		if(client.dsthost) {free(client.dsthost); client.dsthost=NULL;}
+		unmark_initing();
 		return err;
-
 	}
 
 private:
-	virtual void do_stop(void) override {
-		assert(state==STATE_STARTED);
+	virtual uint8_t p_get_cpu_loading(void) override { //must return pure cpu loading of netcon layer implementation
+		return 3;
+	}
+	virtual int do_stop(void) override {
+		assert(!is_started() || uv_thread_self()==thread->thread);
+
+		int num_closing=0;
+
+		if(session_state>HS_UNINIT) {
+			assert(protosession!=NULL);
+			assert(phase==PHASE_RUNNING);
+			if(session_state>=HS_INIT) {
+				session_state=HS_CLOSING;
+				num_closing++;
+				if(!protosession->stop(true)) { //session won't call on_sesion_closed()
+					num_closing--;
+					session_state=HS_UNINIT;
+				}
+			} else num_closing++;
+		}
+
+		if(h_tcp_state>=HS_INIT) {
+			h_tcp_state=HS_CLOSING;
+			num_closing++;
+			uv_close((uv_handle_t*)&h_tcp, [](uv_handle_t* handle) -> void {
+				iot_netcon_tcp* obj=(iot_netcon_tcp*)(handle->data);
+				assert(obj->h_tcp_state==HS_CLOSING);
+				obj->h_tcp_state=HS_UNINIT;
+				obj->do_stop();
+			});
+		} else if(h_tcp_state==HS_CLOSING) num_closing++;
+
+		if(h_phase_timer_state>=HS_INIT) {
+			h_phase_timer_state=HS_CLOSING;
+			num_closing++;
+			uv_close((uv_handle_t*)&retry_phase_timer, [](uv_handle_t* handle) -> void {
+				iot_netcon_tcp* obj=(iot_netcon_tcp*)(handle->data);
+				assert(obj->h_phase_timer_state==HS_CLOSING);
+				obj->h_phase_timer_state=HS_UNINIT;
+				obj->do_stop();
+			});
+		} else if(h_phase_timer_state==HS_CLOSING) num_closing++;
+
+		int err;
+
+		if(h_addr_req_state>HS_UNINIT) {
+			assert(phase==PHASE_RESOLVING);
+			if(h_addr_req_state>=HS_INIT) {
+				h_addr_req_state=HS_CLOSING;
+				num_closing++;
+				err=uv_cancel((uv_req_t*)&phasedata.resolving.addr_req);
+				if(err) {
+					assert(false);
+					h_addr_req_state=HS_UNINIT;
+					num_closing--;
+				}
+			} else num_closing++;
+		}
+
+		if(num_closing>0) return IOT_ERROR_NOT_READY;
+
+/*		switch(phase) {
+			case PHASE_INITIAL:		//server or client
+			case PHASE_PREPLISTEN:	//server
+			case PHASE_PREPLISTEN2:	//server
+			case PHASE_LISTENING:	//server (final phase for accepting connection)
+			case PHASE_CONNECTED:	//common
+			case PHASE_CONNECTING:	//client
+				break;
+			case PHASE_RESOLVING:	//server or client
+				if(!phasedata.resolving.active) break;
+				err=uv_cancel((uv_req_t*)&phasedata.resolving.addr_req);
+				if(err) {
+					assert(false);
+					break;
+				}
+				//wait for cancel reported to callback
+				return;
+			case PHASE_RUNNING:		//common
+				if(protosession && protosession->stop(false)) return; //works only if do_stop called again and connection still waits for on_session_closed() call. then stop session ungracefully
+				break;
+			default:
+				outlog_error("%s() called for illegal phase %d", __func__, int(phase));
+				break;
+		}
+*/
+		phase=PHASE_INITIAL;
+		return on_stopped();
 	}
 	virtual void do_start_uv(void) override {
-		assert(uv_thread_self()==worker_thread);
+		assert(uv_thread_self()==thread->thread);
 
+		assert(h_phase_timer_state==HS_UNINIT);
 		int err=uv_timer_init(loop, &retry_phase_timer);
 		assert(err==0);
 		retry_phase_timer.data=this;
+		h_phase_timer_state=HS_INIT;
 
-		if(!h_tcp_valid) {
+		if(h_tcp_state==HS_UNINIT) {
 			err=uv_tcp_init(loop, &h_tcp);
 			assert(err==0);
 			h_tcp.data=this;
-			h_tcp_valid=true;
+			h_tcp_state=HS_INIT;
 		} else {
 			assert(h_tcp.loop==loop);
+			assert(h_tcp_state==HS_ACTIVE);
 		}
 
 		resolve_errors=0;
 		if(is_server) {
 			listen_errors=0;
-			if(phase==PHASE_CONNECTED) process_common_phase();
+			if(phase==PHASE_CONNECTED) {
+				if(accepted_fd!=INVALID_SOCKET) { //this is duplicated raw socket
+					err=uv_tcp_open(&h_tcp, accepted_fd);
+					assert(err==0);
+					accepted_fd=INVALID_SOCKET;
+					h_tcp_state=HS_ACTIVE;
+				}
+				process_common_phase();
+			}
 			else if(phase==PHASE_LISTENING || phase==PHASE_INITIAL) process_server_phase();
 			else {
 				assert(false);
@@ -265,20 +453,28 @@ private:
 			}
 		} else {
 			assert(phase==PHASE_INITIAL);
-			connect_errors=0;
+			if(peer_closed_restart) {
+				connect_errors=1;
+				peer_closed_restart=false;
+			} else {
+				connect_errors=0;
+			}
 			process_client_phase();
 		}
 	}
 	void retry_phase(void) { //schedules call of process_[client|server] phase() after delay ms in retry_delay var
-		assert(uv_thread_self()==worker_thread);
+		assert(uv_thread_self()==thread->thread);
+		h_phase_timer_state=HS_ACTIVE;
 		uv_timer_start(&retry_phase_timer, [](uv_timer_t* h) -> void {
-			iot_netcon_tcp* obj=(iot_netcon_tcp*)h->data;
+			iot_netcon_tcp* obj=(iot_netcon_tcp*)(h->data);
+
+			obj->h_phase_timer_state=HS_INIT;
 			if(!obj->is_server) obj->process_client_phase();
 				else obj->process_server_phase();
 		}, retry_delay, 0);
 	}
 	void resolve_host(const char *host, uint16_t port) {
-		assert(phase==PHASE_RESOLVING && uv_thread_self()==worker_thread);
+		assert(phase==PHASE_RESOLVING && uv_thread_self()==thread->thread);
 		assert(host!=NULL);
 		char portbuf[8];
 		snprintf(portbuf, sizeof(portbuf), "%u", unsigned(port));
@@ -290,11 +486,14 @@ private:
 		hints.ai_socktype=SOCK_STREAM;
 		hints.ai_flags=AI_NUMERICSERV | AI_ADDRCONFIG;
 
+		h_addr_req_state=HS_ACTIVE;
 		int err=uv_getaddrinfo(loop, &phasedata.resolving.addr_req, [](uv_getaddrinfo_t* req, int status, struct addrinfo* res) -> void {
 			iot_netcon_tcp* obj=(iot_netcon_tcp*)req->data;
+			obj->h_addr_req_state=HS_UNINIT;
 			obj->on_resolve_status(status, res);
 		}, host, portbuf, &hints);
 		if(!err) return;
+		h_addr_req_state=HS_UNINIT;
 
 		assert(err!=UV_EINVAL);
 		//must be UV_ENOMEM
@@ -311,11 +510,20 @@ private:
 			if(!is_server) {
 				phase=PHASE_CONNECTING;
 				client.cur_addr=addr;
+				if(connect_errors>0) { //initial delay after restart of client connection required
+					retry_delay=30*1000;
+					retry_phase();
+					return;
+				}
 				process_client_phase();
 			} else {
 				phase=PHASE_PREPLISTEN;
 				process_server_phase();
 			}
+			return;
+		}
+		if(status==UV_ECANCELED) {
+			do_stop();
 			return;
 		}
 		uint32_t delay=(2*60+(resolve_errors>10 ? 10 : resolve_errors)*3*60);
@@ -325,15 +533,16 @@ private:
 		retry_phase();
 	}
 	void process_common_phase(void) {
-		assert(uv_thread_self()==worker_thread);
+		assert(uv_thread_self()==thread->thread);
 		int err;
 //		uint32_t delay;
 //again:
 		switch(phase) {
 			case PHASE_CONNECTED:
 outlog_notice("in common phase %u", unsigned(phase));
+				assert(h_tcp_state==HS_ACTIVE);
 				assert(protosession==NULL);
-				err=protoconfig->instantiate(this, protosession);
+				err=protoconfig->instantiate(this);
 				if(err) {
 					outlog_error("Cannot initialize protocol '%s': %s", protoconfig->get_typename(), kapi_strerror(err));
 					do_stop();
@@ -342,6 +551,7 @@ outlog_notice("in common phase %u", unsigned(phase));
 				assert(protosession!=NULL);
 
 				phase=PHASE_RUNNING;
+				session_state=HS_ACTIVE;
 				err=protosession->start();
 				if(err) {
 					outlog_error("Cannot start session of protocol '%s': %s", protoconfig->get_typename(), kapi_strerror(err));
@@ -357,7 +567,7 @@ outlog_notice("in common phase %u", unsigned(phase));
 		}
 	}
 	void process_server_phase(void) {
-		assert(uv_thread_self()==worker_thread);
+		assert(uv_thread_self()==thread->thread);
 		int err;
 		uint32_t delay;
 again:
@@ -545,13 +755,14 @@ outlog_notice("in phase %u, numsocks=%d", unsigned(phase), phasedata.preplisten.
 				phase=PHASE_LISTENING;
 			}
 			case PHASE_LISTENING: {
-outlog_notice("in phase %u, objid=%u", unsigned(phase), objid.idx);
+outlog_notice("in phase %u, obj=%p", unsigned(phase), this);
 				assert(server.cur_sockaddr.ss_family!=0);
-				if(!h_tcp_valid) {
+				if(h_tcp_state<HS_INIT) {
+					if(h_tcp_state==HS_CLOSING) return;
 					err=uv_tcp_init(loop, &h_tcp);
 					assert(err==0);
 					h_tcp.data=this;
-					h_tcp_valid=true;
+					h_tcp_state=HS_INIT;
 				}
 
 				char ipstr[INET6_ADDRSTRLEN+1]="";
@@ -564,16 +775,9 @@ outlog_notice("in phase %u, objid=%u", unsigned(phase), objid.idx);
 				err=uv_tcp_bind(&h_tcp, (sockaddr*)&server.cur_sockaddr, 0);
 				if(err) {
 					delay=(2*60+(listen_errors>10 ? 10 : listen_errors)*3*60);
-					outlog_notice("Error calling uv_tcp_bind() for host '%s' and interface '%s' [%s:%u]: %s, retrying in %u secs", server.bindhost ? server.bindhost : "ANY", server.bindiface ? server.bindiface : "ANY", ipstr, unsigned(server.bindport), uv_strerror(err), delay);
 					listen_errors++;
-
-					h_tcp_valid=false;
-					retry_delay=delay*1000;
-					uv_close((uv_handle_t*)&h_tcp, [](uv_handle_t* handle) -> void {
-						iot_netcon_tcp* obj=(iot_netcon_tcp*)handle->data;
-						obj->retry_phase();
-					});
-
+					outlog_notice("Error calling uv_tcp_bind() for host '%s' and interface '%s' [%s:%u]: %s, retrying in %u secs", server.bindhost ? server.bindhost : "ANY", server.bindiface ? server.bindiface : "ANY", ipstr, unsigned(server.bindport), uv_strerror(err), delay);
+					close_handle_retry(delay*1000);
 					return;
 				}
 
@@ -583,18 +787,12 @@ outlog_notice("in phase %u, objid=%u", unsigned(phase), objid.idx);
 				});
 				if(err) {
 					delay=(2*60+(listen_errors>10 ? 10 : listen_errors)*3*60);
-					outlog_notice("Error calling uv_listen() for host '%s' and interface '%s' [%s:%u]: %s, retrying in %u secs", server.bindhost ? server.bindhost : "ANY", server.bindiface ? server.bindiface : "ANY", ipstr, unsigned(server.bindport), uv_strerror(err), delay);
 					listen_errors++;
-
-					h_tcp_valid=false;
-					retry_delay=delay*1000;
-					uv_close((uv_handle_t*)&h_tcp, [](uv_handle_t* handle) -> void {
-						iot_netcon_tcp* obj=(iot_netcon_tcp*)handle->data;
-						obj->retry_phase();
-					});
-
+					outlog_notice("Error calling uv_listen() for host '%s' and interface '%s' [%s:%u]: %s, retrying in %u secs", server.bindhost ? server.bindhost : "ANY", server.bindiface ? server.bindiface : "ANY", ipstr, unsigned(server.bindport), uv_strerror(err), delay);
+					close_handle_retry(delay*1000);
 					return;
 				}
+				h_tcp_state=HS_ACTIVE;
 				outlog_notice("Now listening for incoming connections on host '%s' and interface '%s' [%s:%u]", server.bindhost ? server.bindhost : "ANY", server.bindiface ? server.bindiface : "ANY", ipstr, unsigned(server.bindport));
 				listen_errors=0;
 				return;
@@ -604,6 +802,17 @@ outlog_notice("in phase %u, objid=%u", unsigned(phase), objid.idx);
 				do_stop();
 				return;
 		}
+	}
+	void close_handle_retry(uint32_t delay_ms) { //close handle and then retry phase after delay
+		assert(h_tcp_state>=HS_INIT);
+		assert(h_phase_timer_state==HS_INIT);
+		h_tcp_state=HS_CLOSING;
+		retry_delay=delay_ms;
+		uv_close((uv_handle_t*)&h_tcp, [](uv_handle_t* handle) -> void {
+			iot_netcon_tcp* obj=(iot_netcon_tcp*)(handle->data);
+			obj->h_tcp_state=HS_UNINIT;
+			obj->retry_phase();
+		});
 	}
 	void on_incomming_connection(int status) {
 		int err;
@@ -618,7 +827,7 @@ outlog_notice("in phase %u, objid=%u", unsigned(phase), objid.idx);
 		assert(err!=IOT_ERROR_INVALID_ARGS);
 	}
 	void process_client_phase(void) {
-		assert(uv_thread_self()==worker_thread);
+		assert(uv_thread_self()==thread->thread);
 		int err;
 		uint32_t delay;
 //again:
@@ -632,11 +841,12 @@ outlog_notice("in client phase %u", unsigned(phase));
 			case PHASE_CONNECTING:
 outlog_notice("in client phase %u", unsigned(phase));
 				assert(client.cur_addr!=NULL);
-				if(!h_tcp_valid) {
+				if(h_tcp_state<HS_INIT) {
+					if(h_tcp_state==HS_CLOSING) return;
 					err=uv_tcp_init(loop, &h_tcp);
 					assert(err==0);
 					h_tcp.data=this;
-					h_tcp_valid=true;
+					h_tcp_state=HS_INIT;
 				}
 				phasedata.connecting.conn_req.data=this;
 
@@ -647,17 +857,10 @@ outlog_notice("in client phase %u", unsigned(phase));
 				if(!err) return;
 				assert(err!=UV_EINVAL);
 				//must be UV_ENOMEM
-				delay=(2*60+(connect_errors>10 ? 10 : connect_errors)*3*60);
+				delay=30+(connect_errors>10 ? 10 : connect_errors)*3*60;
 				outlog_notice("Error calling uv_tcp_connect() for host '%s': %s, retrying in %u secs", client.dsthost, uv_strerror(err), delay);
 				connect_errors++;
-
-				h_tcp_valid=false;
-				retry_delay=delay*1000;
-				uv_close((uv_handle_t*)&h_tcp, [](uv_handle_t* handle) -> void {
-					iot_netcon_tcp* obj=(iot_netcon_tcp*)handle->data;
-					obj->retry_phase();
-				});
-
+				close_handle_retry(delay*1000);
 				return;
 			default:
 				outlog_error("%s() called for illegal phase %d for host '%s', aborting", __func__, int(phase), client.dsthost);
@@ -669,26 +872,29 @@ outlog_notice("in client phase %u", unsigned(phase));
 		if(!status) {
 			connect_errors=0;
 			phase=PHASE_CONNECTED;
+			h_tcp_state=HS_ACTIVE;
 			process_common_phase();
 			return;
 		}
+		if(status==UV_ECANCELED) return; //handle was closed and connection request automatically cancelled
 		uv_getnameinfo_t ip_req;
 		const char* ipstr="UNKNOWN";
 		int err=uv_getnameinfo(loop, &ip_req, NULL, client.cur_addr->ai_addr, NI_NUMERICHOST | NI_NUMERICSERV);
 		if(err) outlog_notice("Error calling uv_getnameinfo() for IP of host '%s': %s", client.dsthost, uv_strerror(err));
 			else ipstr=ip_req.host;
+		uint32_t delay;
 		if(client.cur_addr->ai_next) {
 			outlog_info("Error connecting to host '%s' (by IP '%s'): %s, trying next IP", client.dsthost, ipstr, uv_strerror(status));
 			client.cur_addr=client.cur_addr->ai_next;
-			retry_delay=100;
+			delay=200;
 		} else {
-			uint32_t delay=(2*60+(connect_errors>10 ? 10 : connect_errors)*3*60);
+			delay=30+(connect_errors>10 ? 10 : connect_errors)*3*60;
 			outlog_notice("Error connecting to host '%s' (by IP '%s'): %s, retrying in %u secs", client.dsthost, ipstr, uv_strerror(status), delay);
 			connect_errors++;
 			client.cur_addr=addr;
-			retry_delay=delay*1000;
+			delay*=1000;
 		}
-		retry_phase();
+		close_handle_retry(delay);
 	}
 
 	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const override {
@@ -706,8 +912,11 @@ outlog_notice("in client phase %u", unsigned(phase));
 
 
 	void stop_data_read(void) {
-		int err=uv_read_stop((uv_stream_t*)&h_tcp);
-		assert(err==0);
+		if(phase!=PHASE_RUNNING) return;
+		if(h_tcp_state==HS_ACTIVE) {
+			int err=uv_read_stop((uv_stream_t*)&h_tcp);
+			assert(err==0);
+		}
 		read_enabled=false;
 		readbuf=NULL;
 		readbufsize=0;
@@ -718,7 +927,7 @@ outlog_notice("in client phase %u", unsigned(phase));
 	//1 - reading successfully set and ready, iot_netproto_session::on_read_data_status() was already called before return from read_data()
 	//IOT_ERROR_INVALID_ARGS - invalid arguments (databuf is NULL or datalen==0 but not simultaneously)
 	virtual int read_data(void *databuf, size_t datalen) override {
-		if(phase!=PHASE_RUNNING) {
+		if(phase!=PHASE_RUNNING || h_tcp_state!=HS_ACTIVE) {
 			assert(false);
 			return IOT_ERROR_INVALID_ARGS;
 		}
@@ -752,14 +961,15 @@ outlog_notice("in client phase %u", unsigned(phase));
 	void on_read(ssize_t nread, const uv_buf_t* buf) {
 		assert(protosession!=NULL);
 		if(nread==0) return;
-		if(nread==UV_EOF) { //connection closed by other side
+
+		if(nread==UV_EOF || nread<0) { //connection closed by other side or some error
+			h_tcp_state=HS_INIT;
 			stop_data_read();
-			protosession->on_read_data_status(0, readbuf, readbufsize);
-			return;
-		}
-		if(nread<0) {
+			peer_closed_restart=true;
+//			detach_session();
+//			session_state=HS_UNINIT;
 			do_stop();
-			//todo
+//			protosession->on_read_data_status(0, readbuf, readbufsize);
 			return;
 		}
 		if(!protosession->on_read_data_status(nread, readbuf, readbufsize)) stop_data_read();
@@ -771,7 +981,7 @@ outlog_notice("in client phase %u", unsigned(phase));
 	//0 - request writing is in progress, so iot_netproto_session::on_write_data_status() must be waited (no need to call can_write_data() again)
 	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
 	virtual int can_write_data(void) override {
-		if(phase!=PHASE_RUNNING) return IOT_ERROR_NOT_READY;
+		if(phase!=PHASE_RUNNING || h_tcp_state!=HS_ACTIVE) return IOT_ERROR_NOT_READY;
 		if(h_writereq_valid) return 0;
 		return 1;
 	}
@@ -785,7 +995,7 @@ outlog_notice("in client phase %u", unsigned(phase));
 	virtual int write_data(void *databuf, size_t datalen) override {
 		static uv_buf_t buf;
 		if(!databuf || !datalen) return IOT_ERROR_INVALID_ARGS;
-		if(phase!=PHASE_RUNNING) return IOT_ERROR_NOT_READY;
+		if(phase!=PHASE_RUNNING || h_tcp_state!=HS_ACTIVE) return IOT_ERROR_NOT_READY;
 		if(h_writereq_valid) return IOT_ERROR_TRY_AGAIN;
 
 		h_writereq_valid=true;
@@ -822,8 +1032,8 @@ outlog_notice("in client phase %u", unsigned(phase));
 
 	void on_write_status(int status) {
 		assert(protosession!=NULL);
+		h_writereq_valid=false;
 		if(!status) {
-			h_writereq_valid=false;
 			protosession->on_write_data_status(0);
 			if(!h_writereq_valid) { //no additional write_data() called in on_write_data_status()
 				protosession->on_can_write_data();
@@ -835,7 +1045,7 @@ outlog_notice("in client phase %u", unsigned(phase));
 	}
 
 	//stop reading side, wait for current write request to finish and then close connection
-	virtual void graceful_close(void) override {
+/*	virtual void graceful_close(void) override {
 		if(h_shutdownreq_valid || !h_tcp_valid) return;
 		if(read_enabled) stop_data_read();
 
@@ -850,8 +1060,10 @@ outlog_notice("in client phase %u", unsigned(phase));
 	void on_shutdown_status(int status) {
 		//todo
 		do_stop();
-	}
-	virtual void on_clear_session(void) {
+	}*/
+	virtual void on_session_closed(void) {
+		session_state=HS_UNINIT;
+		do_stop();
 	}
 
 };
@@ -910,7 +1122,7 @@ inline int iot_netcontype_metaclass_tcp::p_from_json(json_object* json, iot_netp
 			iface=json_object_get_string(val);
 		}
 
-		iot_netcon_tcp *con=new iot_netcon_tcp(protoconfig);
+		iot_netcon_tcp* con=iot_netcontype_metaclass_tcp::allocate_netcon(protoconfig);
 		if(!con) return IOT_ERROR_NO_MEMORY;
 		if(is_server) err=con->init_server(host, port, iface, registry);
 			else err=con->init_client(metric, host, port, registry);
@@ -922,5 +1134,11 @@ inline int iot_netcontype_metaclass_tcp::p_from_json(json_object* json, iot_netp
 		return 0;
 	}
 
+inline iot_netcon_tcp* iot_netcontype_metaclass_tcp::allocate_netcon(iot_netproto_config* protoconfig) {
+	assert(protoconfig!=NULL);
+	iot_netcon_tcp *con=(iot_netcon_tcp *)iot_allocate_memblock(sizeof(iot_netcon_tcp), true);
+	if(!con) return NULL;
+	return new(con) iot_netcon_tcp(protoconfig);
+}
 
 #endif //IOT_NETCON_TCP_H
