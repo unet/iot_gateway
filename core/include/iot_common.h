@@ -59,11 +59,11 @@ enum h_state_t : uint8_t { //libuv handle state
 
 
 
-template<class Node, class NodeBase, volatile std::atomic<NodeBase*> NodeBase::* NextPtr> class mpsc_queue { //Multiple Producer (push, push_list) Single Consumer (pop, pop_all) unlimited FIFO queue. Deletions not possible
+template<class Node, class NodeBase, volatile std::atomic<NodeBase*> NodeBase::* NextPtr> class mpsc_queue { //Multiple Producer (push, push_list) Single Consumer (pop, pop_all, unpop, unpop_list, remove) unlimited FIFO queue.
 	NodeBase *const stub;
 	alignas(NodeBase) char stubbuf[sizeof(NodeBase)];
 	volatile std::atomic<NodeBase*> tail;
-	NodeBase* head;
+	NodeBase* head; //accessed from consumer thread only
 public:
 	mpsc_queue(void): stub((NodeBase*)stubbuf),tail({stub}), head(stub) {
 		(stub->*NextPtr).store(NULL, std::memory_order_release);
@@ -71,7 +71,9 @@ public:
 
 
 	bool push(Node* newnode) { //returns true if first item is added (e.g. to send signal that queue is not empty)
+		assert(!newnode->check_in_queue()); //check_in_queue MUST return constant FALSE if flag 'in_queue' is not implemented for NodeBase!!!
 		(newnode->*NextPtr).store(NULL, std::memory_order_relaxed);
+		newnode->set_in_queue();
 		NodeBase* prevtail=tail.exchange(newnode, std::memory_order_acq_rel);
 		//(critial point) - last element of list (when traversing from head) does not coinside with tail pointer
 		(prevtail->*NextPtr).store(newnode, std::memory_order_release);
@@ -80,45 +82,123 @@ public:
 
 	//adds several items connected by NextPtr field, with NULL for the last item
 	bool push_list(Node* listhead) { //returns true if first item is added (e.g. to send signal that queue is not empty)
-		Node* newtail=listhead;
+		NodeBase* newtail=listhead;
+		NodeBase* next;
+		assert(!newtail->check_in_queue());
+		newtail->set_in_queue();
 		//find last item of supplied list
-		do {
-			Node* next=(newtail->*NextPtr).load(std::memory_order_relaxed);
-			if(!next) break;
+		while((next=(newtail->*NextPtr).load(std::memory_order_relaxed))) {
 			newtail=next;
-		} while(1);
+			assert(!newtail->check_in_queue());
+			newtail->set_in_queue();
+		}
+		//here newtail->*NextPtr is NULL, so no need to assign it
 		NodeBase* prevtail=tail.exchange(newtail, std::memory_order_acq_rel);
 		//(critial point)
 		(prevtail->*NextPtr).store(listhead, std::memory_order_release);
 		return (prevtail==stub);
 	}
 
-	void unshift(Node* newnode) { //operation for Consumer to put item at head of queue
-		if(head==stub) { //head points to stub, so queue can be empty (and push, which will modify next in stub, can begin at any moment) or not (no race possible)
-			NodeBase* next=(head->*NextPtr).load(std::memory_order_acquire);
-			if(next) { //stub is not the only item, so no race possible, just remove stub
-				(newnode->*NextPtr).store(next, std::memory_order_relaxed);
-				head=newnode;
-			} else { //stub was the only item, so head must be equal to tail. try to make newnode new tail
-				NodeBase* oldhead=head;
+	void unpop(Node* newnode) { //operation for Consumer to put item at head of queue (reverse of pop)
+		assert(!newnode->check_in_queue());
+		newnode->set_in_queue();
+
+		if(head==stub) { //head points to stub, so queue can be empty (and push, which will modify .next in stub, can start at any moment, so race is possible) or not (no race possible)
+			NodeBase* next=(stub->*NextPtr).load(std::memory_order_acquire);
+			if(!next) { //stub was the only item, so head must be equal to tail. try to make newnode new tail
 				(newnode->*NextPtr).store(NULL, std::memory_order_release); //init newnode as new tail
-				if(tail.compare_exchange_strong(head, newnode, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue becomes with only newnode
+				if(tail.compare_exchange_strong(head, newnode, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue remains with only newnode
 											/*  head will be modified if FALSE!!! */
 					head=newnode;
+					return;
 				} else { //push is right in progress. it can be at critial point so we must wait when it will be passed and 'next' gets non-NULL value
 					uint16_t c=1;
-					while(!(oldhead->*NextPtr).load(std::memory_order_acquire)) {
+					while(!(stub->*NextPtr).load(std::memory_order_acquire)) {
 						if(!(c++ & 1023)) sched_yield();
 					}
-					next=(oldhead->*NextPtr).load(std::memory_order_relaxed);
-					(newnode->*NextPtr).store(next, std::memory_order_relaxed);
-					head=newnode;
+					next=(stub->*NextPtr).load(std::memory_order_relaxed);
 				}
-			}
-		} else {
+			} //else stub is not the only item, so no race possible, just remove stub and put newnode at head
+			(newnode->*NextPtr).store(next, std::memory_order_relaxed);
+		} else { //stub is absent, so there is at least one item at head
 			(newnode->*NextPtr).store(head, std::memory_order_relaxed);
-			head=newnode;
 		}
+		head=newnode;
+	}
+
+	void unpop_list(Node* listhead) { //operation for Consumer to put items at head of queue (reverse of pop_all)
+		NodeBase* last=listhead;
+		NodeBase* next;
+
+		assert(!last->check_in_queue());
+		last->set_in_queue();
+		//find last item of supplied list
+		while((next=(last->*NextPtr).load(std::memory_order_relaxed))) {
+			last=next;
+
+			assert(!last->check_in_queue());
+			last->set_in_queue();
+		}
+
+		if(head==stub) { //head points to stub, so queue can be empty (and push, which will modify .next in stub, can start at any moment, so race is possible) or not (no race possible)
+			next=(stub->*NextPtr).load(std::memory_order_acquire);
+			if(!next) { //stub was the only item, so head must be equal to tail. try to make newnode new tail
+				(last->*NextPtr).store(NULL, std::memory_order_release); //init newnode as new tail
+				if(tail.compare_exchange_strong(head, last, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue remains with only listhead
+											/*  head will be modified if FALSE!!! */
+					head=listhead;
+					return;
+				} else { //push is right in progress. it can be at critial point so we must wait when it will be passed and 'next' gets non-NULL value
+					uint16_t c=1;
+					while(!(stub->*NextPtr).load(std::memory_order_acquire)) {
+						if(!(c++ & 1023)) sched_yield();
+					}
+					next=(stub->*NextPtr).load(std::memory_order_relaxed);
+				}
+			} //else stub is not the only item, so no race possible, just remove stub and put newnode at head
+			(last->*NextPtr).store(next, std::memory_order_relaxed);
+		} else { //stub is absent, so there is at least one item at head
+			(last->*NextPtr).store(head, std::memory_order_relaxed);
+		}
+		head=listhead;
+	}
+
+	bool remove(Node* oldnode) { //operation for Consumer to search for node in list and remove it. returns true if node was found and removed from queue
+		NodeBase* cur=head, *prev=NULL; //head cannot be NULL
+		NodeBase* next=(cur->*NextPtr).load(std::memory_order_acquire);
+		do {
+			if(cur==oldnode) break;
+			prev=cur;
+			cur=next;
+			if(!cur) return false;
+			next=(cur->*NextPtr).load(std::memory_order_acquire);
+		} while(1);
+		if(cur==head) { //item is at head, so just pop it
+			pop();
+			return true;
+		}
+
+		if(next) { //not last item, so prev item can be just updated
+			(prev->*NextPtr).store(next, std::memory_order_relaxed);
+			(cur->*NextPtr).store(NULL, std::memory_order_relaxed);
+			cur->clear_in_queue();
+			return true;
+		}
+		//is last item. push can be in progress which will update NextPtr of cur, so must wait for push operation to finish
+		(prev->*NextPtr).store(NULL, std::memory_order_release); //prepare prev item to becoming new tail
+		if(tail.compare_exchange_strong(cur, prev, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to cur, so prev becomes tail
+										/*  cur will be modified if FALSE!!! */
+			//do nothing
+		} else { //push is right in progress. it can be at critial point so we must wait when it will be passed and 'next' gets non-NULL value
+			uint16_t c=1;
+			while(!(oldnode->*NextPtr).load(std::memory_order_acquire)) {
+				if(!(c++ & 1023)) sched_yield();
+			}
+			(prev->*NextPtr).store( (oldnode->*NextPtr).load(std::memory_order_relaxed), std::memory_order_relaxed);
+		}
+		(cur->*NextPtr).store(NULL, std::memory_order_relaxed);
+		cur->clear_in_queue();
+		return true;
 	}
 
 	Node* pop(void) {
@@ -145,6 +225,7 @@ public:
 				head=(oldhead->*NextPtr).load(std::memory_order_relaxed); //non-NULL next becomes new head
 			}
 		}
+		oldhead->clear_in_queue();
 		return static_cast<Node*>(oldhead);
 	}
 	Node* pop_all(void) {
@@ -159,6 +240,7 @@ public:
 		(stub->*NextPtr).store(NULL, std::memory_order_release); //init stub
 		do {
 			while(next) { //not last item in head
+				head->clear_in_queue();
 				head=next;
 				next=(next->*NextPtr).load(std::memory_order_acquire);
 			}
@@ -166,6 +248,7 @@ public:
 			NodeBase* tmp=head;
 			if(tail.compare_exchange_strong(tmp, stub, std::memory_order_acq_rel, std::memory_order_relaxed)) { //tail is still equal to head, so queue becomes empty
 										/*  tmp will be modified if FALSE!!! */
+				head->clear_in_queue();
 				head=stub;
 				break;
 			}
@@ -259,13 +342,16 @@ public:
 		return ws;
 	}
 
-	uint32_t read(void* dstbuf, size_t dstsize) { //read at most dstsize bytes. returns number of copied bytes
-		//NULL dstbuf means that data must be discarded
+	uint32_t read(void* dstbuf, size_t dstsize, uint32_t offset=0) { //read at most dstsize bytes. returns number of copied bytes
+		//NULL dstbuf means that data must be discarded, so only readpos is advanced
+		//offset (which is added to readpos) cannot exceed available data size (ot zero will be returned)
 		uint32_t avail=pending_read();
+		if(offset>=avail) return 0;
+		avail-=offset;
 		uint32_t ws=avail < dstsize ? avail : dstsize; //working size
 		if(!ws) return 0;
 		if(dstbuf) {
-			uint32_t readpos1=readpos.load(std::memory_order_relaxed) & mask;
+			uint32_t readpos1=(readpos.load(std::memory_order_relaxed)+offset) & mask;
 			if(readpos1+ws <= bufsize) { //no buffer border crossed, move single block
 				memcpy(dstbuf, &buf[readpos1], ws);
 			} else { //buffer border crossed, move two blocks
@@ -275,14 +361,14 @@ public:
 			}
 		}
 		std::atomic_thread_fence(std::memory_order_release);
-		readpos.fetch_add(ws, std::memory_order_relaxed);
+		readpos.fetch_add(ws+offset, std::memory_order_relaxed);
 		return ws;
 	}
-	uint32_t peek(void* dstbuf, size_t dstsize, uint32_t offset=0) { //read at most dstsize bytes. returns number of copied bytes
+	uint32_t peek(void* dstbuf, size_t dstsize, uint32_t offset=0) { //read at most dstsize bytes WITHOUT MOVING readpos. returns number of copied bytes
 		//NULL dstbuf means that data will not be actually copied, but return value will be the same as if dstbuf was non-NULL
-		//offset cannot exceed available data size (ot zero will be returned)
+		//offset (which is added to readpos) cannot exceed available data size (ot zero will be returned)
 		uint32_t avail=pending_read();
-		if(offset>avail) return 0;
+		if(offset>=avail) return 0;
 		avail-=offset;
 		uint32_t ws=avail < dstsize ? avail : dstsize; //working size
 		if(!ws) return 0;
@@ -298,17 +384,40 @@ public:
 		}
 		return ws;
 	}
+	uint32_t poke(const void* srcbuf, size_t srcsize, uint32_t offset=0) { //write at most srcsize bytes WITHOUT MOVING writepos. returns number of written bytes
+		//NULL srcbuf means that no data will be written, but return value will be the same as if dstbuf was non-NULL
+		//offset (which is added to writepos) cannot exceed size of available space (ot zero will be returned)
+		uint32_t avail=avail_write();
+		if(offset>=avail) return 0;
+		avail-=offset;
+		uint32_t ws=avail < srcsize ? avail : srcsize; //working size
+		if(!ws) return 0;
+		if(srcbuf) {
+			uint32_t writepos1=(writepos.load(std::memory_order_relaxed)+offset) & mask;
+			if(writepos1+ws <= bufsize) { //no buffer border crossed, move single block
+				memcpy(&buf[writepos1], srcbuf, ws);
+			} else { //buffer border crossed, move two blocks
+				uint32_t ws1 = bufsize - writepos1;
+				memcpy(&buf[writepos1], srcbuf, ws1);
+				memcpy(buf, (char*)srcbuf + ws1, ws - ws1);
+			}
+		}
+		return ws;
+	}
 	uint32_t write(const void* srcbuf, size_t srcsize) { //write at most srcsize bytes. returns number of written bytes
+		//NULL srcbuf means that no data will be written, but writepos is advanced as if write was made (this feature is meaningful together with using poke())
 		uint32_t avail=avail_write();
 		uint32_t ws=avail < srcsize ? avail : srcsize; //working size
 		if(!ws) return 0;
-		uint32_t writepos1=writepos.load(std::memory_order_relaxed) & mask;
-		if(writepos1+ws <= bufsize) { //no buffer border crossed, move single block
-			memcpy(&buf[writepos1], srcbuf, ws);
-		} else { //buffer border crossed, move two blocks
-			uint32_t ws1 = bufsize - writepos1;
-			memcpy(&buf[writepos1], srcbuf, ws1);
-			memcpy(buf, (char*)srcbuf + ws1, ws - ws1);
+		if(srcbuf) {
+			uint32_t writepos1=writepos.load(std::memory_order_relaxed) & mask;
+			if(writepos1+ws <= bufsize) { //no buffer border crossed, move single block
+				memcpy(&buf[writepos1], srcbuf, ws);
+			} else { //buffer border crossed, move two blocks
+				uint32_t ws1 = bufsize - writepos1;
+				memcpy(&buf[writepos1], srcbuf, ws1);
+				memcpy(buf, (char*)srcbuf + ws1, ws - ws1);
+			}
 		}
 		std::atomic_thread_fence(std::memory_order_release);
 		writepos.fetch_add(ws, std::memory_order_relaxed);
@@ -337,42 +446,6 @@ struct iot_releasable {
 };
 
 
-class iot_spinlock {
-	mutable volatile std::atomic_flag _lock=ATOMIC_FLAG_INIT; //lock to protect critical sections
-	mutable volatile uint8_t lock_recurs=0;
-	mutable volatile uv_thread_t locked_by={};
-
-public:
-	void lock(void) const { //wait for lock mutex
-		if(locked_by==uv_thread_self()) { //this thread already owns lock, just increase recursion level
-			lock_recurs++;
-			assert(lock_recurs<5); //limit recursion to protect against endless loops
-			return;
-		}
-		uint16_t c=1;
-		while(_lock.test_and_set(std::memory_order_acquire)) {
-			//busy wait
-			if(!(c++ & 1023)) sched_yield();
-		}
-		locked_by=uv_thread_self();
-		assert(lock_recurs==0);
-	}
-	void unlock(void) const { //free lock mutex
-		if(locked_by!=uv_thread_self()) {
-			assert(false);
-			return;
-		}
-		if(lock_recurs>0) { //in recursion
-			lock_recurs--;
-			return;
-		}
-		locked_by={};
-		_lock.clear(std::memory_order_release);
-	}
-	void assert_is_locked(void) { //ensures lock is locked
-		assert(_lock.test_and_set(std::memory_order_acquire));
-	}
-};
 
 class iot_objectrefable;
 typedef void (*object_destroysub_t)(iot_objectrefable*);
@@ -395,7 +468,8 @@ public:
 #endif
 ///////////////////
 
-	object_destroysub_t destroy_sub; //can be NULL if no specific destruction required (i.e. object is statically allocated). this function MUST call iot_objectrefable desctuctor (explicitely or doing delete)
+	object_destroysub_t destroy_sub; //can be NULL if no specific destruction required (i.e. object is statically allocated). this function MUST call
+		//iot_objectrefable desctuctor (explicitely or doing delete)
 
 protected:
 	iot_objectrefable(object_destroysub_t destroy_sub, bool is_dynamic) : destroy_sub(destroy_sub) {

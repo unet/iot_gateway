@@ -54,7 +54,7 @@ int iot_peer::resize_origroutes_buffer(uint32_t n, iot_memallocator* allocator) 
 
 	//copy existing entries and relink them 
 	if(numorigroutes>0) {
-		memmove(newroutes, origroutes, sizeof(iot_meshorigroute_entry)*(n-numorigroutes));
+		memmove(newroutes, origroutes, sizeof(iot_meshorigroute_entry)*numorigroutes);
 		for(uint32_t i=0; i<numorigroutes; i++) { //relink head items to point to new allocated entries
 			BILINKLIST_FIXHEAD(newroutes[i].routeslist_head, orig_prev);
 		}
@@ -243,12 +243,17 @@ void iot_peers_registry_t::graceful_shutdown(void) { //stop listening connection
 	assert(!is_shutdown);
 	is_shutdown=true;
 
+	if(iotgw_listencon) {
+		iotgw_listencon->destroy();
+		iotgw_listencon=NULL;
+	}
+
 	uv_rwlock_rdlock(&peers_lock);
 
 	//reset all peer connections
 	iot_peer* p=peers_head;
 	while(p) {
-		reset_peer_connections(p);
+		p->on_graceful_shutdown();
 		p=p->next;
 	}
 	uv_rwlock_rdunlock(&peers_lock);
@@ -257,7 +262,7 @@ void iot_peers_registry_t::graceful_shutdown(void) { //stop listening connection
 
 	for(iot_netcon *cur, *next=passive_cons_head; (cur=next); ) {
 		next=next->registry_next;
-		cur->destroy();
+		cur->destroy(true);
 	}
 
 	uv_mutex_unlock(&datamutex);

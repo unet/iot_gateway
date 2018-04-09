@@ -18,7 +18,7 @@ class iot_netcon_tcp;
 
 //metaclass for TCP network connection type
 class iot_netcontype_metaclass_tcp: public iot_netcontype_metaclass {
-	iot_netcontype_metaclass_tcp(void) : iot_netcontype_metaclass("tcp", true, true) {
+	iot_netcontype_metaclass_tcp(void) : iot_netcontype_metaclass("tcp", NETCONTYPE_TCP, true, true, true) {
 	}
 
 public:
@@ -116,13 +116,13 @@ class iot_netcon_tcp : public iot_netcon {
 
 		int err=rep->init_server(srv->server.bindhost, srv->server.bindport, srv->server.bindiface, srv->registry, true);
 		if(err) {
-			delete rep;
+			rep->meta->destroy_netcon(rep);
 			return err;
 		}
 		memcpy(&rep->server.cur_sockaddr, saddr, addrlen);
 		rep->phase=PHASE_LISTENING;
 
-		err=rep->start_uv(srv->thread, true); //listening socket creates too small load, so use the same thread as master
+		err=rep->start_uv(srv->thread, false, true); //listening socket creates too small load, so use the same thread as master
 		if(err && err!=IOT_ERROR_NOT_READY) {
 			if(!rep->unmark_initing(true)) {
 				assert(false);
@@ -138,7 +138,7 @@ class iot_netcon_tcp : public iot_netcon {
 
 		int err=rep->init_server(NULL, 0, NULL, srv->registry, true);
 		if(err) {
-			delete rep;
+			rep->meta->destroy_netcon(rep);
 			return err;
 		}
 		err=uv_tcp_init(srv->loop, &rep->h_tcp);
@@ -180,13 +180,13 @@ class iot_netcon_tcp : public iot_netcon {
 				iot_netcon_tcp* obj=(iot_netcon_tcp*)(handle->data);
 				assert(obj->h_tcp_state==HS_CLOSING);
 				obj->h_tcp_state=HS_UNINIT;
-				obj->start_uv(NULL, true);
+				obj->start_uv(NULL, false, true);
 			});
 			err=0;
 		} else {
 			rep->h_tcp_state=HS_ACTIVE;
 
-			err=rep->start_uv(srv->thread, true); //listening socket creates too small load, so use the same thread as master
+			err=rep->start_uv(srv->thread, false, true); //listening socket creates too small load, so use the same thread as master
 		}
 onexit:
 		if(err && err!=IOT_ERROR_NOT_READY) {
@@ -869,7 +869,22 @@ outlog_notice("in client phase %u", unsigned(phase));
 		}
 	}
 	void on_connect_status(int status) {
+		int err;
 		if(!status) {
+			//check for self-connected socket
+			sockaddr_storage addr;
+			socklen_t slen2=sizeof(addr);
+			err=uv_tcp_getsockname(&h_tcp, (sockaddr*)&addr, (int*)&slen2);
+			if(err) {
+				assert(false);
+			} else {
+				if(slen2==client.cur_addr->ai_addrlen && memcmp(client.cur_addr->ai_addr, &addr, slen2)==0) { //addrs are the same
+					outlog_notice("Looped to myself while connecting to host '%s', retrying", client.dsthost);
+					close_handle_retry(200);
+					return;
+				}
+			}
+
 			connect_errors=0;
 			phase=PHASE_CONNECTED;
 			h_tcp_state=HS_ACTIVE;
@@ -877,9 +892,10 @@ outlog_notice("in client phase %u", unsigned(phase));
 			return;
 		}
 		if(status==UV_ECANCELED) return; //handle was closed and connection request automatically cancelled
+
 		uv_getnameinfo_t ip_req;
 		const char* ipstr="UNKNOWN";
-		int err=uv_getnameinfo(loop, &ip_req, NULL, client.cur_addr->ai_addr, NI_NUMERICHOST | NI_NUMERICSERV);
+		err=uv_getnameinfo(loop, &ip_req, NULL, client.cur_addr->ai_addr, NI_NUMERICHOST | NI_NUMERICSERV);
 		if(err) outlog_notice("Error calling uv_getnameinfo() for IP of host '%s': %s", client.dsthost, uv_strerror(err));
 			else ipstr=ip_req.host;
 		uint32_t delay;
@@ -979,39 +995,38 @@ outlog_notice("in client phase %u", unsigned(phase));
 	//check if new write request can be added. must return:
 	//1 - write_data() can be called with request data
 	//0 - request writing is in progress, so iot_netproto_session::on_write_data_status() must be waited (no need to call can_write_data() again)
-	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
+////	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
+	//IOT_ERROR_INVALID_STATE - netcon is not in RUNNING state
 	virtual int can_write_data(void) override {
-		if(phase!=PHASE_RUNNING || h_tcp_state!=HS_ACTIVE) return IOT_ERROR_NOT_READY;
+		if(phase!=PHASE_RUNNING || h_tcp_state!=HS_ACTIVE) {
+			return IOT_ERROR_INVALID_STATE;
+		}
 		if(h_writereq_valid) return 0;
 		return 1;
 	}
 
 	//try to add new write request. must return:
 	//0 - request successfully added. iot_netproto_session::on_write_data_status() will be called later after completion
-	//1 - request successfully added and ready, iot_netproto_session::on_write_data_status() was already called before return from write_data()
+	//1 - request successfully finished. iot_netproto_session::on_write_data_status() was NOT CALLED
 	//IOT_ERROR_TRY_AGAIN - another request writing is in progress, so iot_netproto_session::on_write_data_status() must be waited
-	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
+	//IOT_ERROR_INVALID_STATE - (must not occur in debug mode) netcon is not in RUNNING state
+////	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
 	//IOT_ERROR_INVALID_ARGS - invalid arguments (databuf is NULL or datalen==0)
 	virtual int write_data(void *databuf, size_t datalen) override {
-		static uv_buf_t buf;
 		if(!databuf || !datalen) return IOT_ERROR_INVALID_ARGS;
-		if(phase!=PHASE_RUNNING || h_tcp_state!=HS_ACTIVE) return IOT_ERROR_NOT_READY;
-		if(h_writereq_valid) return IOT_ERROR_TRY_AGAIN;
+		iovec vec;
+		vec.iov_base=databuf;
+		vec.iov_len=datalen;
 
-		h_writereq_valid=true;
-		buf.base=(char*)databuf;
-		buf.len=datalen;
-		h_writereq.data=this;
-		int err=uv_write(&h_writereq, (uv_stream_t*)&h_tcp, &buf, 1, [](uv_write_t* req, int status)->void {
-			iot_netcon_tcp* obj=(iot_netcon_tcp*)req->data;
-			obj->on_write_status(status);
-		});
-		assert(err==0);
-		return 0;
+		return iot_netcon_tcp::write_data(&vec, 1);
 	}
 	virtual int write_data(iovec *databufvec, int veclen) override {
 		if(!databufvec || veclen<=0) return IOT_ERROR_INVALID_ARGS;
-		if(phase!=PHASE_RUNNING) return IOT_ERROR_NOT_READY;
+		if(phase!=PHASE_RUNNING || h_tcp_state!=HS_ACTIVE) {
+			assert(false);
+			return IOT_ERROR_INVALID_STATE;
+//			return IOT_ERROR_NOT_READY;
+		}
 		if(h_writereq_valid) return IOT_ERROR_TRY_AGAIN;
 
 		h_writereq_valid=true;
@@ -1031,13 +1046,14 @@ outlog_notice("in client phase %u", unsigned(phase));
 	}
 
 	void on_write_status(int status) {
-		assert(protosession!=NULL);
 		h_writereq_valid=false;
+		if(session_state!=HS_ACTIVE) return;
+		assert(protosession!=NULL);
 		if(!status) {
 			protosession->on_write_data_status(0);
-			if(!h_writereq_valid) { //no additional write_data() called in on_write_data_status()
-				protosession->on_can_write_data();
-			}
+//			if(!h_writereq_valid) { //no additional write_data() called in on_write_data_status()
+//				protosession->on_can_write_data();
+//			}
 			return;
 		}
 		do_stop();
@@ -1061,7 +1077,7 @@ outlog_notice("in client phase %u", unsigned(phase));
 		//todo
 		do_stop();
 	}*/
-	virtual void on_session_closed(void) {
+	virtual void on_session_closed(void) override {
 		session_state=HS_UNINIT;
 		do_stop();
 	}
@@ -1127,7 +1143,7 @@ inline int iot_netcontype_metaclass_tcp::p_from_json(json_object* json, iot_netp
 		if(is_server) err=con->init_server(host, port, iface, registry);
 			else err=con->init_client(metric, host, port, registry);
 		if(err) {
-			delete con;
+			con->meta->destroy_netcon(con);
 			return err;
 		}
 		obj=con;

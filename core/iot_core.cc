@@ -111,6 +111,7 @@ iot_gwinstance::iot_gwinstance(uint32_t guid, iot_hostid_t hostid, uint64_t even
 	}
 
 iot_gwinstance::~iot_gwinstance(void) {
+		if(meshcontroller) delete meshcontroller;
 		if(peers_registry) delete peers_registry;
 		if(hwdev_registry) delete hwdev_registry;
 		if(config_registry) {
@@ -182,10 +183,14 @@ void iot_gwinstance::graceful_shutdown_step3(void) { //called when node modinsta
 			modinst->stop(false);
 		}
 
+		if(meshcontroller) meshcontroller->graceful_shutdown(); //close all meshtuns gracefully. will call gwinst->graceful_shutdown_step4()
+			else graceful_shutdown_step4();
+	}
+
+void iot_gwinstance::graceful_shutdown_step4(void) { //called when meshtuns are closed
 		if(peers_registry) peers_registry->graceful_shutdown();//send stop signal to peer connections (skipping logger host)
 		//TODO: logger must continue data transfer until all pending data is sent or graceful timeout expires
 
 		//TODO: decrement some counter of unfinished instances in some registry of gwinstances so that on_shutdown callback could check it
 		if(on_shutdown) on_shutdown();
-	}
-
+}

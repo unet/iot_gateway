@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <atomic>
 
 #define ECB_NO_LIBM
 #include "ecb.h"
@@ -12,6 +13,7 @@
 #define expect_true(cond)  ecb_expect_true  (cond)
 
 #include "uv.h"
+#include "iot_error.h"
 
 //Functions to be used during serialization/deserialization to get fixed (little endian) byte order
 #if ECB_LITTLE_ENDIAN
@@ -479,7 +481,6 @@ public:
 	}
 };
 
-class iot_atimer_item;
 class iot_atimer_item {
 	friend class iot_atimer;
 	iot_atimer_item *next, *prev;
@@ -499,7 +500,7 @@ public:
 		param=param_;
 		next=prev=NULL;
 	}
-	void unschedule(void) { //should not be called in thread other than of corresponding iot_atimer object
+	void unschedule(void) { //should not be called in thread other than of corresponding iot_atimer object OR under same lock when nothreadcheck is true
 		BILINKLISTWT_REMOVE(this, next, prev);
 	}
 	bool is_on(void) { //checks if timer is scheduled
@@ -516,6 +517,9 @@ class iot_atimer {
 	uv_timer_t timer;
 	uv_thread_t thread;
 	uint64_t period; //zero if no timer inited
+	void (*on_deinit)(void *deinitarg);
+	void* deinitarg;
+	bool nothreadcheck;
 public:
 	iot_atimer(void) {
 		period=0;
@@ -523,10 +527,17 @@ public:
 	~iot_atimer(void) {
 		deinit();
 	}
-	void init(uint64_t period_, uv_loop_t *loop) {
+	void init(uint64_t period_, uv_loop_t *loop, bool nothreadcheck_=false) { //when nothreadcheck true this means that caller code must ensure correct thread or use mutexes before all atimer methods
+		//must be called in correct thread of provided loop!
 		assert(period==0); //forbid double init
 		assert(loop!=NULL);
-		thread=uv_thread_self();
+		if(nothreadcheck_) {
+			nothreadcheck=true;
+			thread=0;
+		} else {
+			nothreadcheck=false;
+			thread=uv_thread_self();
+		}
 
 		if(period_==0) period_=1;
 		head=tail=NULL;
@@ -537,15 +548,27 @@ public:
 		uv_timer_start(&timer, iot_atimer::ontimer, period_, period_);
 	}
 	void set_thread(uv_thread_t thread_) {
-		thread=thread_;
+		if(!nothreadcheck) {
+			thread=thread_;
+		} else {
+			assert(false);
+		}
 	}
-	void deinit(void) {
+	bool deinit(void (*on_deinit_)(void *arg)=NULL, void* arg=NULL) { //returns true if deinit finished, false if memory cannot be released until on_deinit is called (it can be NULL if no such notification is necessary)
 		if(period) {
 			while(head)
 				head->unschedule(); //here head is moved to next item!!!
-			uv_close((uv_handle_t*)&timer, NULL);
+
+			on_deinit=on_deinit_;
+			deinitarg=arg;
+			uv_close((uv_handle_t*)&timer, [](uv_handle_t *handle)->void {
+				iot_atimer* th=(iot_atimer*)handle->data;
+				if(th->on_deinit) th->on_deinit(th->deinitarg);
+			});
 			period=0;
+			return false;
 		}
+		return true;
 	}
 	static void ontimer(uv_timer_t *w) {
 		iot_atimer* th=(iot_atimer*)w->data;
@@ -568,8 +591,8 @@ public:
 		}
 		uv_timer_again(w);
 	}
-	void schedule(iot_atimer_item &it) {
-		assert(thread==uv_thread_self());
+	void schedule(iot_atimer_item &it) { //must be mutex protected when nothreadcheck is true!
+		assert(nothreadcheck || thread==uv_thread_self());
 		assert(period!=0);
 		assert(it.notify!=NULL);
 		if(expect_false(!it.notify)) return;
@@ -580,6 +603,251 @@ public:
 		BILINKLISTWT_INSERTTAIL(&it, head, tail, next, prev);
 	}
 };
+
+
+class iot_spinlock {
+	mutable volatile std::atomic_flag _lock=ATOMIC_FLAG_INIT; //lock to protect critical sections
+	mutable volatile uint8_t lock_recurs=0;
+	mutable volatile uv_thread_t locked_by={};
+
+public:
+	void lock(void) const { //wait for lock mutex
+		if(locked_by==uv_thread_self()) { //this thread already owns lock, just increase recursion level
+			lock_recurs++;
+			assert(lock_recurs<5); //limit recursion to protect against endless loops
+			return;
+		}
+		uint16_t c=1;
+		while(_lock.test_and_set(std::memory_order_acquire)) {
+			//busy wait
+			if(!(c++ & 1023)) sched_yield();
+		}
+		locked_by=uv_thread_self();
+		assert(lock_recurs==0);
+	}
+	void unlock(void) const { //free lock mutex
+		if(locked_by!=uv_thread_self()) {
+			assert(false);
+			return;
+		}
+		if(lock_recurs>0) { //in recursion
+			lock_recurs--;
+			return;
+		}
+		locked_by={};
+		_lock.clear(std::memory_order_release);
+	}
+	void assert_is_locked(void) { //ensures lock is locked
+		assert(_lock.test_and_set(std::memory_order_acquire));
+	}
+};
+
+
+template <bool shared> class iot_fixprec_timer;
+
+template <bool shared> class iot_fixprec_timer_item {
+	friend class iot_fixprec_timer<shared>;
+	iot_fixprec_timer_item *next=NULL, *prev=NULL;
+	volatile std::atomic<iot_fixprec_timer<shared> *>timer={NULL};
+public:
+	void (*notify)(void *param, uint32_t period_id, uint64_t now_ms);
+	void* param;
+
+	iot_fixprec_timer_item(void* param_=NULL, void (*notify_)(void *param, uint32_t period_id, uint64_t now_ms)=NULL) : notify(notify_), param(param_) {
+	}
+	~iot_fixprec_timer_item(void) {
+		unschedule();
+	}
+	void init(void* param_, void (*notify_)(void *param, uint32_t period_id, uint64_t now_ms)) {
+		notify=notify_;
+		param=param_;
+	}
+	void unschedule(void) {
+		if(shared) {
+			auto t=timer.exchange((iot_fixprec_timer<shared> *)1, std::memory_order_acq_rel); //value 1 is used to lock item structure against unschedule invocations in other threads
+			if(t==(iot_fixprec_timer<shared> *)1) return; //item is locked in unschedule
+
+			if(t) {//is on
+				t->unschedule(this);
+			} //else is off
+			//unlock
+			timer.store(NULL, std::memory_order_release);
+		} else {
+			auto t=timer.load(std::memory_order_relaxed);
+			if(t) {
+				t->unschedule(this);
+				timer.store(NULL, std::memory_order_relaxed);
+			}
+		}
+//		BILINKLISTWT_REMOVE(this, next, prev);
+	}
+	bool is_on(void) { //checks if timer is scheduled
+		return timer.load(shared ? std::memory_order_acquire : std::memory_order_relaxed)!=NULL;
+	}
+};
+
+class iot_thread_item_t;
+
+//Fixed precision action timer which works with uv library.
+//Manages queue of arbitrary relative timer events with fixed precision P(set during init) and maximum delay MD.
+//So a timer with precision 100ms will round 49ms to 0ms and 50ms to 100ms.
+//Relation MD/P+1=N determines size of allocated memory. Now N is limited to 2048
+template <bool shared> class iot_fixprec_timer {
+	friend class iot_fixprec_timer_item<shared>;
+
+	iot_fixprec_timer_item<shared> **wheelbuf=NULL;
+	uint32_t prec; //precision in ms
+	uint32_t maxerror; //maximum timer error in ms
+	uint64_t maxdelay; //maximum delay in ms
+	uint32_t numitems=0; //number of items in wheelbuf
+	uint32_t curitem;
+	uint32_t period_id;
+	uint64_t starttime;
+	uv_timer_t timer;
+	iot_thread_item_t *thread=NULL;
+	uv_loop_t *loop=NULL;
+	iot_spinlock lock;
+	void (*on_deinit)(void *deinitarg)=NULL;
+	void* deinitarg=NULL;
+public:
+	iot_fixprec_timer(void) {
+	}
+	~iot_fixprec_timer(void) {
+		deinit();
+	}
+	bool thread_valid(void);// {
+//		return uv_thread_self()==thread->thread;
+//	}
+	int init(uint32_t prec_, uint64_t maxdelay_);
+	bool deinit(void (*on_deinit_)(void *arg)=NULL, void* arg=NULL) { //returns true if deinit finished, false if memory cannot be released until on_deinit is called (it can be NULL if no such notification is necessary)
+		if(!wheelbuf) return true;
+		for(uint32_t i=0;i<numitems;i++) {
+			iot_fixprec_timer_item<shared> * &head=wheelbuf[i];
+			while(head) head->unschedule(); //here head is moved to next item!!!
+		}
+
+		on_deinit=on_deinit_;
+		deinitarg=arg;
+		uv_close((uv_handle_t*)&timer, [](uv_handle_t *handle)->void {
+			iot_fixprec_timer* th=(iot_fixprec_timer*)handle->data;
+			if(th->on_deinit) th->on_deinit(th->deinitarg);
+		});
+		iot_release_memblock(wheelbuf);
+		wheelbuf=NULL;
+		return false;
+	}
+	void ontimer(void) {
+		uint64_t now=uv_now(loop);
+		//check if timer became too inaccurate
+		uint64_t needtime=starttime + uint64_t(curitem)*prec; //now must be about such time
+		uint32_t steps=1;
+		if(needtime<now) {
+			if(now-needtime>maxerror) {
+				steps+=uint32_t((now-needtime+prec/2)/prec); //timer is lagging behind. process several items
+				if(steps>numitems || now-needtime>0xffffffff) steps=numitems;
+			}
+		} else if(needtime>now && needtime-now>maxerror) return; //timer went ahead, skip one iteration
+
+
+		iot_fixprec_timer_item<shared> * head;
+
+		if(shared) {
+			while(steps>0) {
+again:
+				lock.lock();
+				head=wheelbuf[curitem];
+				if(head) {
+					BILINKLIST_REMOVE(head, next, prev);
+					lock.unlock();
+					head->notify(head->param, period_id, now);
+					goto again;
+				}
+				curitem++;
+				period_id++;
+				if(curitem>=numitems) curitem=0;
+				lock.unlock();
+				if(curitem==0) starttime=now+uint64_t(steps)*prec; //realign starttime when curitem passes 0
+				steps--;
+			}
+		} else {
+			assert(thread_valid());
+
+			while(steps>0) {
+				while((head=wheelbuf[curitem])) {
+					BILINKLIST_REMOVE(head, next, prev);
+					head->notify(head->param, period_id, now);
+				}
+				curitem++;
+				period_id++;
+				if(curitem>=numitems) curitem=0;
+				if(curitem==0) starttime=now+uint64_t(steps)*prec; //realign starttime when curitem passes 0
+				steps--;
+			}
+		}
+	}
+	//errors:
+	//IOT_ERROR_INVALID_ARGS  - passed timer item was not inited
+	//IOT_ERROR_ACTION_CANCELLED - for shared timer concurrent schedule() was running in another thread
+	int schedule(iot_fixprec_timer_item<shared> &it, uint64_t delay, uint32_t *pper_id=NULL) { //delay in ms
+		//when no errors and per_id is not NULL, it is filled with period ID at which item will be notified if won't be updated/cancelled
+		assert(numitems>0);
+		if(expect_false(!it.notify)){
+			assert(false);
+			return IOT_ERROR_INVALID_ARGS;
+		}
+		if(expect_false(delay>maxdelay)) delay=maxdelay;
+		uint32_t relidx=uint32_t((delay + prec/2) / prec);
+
+		it.unschedule();
+
+		if(shared) {
+			lock.lock();
+			uint16_t c=1;
+			iot_fixprec_timer *t;
+			do {
+				t=NULL;
+				if(it.timer.compare_exchange_strong(t, this, std::memory_order_acq_rel, std::memory_order_acquire)) break;
+				if(t==(iot_fixprec_timer *)1) { //is locked in unschedule, just spin waiting for NULL or valid pointer
+					//busy wait
+					if(!(c++ & 1023)) sched_yield();
+					continue;
+				}
+				//valid pointer was assigned by concurrent schedule() of another timer, exit
+				lock.unlock();
+				return IOT_ERROR_ACTION_CANCELLED;
+			} while(1);
+		} else {
+			assert(thread_valid());
+		}
+		uint32_t per_id=relidx+period_id;
+		auto &head=wheelbuf[(per_id) % numitems];
+		//add to the tail
+		BILINKLIST_INSERTHEAD(&it, head, next, prev);
+
+		if(shared) lock.unlock();
+		if(pper_id) *pper_id=per_id;
+		return 0;
+	}
+private:
+	void unschedule(iot_fixprec_timer_item<shared> *it) {
+		if(shared) {
+			lock.lock();
+		} else {
+			assert(thread_valid());
+		}
+
+		BILINKLIST_REMOVE(it, next, prev);
+
+		if(shared) lock.unlock();
+	}
+};
+
+
+
+
+
+
+
 
 //Keeps references to allocated (using malloc()) memory blocks.
 class mempool {

@@ -174,16 +174,28 @@ void *iot_allocate_memblock(uint32_t size, bool allow_direct) {
 }
 
 void iot_release_memblock(void *memblock) {
-	assert(memblock!=NULL);
+	if(!memblock) {
+		assert(false);
+		return;
+	}
 	iot_memobject* obj=(iot_memobject*)container_of(memblock, struct iot_memobject, data);
-	assert(obj->parent->signature==IOT_MEMOBJECT_SIGNATURE);
+	if(obj->parent->signature!=IOT_MEMOBJECT_SIGNATURE) {
+		assert(false);
+		return;
+	}
 	obj->parent->release(memblock);
 }
 
 bool iot_incref_memblock(void *memblock) {
-	assert(memblock!=NULL);
+	if(!memblock) {
+		assert(false);
+		return false;
+	}
 	iot_memobject* obj=(iot_memobject*)container_of(memblock, struct iot_memobject, data);
-	assert(obj->parent->signature==IOT_MEMOBJECT_SIGNATURE);
+	if(obj->parent->signature!=IOT_MEMOBJECT_SIGNATURE) {
+		assert(false);
+		return false;
+	}
 	return obj->parent->incref(memblock);
 }
 
@@ -227,20 +239,21 @@ void iot_memallocator::release(void* ptr) { //decrease object's reference count.
 		}
 onexit:
 		if(!infly && prev_slave && thread==&main_thread) { //non-main allocator was previously uninited and now became empty
+			deinit(); //do call BEFORE removing from slave list or it will be just inserted there again. this call of deinit must nullify memchunks even when there are lost blocks
 			BILINKLIST_REMOVE(this, next_slave, prev_slave);
-			delete this;
+			delete this; //will call sl->~iot_memallocator  which calls deinit()
 		}
 	}
 
 
-void iot_memallocator::do_free_direct(uint16_t &chunkindex) {
+void iot_memallocator::do_free_direct(uint16_t chunkindex) {
 		assert(chunkindex<nummemchunks);
 		assert(memchunks[chunkindex]!=NULL);
 		assert(memchunks_refs[chunkindex]==0);
 		free(memchunks[chunkindex]);
 		memchunks[chunkindex]=NULL;
 		memchunks_refs[chunkindex]=-2;
-		numholes.fetch_add(std::memory_order_release);
+		numholes.fetch_add(1, std::memory_order_release);
 	}
 
 void *iot_memallocator::do_allocate_direct(uint32_t size, uint16_t &chunkindex) { //allocate next chunk of memory
@@ -261,14 +274,16 @@ void *iot_memallocator::do_allocate_direct(uint32_t size, uint16_t &chunkindex) 
 						return NULL;
 					}
 					chunkindex=uint16_t(i);
+					assert(memchunks[chunkindex]==NULL);
 					memchunks[chunkindex]=res;
 					memchunks_refs[chunkindex]=1;
 					return res;
 				}
 			}
-			assert(nummemchunks<65536);
-			if(nummemchunks>=65536) return NULL; //for release mode do such test anyway
-
+			if(nummemchunks>=65536) {
+				assert(false);
+				return NULL; //for release mode do such test anyway
+			}
 			uint32_t newmax=nummemchunks+1+50;
 			if(newmax>65536) newmax=65536;
 			void **t=(void**)malloc(sizeof(void*)*newmax);
@@ -394,13 +409,14 @@ bool iot_memallocator::deinit(void) { //free all OS-allocated chunks
 				main_allocator.add_slave(this);
 				return false;
 			}
-		} else {
+		} else { //this is main allocator
 			iot_memallocator *sl, *slnext=slaves_head;
 			while((sl=slnext)) {
 				slnext=slnext->next_slave;
 				if(sl->totalinfly.load(std::memory_order_relaxed)>0) wasslaveerror=true;
+				sl->deinit(); //do call BEFORE removing from slave list or sl will be just inserted there again by above lines. this call of deinit must nullify memchunks even when there are lost blocks
 				BILINKLIST_REMOVE(sl, next_slave, prev_slave);
-				delete sl;
+				delete sl; //will call sl->~iot_memallocator  which calls deinit()
 			}
 		}
 #ifndef NDEBUG
@@ -433,7 +449,10 @@ bool iot_memallocator::deinit(void) { //free all OS-allocated chunks
 					free(symb);
 				}
 			}
-			if(prev_slave) return false; //main allocator will assert
+			if(prev_slave) {
+				memchunks=NULL; //to prevent running of deinit by destructor which will be called from main allocator
+				return false; //main allocator will assert
+			}
 		}
 #endif
 		if(totalinfly.load(std::memory_order_acquire)!=0 || wasslaveerror) {
@@ -447,13 +466,14 @@ bool iot_memallocator::deinit(void) { //free all OS-allocated chunks
 			free(memchunks[i]);
 			memchunks[i]=NULL;
 		}
+		assert(realholes==numholes.load(std::memory_order_relaxed));
+
 		free(memchunks);
 		free(memchunks_refs);
 		memchunks=NULL;
 		memchunks_refs=NULL;
 		nummemchunks=0;
 		maxmemchunks=0;
-		assert(realholes==numholes.load(std::memory_order_relaxed));
 		numholes.store(0,std::memory_order_relaxed);
 printf("Allocator deinited\n");
 		return true;
@@ -470,13 +490,14 @@ const uint32_t iot_memallocator::objsizes[15]={
 		256,
 		384, //index 8
 		512,
-		1024,
+//		1024,
 		2048,
 		4096,
+		8192,
 		IOT_MEMOBJECT_MAXPLAINSIZE+offsetof(struct iot_memobject, data), //index 13
 		IOT_MEMOBJECT_CHAINSIZE //index 14 , underlying data for objects must be iot_membuf_chain
 	};
-const uint32_t iot_memallocator::objoptblock[15]={
+const uint32_t iot_memallocator::objoptblock[15]={ //optimal block of allocation
 		16384,  //index 0
 		16384,
 		16384,

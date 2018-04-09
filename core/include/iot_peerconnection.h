@@ -24,6 +24,8 @@ class iot_peers_conregistry;
 #include "iot_netcon.h"
 #include "iot_netproto_iotgw.h"
 #include "iot_netproto_mesh.h"
+#include "iot_mesh_control.h"
+#include "iot_netcon_mesh.h"
 
 
 struct iot_remote_driverinst_item_t {
@@ -52,51 +54,63 @@ private:
 	iot_peer *next=NULL, *prev=NULL;
 	
 	iot_remote_driverinst_item_t* drivers_head=NULL; //head of list of driver instances available for connections
-	uint64_t state_time; //time (uv_now) when current state was set
+//	uint64_t state_time; //time (uv_now) when current state was set
 	uint64_t last_sync=0;//time of previous full sync (time of first STATE_INSYNC)
 
 	iot_netcon* cons_head=NULL; //list of active (client) connections initiated towards this peer
 	iot_objref_ptr<iot_netproto_config_mesh> meshprotocfg;
+	iot_objref_ptr<iot_netproto_config_iotgw> iotprotocfg;
+	iot_netcon_mesh* iotgw_clientcon=NULL; //mesh netcon used to create IOT GW session. this is client connection used to connect to this peer when its host id IS GREATER than this host
+
 
 	iot_spinlock seslistlock;
 	iot_netproto_session_iotgw *iotsessions_head=NULL; //seslistlock protected list of active IOTGW sessions to this peer
-	iot_netproto_session_mesh *meshsessions_head=NULL; //mesh controller controlled list of active MESH sessions to this peer
 
-	iot_meshorigroute_entry* origroutes=NULL; //iot_memblock of buffer (sized as maxorigroutes*sizeof(iot_meshorigroute_entry)) with original routing entries obtained from peer
+//ROUTING* - means that variable is accessed under corresponding R/W routing lock of mesh controller
+	iot_netproto_session_mesh *meshsessions_head=NULL; //ROUTING*. mesh controller controlled list of active MESH sessions to this peer.
+
+	mpsc_queue<iot_meshtun_packet, iot_meshtun_packet, &iot_meshtun_packet::next> meshtunq; //queue of mesh streams destined to this peer with pending write
+																									 //reader of this queue is holder of meshtunq_lock
+	uv_mutex_t meshtunq_lock; //must be obtained to use consumer methods of meshtunq
+
+	iot_meshorigroute_entry* origroutes=NULL; //ROUTING*. iot_memblock of buffer (sized as maxorigroutes*sizeof(iot_meshorigroute_entry)) with original routing entries obtained from peer
 											//cannot contain entries for local host and this peer. entries are sorted by ascending hostid
-	volatile std::atomic<uint64_t> origroutes_version={0}; //version of routing table in origroutes as it was reported by peer
-	uint32_t maxorigroutes=0; //determines size of memory buffer under origroutes
-	uint32_t numorigroutes=0; //number of valid entries inside origroutes array
+	volatile std::atomic<uint64_t> origroutes_version={0}; //ROUTING*. version of routing table in origroutes as it was reported by peer
+	uint32_t maxorigroutes=0; //ROUTING*. determines size of memory buffer under origroutes
+	uint32_t numorigroutes=0; //ROUTING*. number of valid entries inside origroutes array
 
-	iot_meshroute_entry *routeslist_head=NULL; //Part of local routing table - list of possible routes to this peer sorted by increasing delay (from head to tail)
+	iot_meshroute_entry *routeslist_head=NULL; //ROUTING*. Part of local routing table - list of possible routes to this peer sorted by increasing delay (from head to tail)
 												//Head entry is used  for routing decisions
-	iot_meshroute_entry *routeslist_althead=NULL; //must point to first entry of routeslist_head which has different next-hop peer than entry at head. Is used to build routing table for peer which is next-hop at head (because it must not get route where it is the next-hop for current host)
-	uint64_t routing_actualversionpart=0; //shows to which version of routing table do routing_actualdelay and routing_actualpathlen correspond. maximum among all such values which are actual for particular peer (thus skipping that specific peer's routing_actualversion) is the one which must be reported to peer
-	uint64_t routing_altactualversionpart=0;
+	iot_meshroute_entry *routeslist_althead=NULL; //ROUTING*. must point to first entry of routeslist_head which has different next-hop peer than entry at head. Is used to build routing table for peer which is next-hop at head (because it must not get route where it is the next-hop for current host)
+	uint64_t routing_actualversionpart=0; //ROUTING*. shows to which version of routing table do routing_actualdelay and routing_actualpathlen correspond. maximum among all such values which are actual for particular peer (thus skipping that specific peer's routing_actualversion) is the one which must be reported to peer
+	uint64_t routing_altactualversionpart=0; //ROUTING*. same for alternative route
+//	iot_atimer_item noroute_timer_item; //ROUTING*
+	iot_fixprec_timer_item<true> noroute_timer_item;
 
-	uint32_t routing_actualdelay; //Normally - realdelay from iot_meshroute_entry at routeslist_head, but updating that entry's delay (or changing the entry)
+	uint32_t routing_actualdelay; //ROUTING*. Normally - realdelay from iot_meshroute_entry at routeslist_head, but updating that entry's delay (or changing the entry)
 								//does not update routing_actualdelay if difference in delay is less than some threshold (so that insignificant change does not
 								//initiate routing table resync to peers) this value is reported to peers as path delay (when sending local routing table)
-	uint32_t routing_altactualdelay;
+	uint32_t routing_altactualdelay; //ROUTING*. same for alternative route
 
 	volatile std::atomic<uint64_t> lastreported_routingversion={0}; //this is version of local routing table which was sent to peer and confirmed. this sync is done through first appropriate mesh session to that host
-	uint64_t current_routingversion=0; //this is version of local routing table for this peer which is pending to be sent. notify_routing_update must be true is this value is > than lastreported_routingversion
-	uint16_t routing_actualpathlen=0; //pathlen which corresponds to routing_actualdelay. zero value means that there are no route (direct peers have pathlen==1)
-	uint16_t routing_altactualpathlen=0; //pathlen which corresponds to routing_altactualdelay. zero value means that there are no route
+	uint64_t current_routingversion=0; //ROUTING*. this is version of local routing table for this peer which is pending to be sent. notify_routing_update must be true is this value is > than lastreported_routingversion
+	uint16_t routing_actualpathlen=0; //ROUTING*. pathlen which corresponds to routing_actualdelay. zero value means that there are no route (direct peers have pathlen==1)
+	uint16_t routing_altactualpathlen=0; //ROUTING*. pathlen which corresponds to routing_altactualdelay. zero value means that there are no route
 	uint16_t cons_num=0; //number of connections in cons_head list
 
-	enum : uint8_t {
+/*	enum : uint8_t {
 		STATE_INIT, //initial state after creation
 		STATE_INITIALCONNPEND, //first connection is pending
 		STATE_CONNPEND, //connection is pending (initial sync was already finished)
 		STATE_INITIALSYNCING, //first connection succeeded and data transfer in progress
 		STATE_SYNCING, //data transfer in progress (initial sync was already finished)
 		STATE_INSYNC, //data in sync (end-of-queue mark received from peer)
-	} state=STATE_INIT;
+	} state=STATE_INIT;*/
 	bool notify_routing_update=false; //is set to true if local routing table was updated and lastreported_routingversion here is less than any of appropriate routing_actualversionpart and routing_altactualversionpart (of all other peer structs)
 										//first appropriate mesh session is used to sync routing table when session sees this flag. flag is reset after
 										//successful confirmation from peer, so it is possible that several sessions to same peer can transfer the same routing table and this is OK
 	bool origroutes_unknown_host=false; //true value means that origroutes has at least one entry with unknown host, so when configuration changes and new hosts configured, routes can be applied
+	volatile std::atomic<bool> is_unreachable={false}; //shows that there are no routes to this peer for at least IOT_MESHNET_NOROUTETIMEOUT seconds, and thus peer is treated as unreachable
 
 public:
 	iot_peer(iot_gwinstance* gwinst, iot_hostid_t hostid, object_destroysub_t destroysub, bool is_dynamic=true) : 
@@ -105,22 +119,34 @@ public:
 		assert(uv_thread_self()==main_thread);
 		assert(gwinst!=NULL);
 
-		state_time=uv_now(main_loop);
+		int err=uv_mutex_init(&meshtunq_lock);
+		assert(!err);
+
+		noroute_timer_item.init(this, [](void *peerp, uint32_t period_id, uint64_t now_ms)->void {
+			iot_peer *p=(iot_peer *)peerp;
+			p->gwinst->meshcontroller->on_noroute_timer(p);
+		});
+
+//		state_time=uv_now(main_loop);
 	}
 	virtual ~iot_peer(void) {
 		assert(uv_thread_self()==main_thread);
+
 
 		assert(next==NULL && prev==NULL); //must be disconnected from registry
 
 		assert(iotsessions_head==NULL);
 		assert(meshsessions_head==NULL);
 		assert(cons_head==NULL);
+		assert(iotgw_clientcon==NULL);
 
 		if(origroutes) {
 			iot_release_memblock(origroutes);
 			origroutes=NULL;
 			maxorigroutes=numorigroutes=0;
 		}
+
+		uv_mutex_destroy(&meshtunq_lock);
 	}
 	bool is_notify_routing_update(void) const {
 		return notify_routing_update;
@@ -141,7 +167,77 @@ public:
 	iot_remote_driverinst_item_t* get_avail_drivers_list(void) {
 		return drivers_head;
 	}
-	bool is_failed(void) { //check if peer can be treated as dead
+	bool check_is_reachable(void) {
+		return !is_unreachable.load(std::memory_order_relaxed);
+	}
+	void push_meshtun(const iot_objref_ptr<iot_meshtun_packet> &st, bool st_islocked=false) { //adds meshtun to outgoing queue for processing, increses refcount
+		if(!st_islocked) st->lock();
+		if(is_unreachable.load(std::memory_order_relaxed)) { //generate immediate error
+			if(!st->get_error()) st->set_error(IOT_ERROR_NO_ROUTE);
+			if(!st_islocked) st->unlock();
+			return;
+		}
+		st->ref(); //queue keeps regular pointers, so increase refcount manually
+		meshtunq.push((iot_meshtun_packet*)st);
+		if(!st_islocked) st->unlock();
+		gwinst->meshcontroller->route_meshtunq(this);
+	}
+	iot_objref_ptr<iot_meshtun_packet> pop_meshtun(void) { //returns next meshtun for processing. can be called from any thread
+		uv_mutex_lock(&meshtunq_lock);
+		iot_meshtun_packet* st=meshtunq.pop();
+		uv_mutex_unlock(&meshtunq_lock);
+		return iot_objref_ptr<iot_meshtun_packet>(true, st); //additional refcount is kept by iot_objref_ptr
+	}
+	bool remove_meshtun(iot_meshtun_packet* st) { //tries to find meshtun in queue and remove it. returns true if was found and removed (in such refcount is decreased)
+		uv_mutex_lock(&meshtunq_lock);
+		bool rval=meshtunq.remove(st);
+		uv_mutex_unlock(&meshtunq_lock);
+		if(rval) {
+			st->unref();
+			return true;
+		}
+		return false;
+	}
+
+	void on_meshroute_set(void) { //called by mesh controller when first route in routeslist_head appears. called with active W-routing lock
+		outlog_notice("Got first route to host %" IOT_PRIhostid, host_id);
+		//create client mesh stream from lower host id to greater
+		if(host_id<gwinst->this_hostid) return;
+
+		if(!iotprotocfg) { //init IOT protocol config on first request
+			iotprotocfg=iot_objref_ptr<iot_netproto_config_iotgw>(true, new iot_netproto_config_iotgw(gwinst, this, object_destroysub_delete, true));
+			if(!iotprotocfg) goto nomem;
+//iotprotocfg->debug=true;
+		}
+
+		if(!iotgw_clientcon) {
+			iotgw_clientcon=iot_netcontype_metaclass_mesh::allocate_netcon((iot_netproto_config_iotgw*)iotprotocfg);
+			if(!iotgw_clientcon) goto nomem;
+			int err;
+			err=iotgw_clientcon->init_client(gwinst->meshcontroller, host_id, 0);
+			if(err) { //invalid args? no slots? TODO
+				iotgw_clientcon->meta->destroy_netcon(iotgw_clientcon);
+				iotgw_clientcon=NULL;
+				assert(false); 
+				return;
+			}
+			iotgw_clientcon->start_uv(NULL, true); //force async start to leave routing lock
+		} else {
+			iotgw_clientcon->on_meshtun_event(iotgw_clientcon->EVENT_GOTROUTE); //wake up from NO_ROUTE error
+		}
+		return;
+nomem:
+		assert(false);
+		//TODO retry on timer?
+	}
+	void on_meshroute_reset(void) { //called by mesh controller when last route in routeslist_head disappears. called with active W-routing lock
+		outlog_notice("Lost last route to host %" IOT_PRIhostid, host_id);
+//		if(iotgw_clientcon) {
+//			iotgw_clientcon->destroy();
+//			iotgw_clientcon=NULL;
+//		}
+	}
+/*	bool is_failed(void) { //check if peer can be treated as dead
 		if(state<STATE_INITIALSYNCING && uv_now(main_loop)-state_time>10000) return true;
 		return false;
 	}
@@ -153,8 +249,16 @@ public:
 //		}
 		return false;
 	}
+*/
 private:
 	int resize_origroutes_buffer(uint32_t n, iot_memallocator* allocator);
+	void on_graceful_shutdown(void) {
+		reset_connections();
+		if(iotgw_clientcon) {
+			iotgw_clientcon->destroy();
+			iotgw_clientcon=NULL;
+		}
+	}
 };
 
 
@@ -197,6 +301,9 @@ class iot_peers_registry_t : public iot_netconregistryiface {
 	iot_netcon* passive_cons_head=NULL; //explicit and automatically added passive (listening and connected listening) iot_netcon objects
 
 	iot_objref_ptr<iot_netproto_config_mesh> listenprotocfg;
+	iot_objref_ptr<iot_netproto_config_iotgw> iotlistenprotocfg;
+
+	iot_netcon_mesh* iotgw_listencon=NULL; //listening mesh netcon used to accept IOT GW sessions. connecting peer must have LOWER host id than this host
 
 public:
 	iot_gwinstance* const gwinst;
@@ -232,10 +339,16 @@ public:
 			BILINKLIST_REMOVE(p, next, prev);
 			num_peers.fetch_sub(1, std::memory_order_relaxed);
 			p->meshprotocfg.clear();
+			p->iotprotocfg.clear();
 
 			for(iot_netcon *cur, *next=p->cons_head; (cur=next); ) {
 				next=next->registry_next;
 				BILINKLIST_REMOVE(cur, registry_next, registry_prev);
+			}
+
+			if(p->iotgw_clientcon) {
+				p->iotgw_clientcon->destroy();
+				p->iotgw_clientcon=NULL;
 			}
 
 			p->unref();
@@ -253,6 +366,10 @@ public:
 //			cons=NULL;
 //			objid_keys=NULL;
 //		}
+		if(iotgw_listencon) {
+			iotgw_listencon->destroy();
+			iotgw_listencon=NULL;
+		}
 
 		uv_mutex_unlock(&datamutex);
 		uv_rwlock_wrunlock(&peers_lock);
@@ -274,6 +391,9 @@ public:
 
 		listenprotocfg=iot_objref_ptr<iot_netproto_config_mesh>(true, new iot_netproto_config_mesh(gwinst, NULL, object_destroysub_delete, true, NULL));
 		if(!listenprotocfg) return IOT_ERROR_NO_MEMORY;
+
+		iotlistenprotocfg=iot_objref_ptr<iot_netproto_config_iotgw>(true, new iot_netproto_config_iotgw(gwinst, NULL, object_destroysub_delete, true));
+		if(!iotlistenprotocfg) return IOT_ERROR_NO_MEMORY;
 
 //		size_t sz=(sizeof(iot_netcon *)+sizeof(uint32_t))*maxcons;
 //		cons=(iot_netcon **)malloc(sz);
@@ -358,6 +478,30 @@ onexit:
 	int reset_peer_connections(iot_peer* peer);
 
 	int add_listen_connections(json_object *json, bool prefer_ownthread=false); //add several server (listening) connections by given JSON array with parameters for iot_netcon-derived classes
+
+	int start_iot_listen(void) { //must be started to start listening for IOTGW connections over mesh network
+		if(iotgw_listencon) return IOT_ERROR_NO_ACTION;
+		if(!iotlistenprotocfg) {
+			assert(false);
+			return IOT_ERROR_NOT_INITED;
+		}
+		iotgw_listencon=iot_netcontype_metaclass_mesh::allocate_netcon((iot_netproto_config_iotgw*)iotlistenprotocfg);
+		if(!iotgw_listencon) return IOT_ERROR_NO_MEMORY;
+		int err;
+		err=iotgw_listencon->init_server(gwinst->meshcontroller, 0);
+		if(err) { //invalid args? no slots? TODO
+			iotgw_listencon->meta->destroy_netcon(iotgw_listencon);
+			iotgw_listencon=NULL;
+			assert(false);
+			return err;
+		}
+		err=iotgw_listencon->start_uv(NULL, false);
+		if(err && err!=IOT_ERROR_NOT_READY) {
+			assert(false);
+			return err;
+		}
+		return 0;
+	}
 
 	virtual int on_new_connection(iot_netcon *conobj) override { //called from any thread, part of iot_netconregistryiface
 //IOT_ERROR_NOT_INITED - registry wasn't inited

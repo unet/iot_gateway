@@ -38,6 +38,7 @@ Template args:
 											gives result with range [0 ; 1<<bits ) to give sub-tree index
 		bool operator == (const Key_t& op)	- must check if two keys are equal
 		bool operator < (const Key_T& op)	- must check if left key is less than right
+		bool operator <= (const Key_T& op)	- must check if left key is less than or equal to right
 		Key_t& operator = (int) 			- to initialize key with zero
 	Bits - number of set contiguous bits in bitmask which selects sub-tree. Allowed range [0 ; 24]
 	Bitsoffset - offset of contiguous bits in bitmask which selects sub-tree. Allowed range [0; 32-Bits]
@@ -389,11 +390,12 @@ public:
 		path->pathlen=-1;
 		return -2;
 	}
-	int64_t find_mult(Key_t const &key_from,Key_t const &key_to,leafitem**buf, int64_t numbuf, bool isotropic=false) {//finds all records starting from key_from 
-	//(including) up to key_to (not including). not more than numbuf leafitem structs will be saved in buf.
-	//if isotropic is true then all keys between [key_from; key_to) are assumed to have the same hash (key & mask) which is calculated from key_from. This can
+	int64_t find_mult(Key_t const &key_from,Key_t const &key_to,leafitem**buf, int64_t numbuf, bool isotropic=false, bool countall=true) {//finds all records starting from key_from 
+	//(including) up to key_to (including !!! here (was changed)). not more than numbuf leafitem structs will be saved in buf.
+	//if isotropic is true then all keys between [key_from; key_to] are assumed to have the same hash (key & mask) which is calculated from key_from. This can
 	//greatly speedup this function if mask is wide
-	//returns total number of records (can be larger than numbuf) or  -2 - error too large depth, -3 - error impossible condition
+	//returns either total number of records (can be larger than numbuf) if countall==true, OR actual number written (no more than numbuf) if countall==false,
+	//	or  -2 - error too large depth, -3 - error impossible condition
 		treepath path;
 		if(!buf) numbuf=0;
 		int64_t n=0;
@@ -420,8 +422,74 @@ public:
 			idx=path.pathway[depth].idx;
 			p=path.pathway[depth].offset;
 			do {
-				while(idx<p->num && p->leaf.leaf[idx].key<key_to) {
-					if(n<numbuf) buf[n]=&p->leaf.leaf[idx];
+				while(idx<p->num && p->leaf.leaf[idx].key<=key_to) {
+					if(n<numbuf) {
+						buf[n]=&p->leaf.leaf[idx];
+					} else if(!countall) break;
+					n++;
+					idx++;
+				}
+				if(idx<p->num) break; //some key >= key_to was found
+				//move to the next leaf
+				if(depth<=0) break; //no parent branches
+				//find deepest parent branch where idx is not at the end
+				depth--;
+				while(depth>=0) {
+					if(path.pathway[depth].idx<path.pathway[depth].offset->num-1) break;
+					depth--;
+				}
+				if(depth<0) break; //all idx's are at the end
+				path.pathway[depth].idx++; //go to next leaf or branch
+				//move down until leaf level is found
+				p=path.pathway[depth].offset->branch.data[path.pathway[depth].idx].offset; //next child
+				depth++;
+				do {
+					if(p->isleaf==1) {idx=0;break;} //don't update pathway for leaves
+					path.pathway[depth].offset=p;
+					path.pathway[depth].idx=-1;
+					p=path.pathway[depth].offset->branch.left; //next child
+					depth++;
+				} while(depth<int(MAX_TREE_DEPTH));
+			} while(n<int64_t(amount)); //just in case
+		}
+		return n;
+	}
+	int64_t find_mult_values(Key_t const &key_from,Key_t const &key_to,Val_t* buf, int64_t numbuf, bool isotropic=false, bool countall=true) {//finds all records starting from key_from 
+	//(including) up to key_to (including !!! here (was changed)). not more than numbuf leafitem structs will be saved in buf.
+	//if isotropic is true then all keys between [key_from; key_to] are assumed to have the same hash (key & mask) which is calculated from key_from. This can
+	//greatly speedup this function if mask is wide
+	//returns either total number of records (can be larger than numbuf) if countall==true, OR actual number written (no more than numbuf) if countall==false,
+	//	or  -2 - error too large depth, -3 - error impossible condition
+		treepath path;
+		if(!buf) numbuf=0;
+		int64_t n=0;
+		int depth,idx;
+		treeblock* p;
+		uint32_t i,lasti;
+		if(isotropic) {
+			i=(key_from & (((1u << Bits)-1) << Bitsoffset)) >> Bitsoffset;
+			lasti=i;
+		} else if(Highbits) {
+			i=(key_from & (((1u << Bits)-1) << Bitsoffset)) >> Bitsoffset;
+			lasti=(key_to & (((1u << Bits)-1) << Bitsoffset)) >> Bitsoffset;
+		} else {
+			i=0;
+			lasti=(1u << Bits)-1;
+		}
+		for(;i<=lasti;i++) { //loop through all or particular root
+			int rval=find(key_from,NULL,&path,&i);
+			if(rval<0) return rval;
+			depth=path.pathlen;
+			if(depth<0) continue;
+			if(path.pathway[depth].offset->isleaf!=1) return -3; //must be at leaf
+			if(rval==0) path.pathway[depth].idx++; //when not found, increase idx
+			idx=path.pathway[depth].idx;
+			p=path.pathway[depth].offset;
+			do {
+				while(idx<p->num && p->leaf.leaf[idx].key<=key_to) {
+					if(n<numbuf) {
+						buf[n]=p->leaf.leaf[idx].val;
+					} else if(!countall) break;
 					n++;
 					idx++;
 				}

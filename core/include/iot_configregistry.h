@@ -343,7 +343,7 @@ private:
 
 	uint32_t nodecfg_id=0, hostcfg_id=0, modecfg_id=0, owncfg_modtime=0; //current numbers of config parts
 	iot_hostid_t logger_host_id=0;
-	std::atomic<uint32_t> num_hosts={0}; //current number of entries in hosts_head list. (will become unnecessary if linked list will be changed to a tree)
+	volatile std::atomic<uint32_t> num_hosts={0}; //current number of entries in hosts_head list. (will become unnecessary if linked list will be changed to a tree)
 
 	iot_modelevent eventsbuf[100]; //preallocated model event structs
 	iot_modelevent *events_freelist=NULL; //only ->qnext is used for list iterating

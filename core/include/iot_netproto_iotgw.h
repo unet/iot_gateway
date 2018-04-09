@@ -120,6 +120,7 @@ struct iot_gwprotoreq {
 	//0 - chunk successfully processed, but more data required (offset + chunksize must be < data_size)
 	//1 - chunk successfully processed and all data received (offset + chunksize must be == data_size and state set to STATE_READ or higher)
 	// negative error status
+	//IOT_ERROR_OBJECT_INVALIDATED - request was released or mutated to reply, so reference to it must be dropped immediately
 	virtual int p_req_inpacket_cont(iot_netproto_session_iotgw* session, size_t data_size, size_t offset, const char* chunk, size_t chunksize) = 0;
 	virtual int p_reply_inpacket_cont(iot_netproto_session_iotgw* session, size_t data_size, size_t offset, const char* chunk, size_t chunksize) = 0;
 
@@ -135,6 +136,8 @@ struct iot_gwprotoreq {
 	}
 
 	//is called after reading full request/reply packet if state was left as STATE_READ
+	//returns error code:
+	//IOT_ERROR_OBJECT_INVALIDATED - request was released or mutated to reply, so reference to it must be dropped immediately
 	virtual int p_req_inpacket_execute(iot_netproto_session_iotgw* session) = 0;
 	virtual int p_reply_inpacket_execute(iot_netproto_session_iotgw* session) = 0;
 
@@ -151,7 +154,7 @@ private:
 
 //metaclass for IOTGW protocol type
 class iot_netprototype_metaclass_iotgw : public iot_netprototype_metaclass {
-	iot_netprototype_metaclass_iotgw(void) : iot_netprototype_metaclass("iotgw", MESHSES_PROTO_IOTGW, 0) {
+	iot_netprototype_metaclass_iotgw(void) : iot_netprototype_metaclass("iotgw", MESHTUN_PROTO_IOTGW, true, true, 0) {
 	}
 
 public:
@@ -172,7 +175,7 @@ public:
 
 	~iot_netproto_config_iotgw(void) {}
 
-	virtual int instantiate(iot_netconiface* coniface) override; //called in coniface->thread
+	virtual int instantiate(iot_netconiface* coniface, iot_hostid_t meshtun_peer=0) override; //called in coniface->thread
 };
 
 
@@ -233,8 +236,9 @@ struct iot_netproto_session_iotgw : public iot_netproto_session {
 	uint8_t pending_close=0; //1 - graceful close: reading stops immediately, writing stops accepting new requests but finishes to send existing and then makes shutdown of coniface
 					//2 - immediate close: reading stops immediately, write is stopped immediately by closing coniface
 	bool in_processing=false; //when true, stop() call will just set 'pending_close' var. otherwise do actual stop
+	uint8_t inside_write_next=0; //tracks recursive calls of write_next(). 0 - not in write_next(), 1 - in write_next() and not recursive call noticed, 2 - in write_next() and was recursive call
 
-	iot_netproto_session_iotgw(iot_netconiface* coniface, iot_netproto_config_iotgw* config, object_destroysub_t destroysub);
+	iot_netproto_session_iotgw(iot_netconiface* coniface, iot_netproto_config_iotgw* config, const iot_objref_ptr<iot_peer> &peer, object_destroysub_t destroysub);
 	~iot_netproto_session_iotgw();
 
 	virtual int start(void) override;
@@ -254,45 +258,24 @@ struct iot_netproto_session_iotgw : public iot_netproto_session {
 
 		BILINKLISTWT_INSERTTAIL(req, outpackets_head, outpackets_tail, next, prev);
 		req->state=iot_gwprotoreq::STATE_SEND_QUEUERED;
-		if(coniface->can_write_data()>0) on_can_write_data();
+		if(coniface->can_write_data()>0) write_next();
 		return true;
 	}
 
 private:
-	virtual void on_stop(bool graceful) override {
-		if(in_processing) { //stop() must be repeated after processing
-			if(!pending_close || (!graceful && pending_close==1)) pending_close=graceful ? 1 : 2;
-			return;
-		}
-		if(closed==2) { //hard stop already proccessed
-			return;
-		}
-		if(closed==1) { //graceful stop already processed. allow upgrade to hard stop. ignore graceful requests
-			if(graceful && pending_close<2) return;
-			closed=2;
-		} else {
-			if(!graceful || pending_close>=2) closed=2;
-			else closed=1;
-		}
-		pending_close=0;
-
-		if(closed==1 && coniface) { //begin graceful stop procedure
-			if(!current_outpacket && !outpackets_head) closed=2; //no current request and nothing in queue
-//			else { wait writing to finish
-//			}
-		}
-		if(closed==2) {
-			self_closed(); //
-		}
-	}
+	virtual void on_stop(bool graceful) override;
 //	virtual void on_coniface_detached(void) override {
 //		closed=2;
 //		//anything to do? for now just wait for destruction
 //	}
 	virtual void on_write_data_status(int status) override {
+		assert(uv_thread_self()==thread->thread);
+		assert(status==0);
+
 		assert(current_outpacket);
 		assert(current_outpacket->state==iot_gwprotoreq::STATE_BEING_SENT);
 
+		if(closed>1) return;
 
 		if(current_outpacket_offset==current_outpacket_size) {
 			in_processing=true;
@@ -316,24 +299,28 @@ private:
 			current_outpacket=NULL;
 
 			in_processing=false;
-			if(pending_close) stop();
-			return;
+			if(pending_close) {
+				stop();
+				if(closed>1) return;
+			}
+		} else {
+			assert(current_outpacket_offset<current_outpacket_size);
 		}
-		assert(current_outpacket_offset<current_outpacket_size);
-
-		//on_can_write_data will be called automatically
+		write_next();
 	}
-	virtual void on_can_write_data(void) override {
+	void write_next(void) {
+		//returns true if next request/part was processed in sync and ones more call to write_next must be done
+		assert(uv_thread_self()==thread->thread);
+		if(inside_write_next) {inside_write_next=2;return;}
+		int err;
+again:
 		//check if there is any request to send
 		in_processing=true;
 		size_t sendbuf_startoff;
 		if(!current_outpacket) { //no current request. take first from main queue
 			if(!outpackets_head) { //nothing to send
-				in_processing=false;
-				if(closed==1) { //graceful stop is active and send queue became empty
-					stop(false); //do hard stop
-				}
-				return;
+				if(closed==1) pending_close=1; //this will initiate rerun of stop()
+				goto onexit;
 			}
 			current_outpacket=outpackets_head;
 			BILINKLISTWT_REMOVE(current_outpacket, next, prev);
@@ -345,14 +332,6 @@ private:
 			memcpy(hdr_prolog->iotsign, packet_signature, sizeof(hdr_prolog->iotsign));
 			uint8_t headflags=0;
 			uint8_t headlen=sizeof(packet_hdr_prolog);
-//todo		if(current_outpacket->proxied_from) {
-//				need_signature=true; //proxied packets must always be signed
-//				headflags|=HEADFLAG_PROXIED;
-//				packet_hdr_proxy *hdr_proxy=(packet_hdr_proxy *)(sendbuf+headlen)
-//				headlen+=sizeof(packet_hdr_proxy);
-//				hdr_proxy->originator=current_outpacket->proxied_from;
-//				hdr_proxy->destination=current_outpacket->proxied_to;
-//			}
 
 			packet_hdr *hdr=(packet_hdr *)(sendbuf+headlen);
 			headlen+=sizeof(packet_hdr);
@@ -392,7 +371,8 @@ private:
 		}
 
 		iovec ownbufs[64]; //index 0 is used for sendbuf[]
-		int ownbufsused=1;
+		int ownbufsused;
+		ownbufsused=1;
 		ownbufs[0].iov_base=sendbuf;
 		ownbufs[0].iov_len=sendbuf_startoff;
 		if(current_outpacket_size>current_outpacket_offset) {
@@ -416,15 +396,36 @@ private:
 			assert(current_outpacket_size>=current_outpacket_offset); //todo
 		}
 
-		coniface->write_data(ownbufs, ownbufsused);
+		in_processing=false;
+		if(pending_close) {
+			stop();
+			if(closed>1) return;
+		}
 
+		err=coniface->write_data(ownbufs, ownbufsused);
+		if(err==1) { //was immediate success, on_write_data_status was not called
+			inside_write_next=1;
+			on_write_data_status(0);
+			if(inside_write_next>1) {
+				inside_write_next=0;
+				goto again;
+			}
+			inside_write_next=0;
+		} else if(err<0) {
+			//some error
+			assert(false);
+		} //else on_write_data_status will be called asynchronously
+		return;
+onexit:
 		in_processing=false;
 		if(pending_close) stop();
+		inside_write_next=0;
 	}
 
 	bool start_new_inpacket(packet_hdr *hdr);
 
 	virtual bool on_read_data_status(ssize_t nread, char* &databuf, size_t &databufsize) override {
+outlog_notice("IOT session got %d bytes", int(nread));
 		if(!nread) {  //reading end of connection closed
 			stop(false);
 			return false;
@@ -469,8 +470,8 @@ private:
 					readbuf_offset=nread; //remember obtained data
 					assert(false); //todo retrying
 
+					if(pending_close) goto onexit;
 					in_processing=false;
-					if(pending_close) stop();
 
 					return false;
 				}
@@ -526,7 +527,10 @@ private:
 					err=current_inpacket->p_reply_inpacket_cont(this, current_inpacket_size, current_inpacket_offset, readbuf+readbuf_offset, chunksize);
 					else
 					err=current_inpacket->p_req_inpacket_cont(this, current_inpacket_size, current_inpacket_offset, readbuf+readbuf_offset, chunksize);
-				if(err) {
+				if(err==IOT_ERROR_OBJECT_INVALIDATED) {
+					assert(last_chunk);
+					current_inpacket=NULL;
+				} else if(err) {
 					assert(false);
 					//todo
 				}
@@ -542,6 +546,7 @@ private:
 				assert(current_inpacket_size==0 && current_inpacket_offset==0);
 				current_inpacket->state=iot_gwprotoreq::STATE_READ;
 			}
+			if(!current_inpacket) continue; //request could mutate into reply in p_req_inpacket_cont
 			//here request is full and must wait for execution, be executing, sending reply or finished
 			if(current_inpacket->state == iot_gwprotoreq::STATE_READ) {
 				//run execution manually
@@ -549,6 +554,10 @@ private:
 					err=current_inpacket->p_reply_inpacket_execute(this);
 					else
 					err=current_inpacket->p_req_inpacket_execute(this);
+				if(err==IOT_ERROR_OBJECT_INVALIDATED) {
+					current_inpacket=NULL;
+					continue;
+				}
 				if(err) {
 					assert(false);
 					//todo
@@ -709,6 +718,7 @@ private:
 				session->stop(false);
 			}
 			else outlog_notice("Host %" IOT_PRIhostid " introduced successfully", repack_hostid(req->host_id));
+			return IOT_ERROR_OBJECT_INVALIDATED;
 		}
 		return 0;
 	}

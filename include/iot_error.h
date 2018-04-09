@@ -12,7 +12,7 @@
 	XX(NOT_FOUND, -6, "not found")											\
 	XX(INVALID_ARGS, -7, "invalid args provided")							\
 	XX(TEMPORARY_ERROR, -8, "temporary error")								\
-	XX(NOT_SUPPORTED, -9, "device not supported")							\
+	XX(NOT_SUPPORTED, -9, "not supported")									\
 	XX(INVALID_DEVICE_DATA, -10, "invalid device data")						\
 	XX(CRITICAL_ERROR, -11, "critical error")								\
 	XX(LIMIT_REACHED, -12, "limit reached")									\
@@ -20,8 +20,8 @@
 	XX(TRY_AGAIN, -14, "one more try should be made")						\
 	XX(MESSAGE_IGNORED, -15, "unknown or invalid message")					\
 	XX(UNKNOWN_ACTION, -16, "unknown action")								\
-	XX(NOT_READY, -17, "object not ready")									\
-	XX(ACTION_CANCELLED, -18, "action cancelled")							\
+	XX(NOT_READY, -17, "object or task not ready")							\
+	XX(ACTION_CANCELLED, -18, "action cancelled or shurdown in progress")	\
 	XX(MODULE_BLOCKED, -19, "module blocked")								\
 	XX(NO_ACTION, -20, "no action performed")								\
 	XX(HARD_LIMIT_REACHED, -21, "hard limit reached")						\
@@ -29,6 +29,11 @@
 	XX(BAD_DATA, -23, "request is broken")									\
 	XX(OBJECT_INVALIDATED, -24, "target object was freed (form of success)") \
 	XX(ADDRESS_INUSE, -25, "address is already busy or cannot be assigned")	\
+	XX(INVALID_STATE, -26, "object is in inappropriate state")				\
+	XX(NO_ROUTE, -27, "no route to destination")							\
+	XX(CONN_RESET, -28, "connection reset by peer")							\
+	XX(ACTION_TIMEOUT, -29, "action timeout")								\
+	XX(STREAM_CLOSED, -30, "stream is shut down or closed by peer")			\
 	XX(CRITICAL_BUG, -100, "bug in code")
 
 enum iot_error_t {

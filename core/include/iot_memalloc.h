@@ -20,7 +20,7 @@ class iot_memallocator;
 //mask for iot_memobject::parent field to get index of freelist inside allocator
 //#define IOT_MEMOBJECT_PARENT_ALIGN 32
 //#define IOT_MEMOBJECT_PARENT_MASK (~uintptr_t(IOT_MEMOBJECT_PARENT_ALIGN-1))
-#define IOT_MEMOBJECT_CHAINSIZE 16384
+#define IOT_MEMOBJECT_CHAINSIZE 32768
 
 
 
@@ -38,6 +38,12 @@ struct iot_memobject {
 	uint8_t listindex:4;  //valid if refcount>0. special value 14 additionally means that data is really iot_membuf_chain object
 								//15 means that memory object is temporary and has arbitrary size
 	uint32_t data[1]; //arbitrary data or iot_membuf_chain if listindex==14. ensure alignment by 4 using uint32_t
+
+	void clear_in_queue(void) {}
+	void set_in_queue(void) {}
+	constexpr bool check_in_queue(void) {
+		return false;
+	}
 };
 
 #define IOT_MEMOBJECT_SIGNATURE ('M'*65536*256+'e'*65536+'m'*256+'O')
@@ -86,7 +92,7 @@ public:
 
 	bool deinit(void); //free all OS-allocated chunks
 private:
-	void do_free_direct(uint16_t &chunkindex);
+	void do_free_direct(uint16_t chunkindex);
 	void *do_allocate_direct(uint32_t size, uint16_t &chunkindex); //returns NULL on allocation error
 	bool do_allocate_freelist(uint32_t &n, uint32_t sz, iot_memobject * &ret, uint32_t OPTIMAL_BLOCK=64*1024, uint32_t MAX_BLOCK=2*1024*1024,unsigned maxn=0xFFFFFFFF);
 		//'n' - minimal amount to be allocated for success. on exit it is updated to show quantity of allocated items

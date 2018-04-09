@@ -34,9 +34,15 @@ void iot_gwprotoreq::release(iot_gwprotoreq* &r) {
 	}
 
 
-int iot_netproto_config_iotgw::instantiate(iot_netconiface* coniface) {
+int iot_netproto_config_iotgw::instantiate(iot_netconiface* coniface, iot_hostid_t meshtun_peer) {
 		assert(uv_thread_self()==coniface->thread->thread);
-		auto ses=new iot_netproto_session_iotgw(coniface, this, object_destroysub_delete);
+		iot_objref_ptr<iot_peer> p;
+		if(meshtun_peer) {
+			p = gwinst->peers_registry->find_peer(meshtun_peer);
+			if(!p) return IOT_ERROR_NO_PEER;
+			assert(!peer || peer==p);
+		}
+		auto ses=new iot_netproto_session_iotgw(coniface, this, !p ? peer : p, object_destroysub_delete);
 		if(!ses) return IOT_ERROR_NO_MEMORY;
 		return 0;
 	}
@@ -45,8 +51,8 @@ int iot_netproto_config_iotgw::instantiate(iot_netconiface* coniface) {
 
 const uint8_t iot_netproto_session_iotgw::packet_signature[2]={'I', 'G'};
 
-iot_netproto_session_iotgw::iot_netproto_session_iotgw(iot_netconiface* coniface, iot_netproto_config_iotgw* config, object_destroysub_t destroysub) :
-			iot_netproto_session(&iot_netprototype_metaclass_iotgw::object, coniface, destroysub), config(config), peer_host(config->peer), introduced(false)
+iot_netproto_session_iotgw::iot_netproto_session_iotgw(iot_netconiface* coniface, iot_netproto_config_iotgw* config, const iot_objref_ptr<iot_peer> &peer, object_destroysub_t destroysub) :
+			iot_netproto_session(&iot_netprototype_metaclass_iotgw::object, coniface, destroysub), config(config), peer_host(peer), introduced(false)
 	{
 		assert(config!=NULL);
 		if(peer_host) {
@@ -54,10 +60,8 @@ iot_netproto_session_iotgw::iot_netproto_session_iotgw(iot_netconiface* coniface
 		}
 	}
 iot_netproto_session_iotgw::~iot_netproto_session_iotgw() {
-		if(peer_host) {
-			if(peer_prev) {
-				peer_host->on_dead_iotsession(this);
-			}
+		if(peer_host && peer_prev) {
+			peer_host->on_dead_iotsession(this);
 		}
 		//todo do something with requests in queue
 		if(current_outpacket) {
@@ -74,6 +78,7 @@ iot_netproto_session_iotgw::~iot_netproto_session_iotgw() {
 			BILINKLISTWT_REMOVE(curreq, next, prev);
 			curreq->on_session_close();
 		}
+		outlog_notice("IOTGW SESSION DESTROYED");
 	}
 
 
@@ -90,6 +95,81 @@ int iot_netproto_session_iotgw::start(void) {
 		int err=coniface->read_data(readbuf, sizeof(readbuf));
 		return err;
 	}
+
+void iot_netproto_session_iotgw::on_stop(bool graceful) {
+		assert(uv_thread_self()==thread->thread);
+		if(in_processing) { //stop() must be repeated after processing
+			assert(closed<3);
+			if(!pending_close || (!graceful && pending_close==1)) pending_close=graceful ? 1 : 2;
+			return;
+		}
+		uint8_t pclose=pending_close;
+		pending_close=0;
+
+		if(closed==3) return; //stop already finished
+
+		if(!closed) {
+			//common steps to initiate both types of stop
+
+			if(!graceful || pclose>=2) {
+				closed=2;
+				//initiate hard stop
+				//for now just continue
+			}
+			else { //can initiate graceful or hard stop
+				if(current_outpacket || outpackets_head) { //there are requests to send, initiate graceful stop
+					closed=1;
+					return;
+				} 
+				//no requests, use hard stop
+				closed=2;
+			}
+		} else if(closed==1) { //graceful stop in progress. allow upgrade to hard stop
+			if(graceful && pclose<2) {
+				//repeated graceful request or changing of some state involved by graceful stop. return if need to wait more or upgrade to hard stop
+				if(current_outpacket || outpackets_head) return; //there are requests to send, initiate graceful stop
+				closed=2; //no requests, use hard stop
+			} else { //upgrade to hard stop
+				closed=2;
+				//initiate hard stop after promoting graceful to hard
+			}
+		}
+		//initiate/continue hard stop
+		if(peer_host && peer_prev) { //unregister from peer
+			peer_host->on_dead_iotsession(this);
+		}
+
+		int8_t num_closing=0;
+
+/*		if(phase_timer_state>=HS_INIT) {
+			phase_timer_state=HS_CLOSING;
+			num_closing++;
+			uv_close((uv_handle_t*)&phase_timer, [](uv_handle_t* handle) -> void {
+				iot_netproto_session_mesh* obj=(iot_netproto_session_mesh*)(handle->data);
+				assert(obj->phase_timer_state==HS_CLOSING);
+				obj->phase_timer_state=HS_UNINIT;
+				obj->on_stop(true);
+			});
+		} else if(phase_timer_state==HS_CLOSING) num_closing++;
+
+		if(comq_watcher_state>=HS_INIT) {
+			comq_watcher_state=HS_CLOSING;
+			num_closing++;
+			uv_close((uv_handle_t*)&comq_watcher, [](uv_handle_t* handle) -> void {
+				iot_netproto_session_mesh* obj=(iot_netproto_session_mesh*)(handle->data);
+				assert(obj->comq_watcher_state==HS_CLOSING);
+				obj->comq_watcher_state=HS_UNINIT;
+				obj->on_stop(true);
+			});
+		} else if(comq_watcher_state==HS_CLOSING) num_closing++;
+*/
+		if(num_closing>0) return;
+
+		//can be destroyed from this point
+		closed=3;
+		self_closed();
+	}
+
 
 bool iot_netproto_session_iotgw::start_new_inpacket(packet_hdr *hdr) {
 		iot_gwprotoreq* req;
@@ -152,7 +232,6 @@ bool iot_netproto_session_iotgw::start_new_inpacket(packet_hdr *hdr) {
 
 int iot_netproto_session_iotgw::on_introduce(iot_gwprotoreq_introduce* req, iot_hostid_t host_id, uint32_t core_vers) {
 		if(introduced) { //for client side of connection. make session approved
-			assert(peer_prev==NULL); //must not be already in registry
 			if(peer_host->host_id!=host_id) return iot_gwprotoreq_introduce::ERRCODE_INVALID_AUTH; //repeated introduce with different host
 		} else {
 			assert(peer_host==NULL);
@@ -160,7 +239,7 @@ int iot_netproto_session_iotgw::on_introduce(iot_gwprotoreq_introduce* req, iot_
 			if(!peer_host) return iot_gwprotoreq_introduce::ERRCODE_UNKNOWN_HOST;
 			introduced=true;
 		}
-		peer_host->on_new_iotsession(this);
+		if(!peer_prev) peer_host->on_new_iotsession(this);
 		return 0;
 	}
 

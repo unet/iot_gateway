@@ -30,6 +30,11 @@ class hwdev_registry_t;
 class iot_netcon;
 class iot_meshnet_controller;
 class iot_netproto_session_mesh;
+class iot_meshtun_packet;
+class iot_meshtun_state;
+class iot_meshtun_forwarding;
+struct iot_meshtun_stream_state;
+struct iot_meshtun_stream_listen_state;
 
 struct iot_node_module_item_t;
 struct iot_driver_module_item_t;
@@ -169,6 +174,7 @@ printf("EVENT %" PRIu64 " allocated\n", rval);
 	void graceful_shutdown(void (*on_shutdown_)(void));
 	void graceful_shutdown_step2(void);
 	void graceful_shutdown_step3(void);
+	void graceful_shutdown_step4(void);
 };
 
 

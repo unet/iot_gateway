@@ -96,6 +96,13 @@ struct iot_threadmsg_t { //this struct MUST BE 64 bytes
 	iot_threadmsg_t* get_next(void) const { //shortcut for relaxed access of next pointer outside message queue position
 		return next.load(std::memory_order_relaxed);
 	}
+
+	void clear_in_queue(void) {}
+	void set_in_queue(void) {}
+	constexpr bool check_in_queue(void) {
+		return false;
+	}
+
 };
 #define IOT_MSG_BUFSIZE (sizeof(iot_threadmsg_t)-offsetof(struct iot_threadmsg_t, buf))
 #define IOT_MSG_INTARG_SAFEDATASIZE (offsetof(struct iot_threadmsg_t, intarg) - offsetof(struct iot_threadmsg_t, buf))

@@ -37,7 +37,8 @@ iot_netcon::iot_netcon(	const iot_netcontype_metaclass* meta,
 //IOT_ERROR_NO_ACTION - netcon already started or being destroyed
 //IOT_ERROR_NOT_INITED - init not done or not finished
 //IOT_ERROR_NOT_READY - async start
-int iot_netcon::start_uv(iot_thread_item_t* use_thread, bool finish_init) { //use_thread can be NULL to auto select thread. can be used from any thread
+int iot_netcon::start_uv(iot_thread_item_t* use_thread, bool always_async, bool finish_init) { //use_thread can be NULL to auto select thread. can be used from any thread
+																				//true always_async means that async start must be used even from the same thread
 																				//true finish_init means that current state of object must be INITING to prevent
 																				//possibility of its destruction after setting state to INITED if creation is not 
 																				//within registry thread
@@ -60,7 +61,7 @@ int iot_netcon::start_uv(iot_thread_item_t* use_thread, bool finish_init) { //us
 		loop=thread->loop;
 		allocator=thread->allocator;
 
-		if(uv_thread_self() == thread->thread) {
+		if(!always_async && uv_thread_self() == thread->thread) {
 			on_startstop_msg();
 			return 0;
 		}
@@ -106,7 +107,7 @@ void iot_netcon::on_startstop_msg(void) {
 
 //errors
 //IOT_ERROR_NOT_READY - destroying will began in async way
-int iot_netcon::destroy(void) {
+int iot_netcon::destroy(bool always_async) {
 	destroy_pending=true;
 
 	std::atomic_thread_fence(std::memory_order_acq_rel);
@@ -131,17 +132,17 @@ int iot_netcon::destroy(void) {
 		break;
 	} while(1);
 	//here state is STARTED
-	return restart();
+	return restart(always_async);
 }
 
-int iot_netcon::restart(void) {
+int iot_netcon::restart(bool always_async) {
 	state_t curstate=state.load(std::memory_order_acquire);
 	if(curstate!=STATE_STARTED) return IOT_ERROR_NO_ACTION;
 
 	if(stop_pending.test_and_set(std::memory_order_acq_rel)) return IOT_ERROR_NOT_READY;
 	//only one thread can arrive here for started netcon
 
-	if(uv_thread_self() == thread->thread) {
+	if(!always_async && uv_thread_self() == thread->thread) {
 		return do_stop();
 	}
 
@@ -239,4 +240,15 @@ outlog_notice("Netcon %s stopped, restarting...", outbuf);
 */
 
 iot_netcontype_metaclass_tcp iot_netcontype_metaclass_tcp::object;
+
+int iot_netcontype_metaclass::meshproxy_from_json(iot_netcontype_metaclass* meta, iot_hostid_t proxyhost, json_object* json, iot_netproto_config* protoconfig, iot_netcon*& obj, bool is_server, iot_netconregistryiface* registry, uint32_t metric) {
+	//TODO
+	//call some size_t bufsize=meta->p_proxyparams_from_json(json, is_server, NULL, 0) to get buffer size for connection params
+	//char buf[bufsize]
+	//meta->p_proxyparams_from_json(json, is_server, buf, bufsize) to get packed binary connection type specific params
+	//create iot_netproto_config_slave instance (proxyconf) using meta->type_id and buf[bufsize] as meta data, protoconfig to know final protocol to set up when proxyhost returns success
+	//create iot_netcon_mesh to proxyhost with proxyconf as protocol. metric can be assigned after init_client() call
+	//IMPORTANT! all hosts, which can act as proxy, must create listening netcon_mesh sockets for proxy protocol on some dedicated port (zero)!
+	return IOT_ERROR_NOT_SUPPORTED;
+}
 

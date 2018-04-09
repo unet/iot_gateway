@@ -493,6 +493,47 @@ void object_destroysub_delete(iot_objectrefable* obj) {
 }
 
 
+template <bool shared> int iot_fixprec_timer<shared>::init(uint32_t prec_, uint64_t maxdelay_) {
+		assert(!wheelbuf); //forbid double init
+
+		if(prec_==0 || maxdelay_<prec_) return IOT_ERROR_INVALID_ARGS;
+		uint64_t num=(maxdelay_ + prec_/2) / prec_ + 1;
+		if(num>2048) return IOT_ERROR_INVALID_ARGS;
+		thread=thread_registry->find_thread(uv_thread_self());
+		if(!thread) {
+			assert(false);
+			return IOT_ERROR_INVALID_THREAD;
+		}
+		loop=thread->loop;
+
+		wheelbuf=(iot_fixprec_timer_item<shared> **)thread->allocator->allocate(sizeof(iot_fixprec_timer_item<shared> *) * num);
+		if(!wheelbuf) return IOT_ERROR_NO_MEMORY;
+		numitems=(uint32_t)num;
+		prec=prec_;
+		maxerror=prec_ > 3 ? prec_/2 : prec_;
+		maxdelay=maxdelay_;
+		curitem=0;
+		period_id=0;
+		memset(wheelbuf, 0, sizeof(iot_fixprec_timer_item<shared> *) * num);
+
+		uv_timer_init(thread->loop, &timer);
+		timer.data=this;
+
+		starttime=uv_now(thread->loop); //is reset every time curitem is set again to 0
+		uv_timer_start(&timer, [](uv_timer_t*handle) -> void {
+			iot_fixprec_timer* th=(iot_fixprec_timer*)handle->data;
+			th->ontimer();
+		}, 0, prec_);
+		return 0;
+	}
+
+template int iot_fixprec_timer<true>::init(uint32_t prec_, uint64_t maxdelay_);
+
+
+template <bool shared> bool iot_fixprec_timer<shared>::thread_valid(void) {
+	return uv_thread_self()==thread->thread;
+}
+
 
 /*
 //kapi_fd_watcher implementation

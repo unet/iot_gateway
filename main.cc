@@ -244,6 +244,17 @@ int main(int argn, char **arg) {
 		outlog_error("Error initializing peers registry: %s", kapi_strerror(err));
 		goto onexit;
 	}
+	err=gwinstance->meshcontroller->init();
+	if(err) {
+		outlog_error("Error initializing mesh controller: %s", kapi_strerror(err));
+		goto onexit;
+	}
+	//create listening IOT GW netcon
+	err=gwinstance->peers_registry->start_iot_listen();
+	if(err) {
+		outlog_error("Error starting listening IOTGW connections: %s", kapi_strerror(err));
+		goto onexit;
+	}
 
 	cfg=iot_configregistry_t::read_jsonfile(conf_dir, IOTCONFIG_NAME, "config");
 	if(!cfg) goto onexit;

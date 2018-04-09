@@ -9,11 +9,23 @@
 #include "iot_configregistry.h"
 
 
+void iot_meshroute_entry::init(iot_netproto_session_mesh* ses, const iot_objref_ptr<iot_peer> &peer) {
+		session=ses;
+		hostpeer=peer;
+		hostid=hostpeer->host_id;
+		next=prev=NULL;
+		orig_next=orig_prev=NULL;
+		fulldelay=realdelay=0;
+		pendmod=MOD_NONE;
+		is_active=0;
+	}
+
+
 iot_netprototype_metaclass_mesh iot_netprototype_metaclass_mesh::object;
 
 //static const char* reqtype_descr[uint8_t(iot_gwproto_reqtype_t::MAX)+1]={"reply", "request", "notification"};
 
-int iot_netproto_config_mesh::instantiate(iot_netconiface* coniface) {
+int iot_netproto_config_mesh::instantiate(iot_netconiface* coniface, iot_hostid_t meshtun_peer) {
 		assert(uv_thread_self()==coniface->thread->thread);
 		auto ses=new iot_netproto_session_mesh(coniface, this, object_destroysub_delete);
 		if(!ses) return IOT_ERROR_NO_MEMORY;
@@ -32,7 +44,6 @@ iot_netproto_session_mesh::iot_netproto_session_mesh(iot_netconiface* coniface, 
 iot_netproto_session_mesh::~iot_netproto_session_mesh() {
 	if(peer_host && peer_prev) { //unregister from mesh constroller
 		assert(state==STATE_WORKING);
-assert(false); //temp
 		config->gwinst->meshcontroller->unregister_session(this);
 	}
 
@@ -80,7 +91,7 @@ int iot_netproto_session_mesh::resize_routes_buffer(uint32_t n, iot_memallocator
 
 	//copy existing entries and relink them 
 	if(numroutes>0) {
-		memmove(newroutes, routes, sizeof(iot_meshroute_entry)*(n-numroutes));
+		memmove(newroutes, routes, sizeof(iot_meshroute_entry)*numroutes);
 		for(uint32_t i=0; i<numroutes; i++) { //relink bilist items to point to new allocated entries
 			BILINKLIST_REPLACE(&routes[i], &newroutes[i], next, prev);
 			BILINKLIST_REPLACE(&routes[i], &newroutes[i], orig_next, orig_prev);
@@ -126,7 +137,23 @@ void iot_netproto_session_mesh::on_stop(bool graceful) {
 
 		if(closed==3) return; //stop already finished
 
-		if(closed==1) { //graceful stop in progress. allow upgrade to hard stop
+		if(!closed) {
+			//common steps to initiate both types of stop
+
+			if(!graceful || pclose>=2) {
+				closed=2;
+				//initiate hard stop
+				//for now just continue
+			}
+			else {
+				closed=1;
+				//initiate graceful stop
+
+				//for now always use hard stop
+				closed++;
+				//for now just continue
+			}
+		} else if(closed==1) { //graceful stop in progress. allow upgrade to hard stop
 			if(graceful && pclose<2) {
 				//repeated graceful request or changing of some state involved by graceful stop. return if need to wait more or upgrade to hard stop
 				
@@ -136,23 +163,23 @@ void iot_netproto_session_mesh::on_stop(bool graceful) {
 				closed=2;
 				//initiate hard stop after promoting graceful to hard
 			}
-		} else if(!closed) {
-			if(!graceful || pclose>=2) {
-				closed=2;
-				//initiate hard stop
-				//for now just continue
-			}
-			else {
-				closed=1;
-				//initiate graceful stop
-				//for now always use hard stop
-				closed++;
-				//for now just continue
-			}
 		}
 		//initiate/continue hard stop
 		if(peer_host && peer_prev) { //unregister from mesh constroller
 			config->gwinst->meshcontroller->unregister_session(this);
+		}
+		if(current_outmeshtun) { //outputting of meshtun is in progress
+			assert(current_outpacket_cmd==CMD_MESHTUN);
+			if(current_outmeshtun->type==TUN_STREAM) {
+				process_meshtun_outputaborted(static_cast<iot_meshtun_stream_state*>((iot_meshtun_packet*)current_outmeshtun));
+			} else if(current_outmeshtun->type==TUN_FORWARDING) {
+				current_outmeshtun->set_closed(false);
+			} else if(current_outmeshtun->type==TUN_DATAGRAM) {
+				assert(false); //TODO
+			} else {
+				assert(false); //TUN_STREAM_LISTEN cannot be here
+			}
+			current_outmeshtun=NULL;
 		}
 
 		int8_t num_closing=0;
@@ -186,79 +213,32 @@ void iot_netproto_session_mesh::on_stop(bool graceful) {
 		self_closed();
 	}
 
-
-void iot_netproto_session_mesh::state_handler_working(hevent_t ev) {
-		int err;
-		if(ev==HEVENT_CAN_WRITE) return;
-		switch(phase) {
-			case PHASE_INITIAL:
-				uv_async_init(coniface->loop, &comq_watcher, [](uv_async_t* handle) -> void {
-					iot_netproto_session_mesh* obj=(iot_netproto_session_mesh*)(handle->data);
-					obj->on_commandq();
-				});
-				comq_watcher.data=this;
-				comq_watcher_state=HS_INIT;
-
-				err=config->gwinst->meshcontroller->register_session(this);
-				if(err) goto stopses;
-				phase=PHASE_NORMAL;
-				return;
-			case PHASE_NORMAL:
-				if(ev==HEVENT_NEW_PACKET_HEADER) {
-					assert(current_inpacket_hdr!=NULL);
-					return;
-				}
-				if(ev==HEVENT_NEW_PACKET_READY) {
-					assert(current_inpacket_hdr!=NULL);
-
-					switch(current_inpacket_hdr->cmd) {
-						case CMD_RTABLE_REQ: {//routing table update
-							packet_rtable_req* req=(packet_rtable_req*)(current_inpacket_hdr+1);
-							if(current_inpacket_size!=sizeof(*req)+sizeof(packet_rtable_req::items[0])*repack_uint16(req->num_items)) { //invalid size
-								outlog_error("MESH session got CMD_RTABLE_REQ packed with invalid size %u, must be %u", unsigned(current_inpacket_size), unsigned(sizeof(*req)+sizeof(packet_rtable_req::items[0])*repack_uint16(req->num_items)));
-								break;
-							}
-							outlog_notice("MESH session got CMD_RTABLE_REQ from %" IOT_PRIhostid, peer_host->host_id);
-							config->gwinst->meshcontroller->sync_routing_table_frompeer(this, req);
-							break;
-						}
-						default:
-							outlog_notice("MESH session got unknown command %d", int(current_inpacket_hdr->cmd));
-							break;
-					}
-
-//					packet_auth_req *req=(packet_auth_req *)(current_inpacket_hdr+1);
-					return;
-				}
-				if(ev==HEVENT_WRITE_READY) {
-					switch(current_outpacket_cmd) {
-						case CMD_RTABLE_REQ:
-							routing_pending=false;
-							config->gwinst->meshcontroller->confirm_routing_table_sync_topeer(this);//temporary until SRVCODE_RTABLE_UPDATED is implemented
-							break;
-						default:
-							break;
-					}
-				}
-
-			default:
-				outlog_notice("MESH session in WORKING state got to phase %d, event %d", int(phase), int(ev));
-		}
-		return;
-stopses:
-		stop(false);
+void iot_netproto_session_mesh::process_service_packet(packet_service* req) {
+	outlog_notice("MESH session got service command %d", int(req->code));
+	switch(req->code) {
+		case SRVCODE_RTABLE_UPDATED:
+			routing_syncing=false;
+			config->gwinst->meshcontroller->confirm_routing_table_sync_topeer(this, req->qword_param, req->byte_param);
+			break;
+		default:
+			outlog_notice("MESH session got unknown service command %d", int(req->code));
+			assert(false);
+			break;
+	}
 }
+
 
 
 void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 		int err;
 		if(ev==HEVENT_CAN_WRITE) return;
+		if(ev==HEVENT_WRITE_READY) current_outpacket_cmd=CMD_ILLEGAL;
 //restart:
 		switch(phase) {
 			case PHASE_INITIAL:
 				phase=PHASE_WAITING_PEER;
 				run_phase_timer(5000);
-				return;
+				break;
 			case PHASE_WAITING_PEER:
 				if(ev==HEVENT_PHASE_TIMER) {
 					outlog_notice("MESH session got timeout in state=%d, phase=%d waiting for client AUTH_REQ", int(state), int(phase));
@@ -276,7 +256,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 						goto stopses;
 					}
 					//just wait for full packet, phase timer remains
-					return;
+					break;
 				}
 				if(ev==HEVENT_NEW_PACKET_READY) {
 					assert(current_inpacket_hdr!=NULL);
@@ -310,7 +290,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 					uint32_t adatasz=current_inpacket_size-sizeof(packet_auth_req);
 
 					//check signature
-					if(!check_authdata((iot_peer*)peer_host, atype, (char*)(req+1), adatasz, (char*)(&statedata.before_auth.auth_cache), sizeof(statedata.before_auth.auth_cache.request_hdr)+offsetof(struct packet_auth_req, reltime_ns))) return;
+					if(!check_authdata((iot_peer*)peer_host, atype, (char*)(req+1), adatasz, (char*)(&statedata.before_auth.auth_cache), sizeof(statedata.before_auth.auth_cache.request_hdr)+offsetof(struct packet_auth_req, reltime_ns))) break;
 
 					atype=AUTHTYPE_UNSET;
 					if(!choose_authtype(atype, adatasz)) {
@@ -344,7 +324,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 					err=coniface->write_data(hdr, sizeof(*hdr)+sizeof(packet_auth_reply)+adatasz);
 					assert(err==0);
 //					if(err==1) goto restart;
-					return;
+					break;
 				}
 				break;
 			case PHASE_REPLY_BEING_SENT:
@@ -354,7 +334,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 				}
 				phase=PHASE_WAITING_PEER_2;
 				run_phase_timer(50000);
-				return;
+				break;
 			case PHASE_WAITING_PEER_2:
 				if(ev==HEVENT_PHASE_TIMER) {
 					outlog_notice("server MESH session got timeout in state=%d, phase=%d waiting for client AUTH_FINISH", int(state), int(phase));
@@ -373,7 +353,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 						goto stopses;
 					}
 					//just wait for full packet, phase timer remains
-					return;
+					break;
 				}
 				if(ev==HEVENT_NEW_PACKET_READY) {
 					assert(current_inpacket_hdr!=NULL);
@@ -402,7 +382,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 						sizeof(statedata.before_auth.auth_cache.request_hdr)+sizeof(statedata.before_auth.auth_cache.request)+
 						sizeof(statedata.before_auth.auth_cache.reply_hdr)+sizeof(statedata.before_auth.auth_cache.reply)+
 						sizeof(statedata.before_auth.auth_cache.fin_hdr)+sizeof(statedata.before_auth.auth_cache.fin)
-						)) return;
+						)) break;
 
 					outlog_notice("server MESH session from host %" IOT_PRIhostid " to host %" IOT_PRIhostid " established", peer_host->host_id, config->gwinst->this_hostid);
 
@@ -414,10 +394,11 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 						cur_delay_us=uint32_t((delay_ns+500)/1000);
 					}
 
-					peer_host->set_lastreported_routingversion(repack_uint64(fin->routing_version));
-
+					uint64_t routing_version=repack_uint64(fin->routing_version);
 					state_change(STATE_WORKING);
-					return;
+					config->gwinst->meshcontroller->confirm_routing_table_sync_topeer(this, routing_version);
+
+					break;
 				}
 				outlog_notice("server MESH session got event %d waiting for AUTH_FINISH packet", int(ev));
 				break;
@@ -432,6 +413,7 @@ stopses:
 void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 		int err;
 		if(ev==HEVENT_CAN_WRITE) return;
+		if(ev==HEVENT_WRITE_READY) current_outpacket_cmd=CMD_ILLEGAL;
 //restart:
 		switch(phase) {
 			case PHASE_INITIAL: {//prepare AUTH_REQ
@@ -470,7 +452,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 				err=coniface->write_data(hdr, sizeof(*hdr)+sizeof(packet_auth_req)+adatasz);
 				assert(err==0);
 //				if(err==1) goto restart;
-				return;
+				break;
 			}
 			case PHASE_REQ_BEING_SENT:
 				if(ev!=HEVENT_WRITE_READY) {
@@ -479,7 +461,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 				}
 				phase=PHASE_WAITING_PEER;
 				run_phase_timer(50000);
-				return;
+				break;
 			case PHASE_WAITING_PEER:
 				if(ev==HEVENT_PHASE_TIMER) {
 					outlog_notice("client MESH session got timeout in state=%d, phase=%d waiting for client AUTH_REPLY", int(state), int(phase));
@@ -498,7 +480,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 						goto stopses;
 					}
 					//just wait for full packet, phase timer remains
-					return;
+					break;
 				}
 				if(ev==HEVENT_NEW_PACKET_READY) {
 					assert(current_inpacket_hdr!=NULL);
@@ -520,7 +502,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 					//check signature
 					if(!check_authdata((iot_peer*)peer_host, atype, (char*)(reply+1), adatasz, (char*)(&statedata.before_auth.auth_cache),
 						sizeof(statedata.before_auth.auth_cache.request_hdr)+sizeof(statedata.before_auth.auth_cache.request)+
-						sizeof(statedata.before_auth.auth_cache.reply_hdr)+offsetof(struct packet_auth_reply, reltime_ns))) return;
+						sizeof(statedata.before_auth.auth_cache.reply_hdr)+offsetof(struct packet_auth_reply, reltime_ns))) break;
 
 					atype=authtype_t(statedata.before_auth.auth_cache.request.authtype); //req and finish must have same authtype
 					if(!choose_authtype(atype, adatasz)) {
@@ -552,7 +534,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 					err=coniface->write_data(hdr, sizeof(*hdr)+sizeof(packet_auth_finish)+adatasz);
 					assert(err==0);
 //					if(err==1) goto restart;
-					return;
+					break;
 				}
 				assert(false);
 				break;
@@ -571,10 +553,11 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 					cur_delay_us=uint32_t((delay_ns+500)/1000);
 				}
 
-				peer_host->set_lastreported_routingversion(repack_uint64(statedata.before_auth.auth_cache.reply.routing_version));
-
+				uint64_t routing_version=repack_uint64(statedata.before_auth.auth_cache.reply.routing_version);
 				state_change(STATE_WORKING);
-				return;
+				config->gwinst->meshcontroller->confirm_routing_table_sync_topeer(this, routing_version);
+
+				break;
 			}
 			default:
 				outlog_notice("client MESH session got to phase %d", int(phase));
@@ -618,13 +601,780 @@ bool iot_netproto_session_mesh::fill_authdata(authtype_t atype, char* buf, uint3
 		return true;
 	}
 
+void iot_netproto_session_mesh::state_handler_working(hevent_t ev) {
+		int err;
+		if(ev==HEVENT_CAN_WRITE) return;
+		cmd_t cmdready; //keeps cmd which is reported as ready for ability to clean in universally
+		if(ev==HEVENT_WRITE_READY) {
+			cmdready=current_outpacket_cmd;
+			current_outpacket_cmd=CMD_ILLEGAL;
+		}
+
+		switch(phase) {
+			case PHASE_INITIAL:
+				uv_async_init(coniface->loop, &comq_watcher, [](uv_async_t* handle) -> void {
+					iot_netproto_session_mesh* obj=(iot_netproto_session_mesh*)(handle->data);
+					obj->on_commandq();
+				});
+				comq_watcher.data=this;
+				comq_watcher_state=HS_INIT;
+
+				err=config->gwinst->meshcontroller->register_session(this);
+				if(err) goto stopses;
+				phase=PHASE_NORMAL;
+				break;
+			case PHASE_NORMAL:
+				if(ev==HEVENT_NEW_PACKET_HEADER) {
+					assert(current_inpacket_hdr!=NULL);
+					break;
+				}
+				if(ev==HEVENT_NEW_PACKET_READY) {
+					assert(current_inpacket_hdr!=NULL);
+
+					switch(current_inpacket_hdr->cmd) {
+						case CMD_RTABLE_REQ: {//incoming routing table update
+							packet_rtable_req* req=(packet_rtable_req*)(current_inpacket_hdr+1);
+							if(current_inpacket_size!=sizeof(*req)+sizeof(packet_rtable_req::items[0])*repack_uint16(req->num_items)) { //invalid size
+								routing_needconfirm=2;
+								outlog_error("MESH session got CMD_RTABLE_REQ packet with invalid size %u, must be %u", unsigned(current_inpacket_size), unsigned(sizeof(*req)+sizeof(packet_rtable_req::items[0])*repack_uint16(req->num_items)));
+							} else {
+								outlog_notice("MESH session got CMD_RTABLE_REQ from %" IOT_PRIhostid, peer_host->host_id);
+								config->gwinst->meshcontroller->sync_routing_table_frompeer(this, req);
+								routing_needconfirm=1;
+							}
+							//TODO check signatures
+							on_commandq(); //to send confirmation if possible
+							break;
+						}
+						case CMD_SERVICE: {//service message received
+							packet_service* req=(packet_service*)(current_inpacket_hdr+1);
+							if(current_inpacket_size!=sizeof(*req)) { //invalid size
+								outlog_error("MESH session got CMD_SERVICE packet with invalid size %u, must be %u", unsigned(current_inpacket_size), unsigned(sizeof(*req)));
+								break;
+							}
+							//TODO check signatures
+							process_service_packet(req);
+							break;
+						}
+						case CMD_MESHTUN: {//tunnelled packet received. it can be processed locally or reassigned and proxied to another peer
+							packet_meshtun_hdr* req=(packet_meshtun_hdr*)(current_inpacket_hdr+1);
+							if(current_inpacket_size!=repack_uint32(req->datalen)+repack_uint16(req->hdrlen)) { //invalid size
+								outlog_error("MESH session got CMD_MESHTUN packet with invalid size %u, must be %u", unsigned(current_inpacket_size), unsigned(uint32_t(req->datalen)+req->hdrlen));
+								break;
+							}
+							//TODO check signatures
+							if(!process_meshtun_proxy_input(req)) goto stopses;
+							break;
+						}
+						default:
+							outlog_notice("MESH session got unknown command %d", int(current_inpacket_hdr->cmd));
+							assert(false);
+							goto stopses;
+					}
+
+					break;
+				}
+				if(ev==HEVENT_WRITE_READY) {
+					switch(cmdready) {
+//						case CMD_RTABLE_REQ:
+//							routing_syncing=false;
+//							config->gwinst->meshcontroller->confirm_routing_table_sync_topeer(this);//temporary until SRVCODE_RTABLE_UPDATED is implemented
+//							break;
+						case CMD_MESHTUN: {
+							assert(current_outmeshtun!=NULL);
+							if(current_outmeshtun->type==TUN_STREAM) {
+								process_meshtun_outputready(static_cast<iot_meshtun_stream_state*>((iot_meshtun_packet*)current_outmeshtun));
+							} else if(current_outmeshtun->type==TUN_FORWARDING) {
+								current_outmeshtun->set_closed(false);
+							} else if(current_outmeshtun->type==TUN_DATAGRAM) {
+								assert(false); //TODO
+							} else {
+								assert(false); //TUN_STREAM_LISTEN cannot be here
+							}
+							current_outmeshtun=NULL; //release reference as soon as possible (pop_meshtun() on next iteration requires much time)
+						}
+						default:
+							break;
+					}
+					on_commandq();
+					break;
+				}
+				break;
+			default:
+				outlog_notice("MESH session in WORKING state got to phase %d, event %d", int(phase), int(ev));
+		}
+
+		return;
+stopses:
+		stop(false);
+}
+
+
+bool iot_netproto_session_mesh::check_privileged_output(void) { //must be called when no output in progress
+//returns true if writing was initiated
+	assert(!current_outpacket_cmd);
+	//do checks for different service output in order of logical importance
+	if(routing_needconfirm) {
+		send_service_packet(SRVCODE_RTABLE_UPDATED, routing_needconfirm==1 ? 0 : 1, 0, 0, peer_host->get_origroutes_version());
+		routing_needconfirm=0;
+		return true;
+	}
+	if(!routing_syncing && peer_host->is_notify_routing_update()) {
+		if(config->gwinst->meshcontroller->sync_routing_table_topeer(this)) { //begin syncing routing table immediately
+			routing_syncing=true;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool iot_netproto_session_mesh::process_meshtun_local_input(packet_meshtun_hdr* req) {
+	//return value of false means to abort mesh session because of protocol error
+	iot_hostid_t srchost=repack_hostid(req->srchost);
+	uint16_t flags=repack_uint16(req->flags);
+
+	iot_objref_ptr<iot_meshtun_state> lstate;
+	if(!config->gwinst->meshcontroller->meshtun_find_bound(repack_uint16(req->protoid), repack_uint16(req->dstport), srchost, repack_uint16(req->srcport), lstate)) {
+		//not found. act accordongly to meshtun type
+		uint16_t reqflags=repack_uint16(req->flags);
+		if(reqflags & MTFLAG_STREAM) { //this is stream
+			outlog_notice("GOT stream packet of non-existing connection with proto %u on local port %u from host %" IOT_PRIhostid ", port %u. will RESET", unsigned(repack_uint16(req->protoid)), unsigned(repack_uint16(req->dstport)), srchost, repack_uint16(req->srcport));
+			if(reqflags & MTFLAG_STREAM_RESET) return true; //do nothing. this is RESET of non-existing connection
+			//else send RESET to peer
+			//TODO for now just do nothing
+			outlog_notice("GOT stream packet of non-existing connection with proto %u on local port %u from host %" IOT_PRIhostid ", port %u. will RESET", unsigned(repack_uint16(req->protoid)), unsigned(repack_uint16(req->dstport)), srchost, repack_uint16(req->srcport));
+			return true;
+		}
+		//this is datagram
+		assert(false); //TODO
+		//TODO
+		return true;
+	}
+	if(lstate->type==TUN_STREAM) {
+		if(!(flags & MTFLAG_STREAM)) return true; //ignore non streamed packets
+		if(!process_meshtun_input(static_cast<iot_meshtun_stream_state*>((iot_meshtun_state*)lstate), req)) return false;
+	} else if(lstate->type==TUN_STREAM_LISTEN) {
+		if((flags & (MTFLAG_STREAM | MTFLAG_STREAM_SYN))!=(MTFLAG_STREAM | MTFLAG_STREAM_SYN)) return true; //ignore non streamed or non SYN packets
+		if(!process_meshtun_input(static_cast<iot_meshtun_stream_listen_state*>((iot_meshtun_state*)lstate), req)) return false;
+	} else if(lstate->type==TUN_DATAGRAM) {
+		if(flags & MTFLAG_STREAM) return true; //ignore streamed packets
+		assert(false); //TODO
+	} else {
+		assert(false); //TUN_STREAM_FORWARDING cannot be here
+	}
+
+	return true;
+}
+
+bool iot_netproto_session_mesh::process_meshtun_proxy_input(packet_meshtun_hdr* req) {
+	//return value of false means to abort mesh session because of protocol error
+	iot_hostid_t dsthost=repack_hostid(req->dsthost);
+	iot_hostid_t srchost=repack_hostid(req->srchost);
+	
+	if(srchost==peer_host->gwinst->this_hostid) { //something is wrong if source host is ours
+		assert(false);
+		return false;
+	}
+
+	if(dsthost==peer_host->gwinst->this_hostid) {
+		//TODO process local destined packets
+		outlog_notice("GOT LOCAL MESHTUN FROM HOST %" IOT_PRIhostid, srchost);
+		if(!process_meshtun_local_input(req)) return false;
+		return true;
+	}
+
+	if(!srchost || !dsthost) {
+		return true; //ignore
+	}
+
+	if(req->ttl<=1) {
+		outlog_notice("Forwarded packet from host %" IOT_PRIhostid " to host %" IOT_PRIhostid " dropped due to TTL", srchost, dsthost);
+		return true;
+	}
+
+	iot_meshtun_forwarding* fw;
+	uint32_t sz=sizeof(iot_meshtun_forwarding)+repack_uint16(req->hdrlen);
+	fw=(iot_meshtun_forwarding*)coniface->allocator->allocate(sz);
+	if(!fw) {
+		outlog_notice("Cannot allocate %u bytes to forward packet from host %" IOT_PRIhostid " to host %" IOT_PRIhostid ", dropping it", sz, srchost, dsthost);
+		return true;
+	}
+	memcpy(fw+1, req, repack_uint16(req->hdrlen)); //save headers in the same buffer as iot_meshtun_forwarding
+	new(fw) iot_meshtun_forwarding(config->gwinst->meshcontroller, dsthost, srchost, (packet_meshtun_hdr*)(fw+1));
+	iot_objref_ptr<iot_meshtun_forwarding> fwptr=iot_objref_ptr<iot_meshtun_forwarding>(true, fw);
+
+	//now allocate memory for request body
+	sz=repack_uint32(req->datalen);
+	void *data;
+	if(sz>0) {
+		data=coniface->allocator->allocate(sz, true);
+		if(!data) { //no memory, drop packet
+			outlog_notice("Cannot allocate %u bytes for data to forward packet from host %" IOT_PRIhostid " to host %" IOT_PRIhostid ", dropping it", sz, srchost, dsthost);
+			return true; //fwptr will be released
+		}
+	} else data=NULL;
+
+	int err=fw->forward(data);
+	if(err) {
+		assert(false);
+		return true;
+	}
+
+	//on success request will be referenced by queue, so must not de deallocated
+	return true;
+}
+
+
+
+
+bool iot_netproto_session_mesh::process_meshtun_input(iot_meshtun_stream_listen_state *st, packet_meshtun_hdr* req) {
+	st->lock();
+	int err;
+	uint16_t metasize;
+	uint16_t flags;
+	packet_meshtun_stream *stream;
+	iot_meshtun_stream_listen_state::listenq_item it;
+
+	if(st->input_closed) {
+		err=IOT_ERROR_INVALID_STATE;
+		goto onexit;
+	}
+	assert(st->con!=NULL);
+
+	metasize=uint16_t(req->metalen64)<<3;
+	flags=repack_uint16(req->flags);
+	if(repack_uint16(req->hdrlen)<=sizeof(*req)+metasize+sizeof(packet_meshtun_stream)) { //signature size not included in sum, so no check for ==
+		assert(false);
+		err=IOT_ERROR_CRITICAL_ERROR;
+		goto onexit;
+	}
+	if(flags & (MTFLAG_STREAM_FIN | MTFLAG_STREAM_ACK | MTFLAG_STREAM_RESET)) { //check flags are correct for initial SYN request (STREAM and SYN checked in caller function)
+		err=IOT_ERROR_TRY_AGAIN;
+		goto onexit;
+	}
+
+	if(st->listenq.avail_write()<sizeof(it)+metasize) { //listen queue is overfilled
+		err=IOT_ERROR_TRY_AGAIN;
+		goto onexit;
+	}
+
+	stream=(packet_meshtun_stream *)(((char*)(req+1))+metasize);
+
+	it.remotehost=repack_hostid(req->srchost);
+	it.initial_sequence=repack_uint64(stream->data_sequence);
+	it.creation_time=0;
+	it.request_time=((iot_get_systime()+500000000)/1000000000)-1000000000; //round to integer seconds and offset by 1e9 seconds
+	it.peer_rwnd=repack_uint32(stream->rwndsize);
+	it.remoteport=repack_uint16(req->srcport);
+	it.metasize=metasize;
+	memcpy(it.random, stream->streamrandom, IOT_MESHPROTO_TUNSTREAM_IDLEN);
+	uint32_t res;
+	res=st->listenq.write(&it, sizeof(it));
+	if(res!=sizeof(it)) {
+		assert(false);
+		//force this listen socket to be closed
+		if(!st->get_error()) st->set_error(IOT_ERROR_CRITICAL_ERROR);
+		err=IOT_ERROR_INVALID_STATE;
+		goto onexit;
+	}
+	if(metasize>0) {
+		res=st->listenq.write(req->meta, metasize);
+		if(res!=metasize) {
+			assert(false);
+			//force this listen socket to be closed
+			if(!st->get_error()) st->set_error(IOT_ERROR_CRITICAL_ERROR);
+			err=IOT_ERROR_INVALID_STATE;
+			goto onexit;
+		}
+	}
+	st->input_pending=1;
+	st->on_state_update(st->UPD_READREADY);
+	err=0;
+onexit:
+	st->unlock();
+
+	if(err==IOT_ERROR_CRITICAL_ERROR) { //mesh session should be aborted
+		outlog_notice("CONNECTING TO LISTENING got protocol error");
+		return false;
+	}
+	if(err) {
+		outlog_notice("CONNECTING TO LISTENING got error: %s, ignoring request", kapi_strerror(err));
+		return true;
+	}
+	//here netcon must be notified abount connection request
+	return true;
+}
+
+bool iot_netproto_session_mesh::process_meshtun_input(iot_meshtun_stream_state *st, packet_meshtun_hdr* req) {
+	st->lock();
+	int err;
+	uint16_t metasize;
+	uint16_t flags;
+	packet_meshtun_stream *stream;
+
+	if(st->input_closed && !st->output_ack_pending) {
+		err=IOT_ERROR_INVALID_STATE;
+		goto onexit;
+	}
+	metasize=uint16_t(req->metalen64)<<3;
+	flags=repack_uint16(req->flags);
+	if(repack_uint16(req->hdrlen)<=sizeof(*req)+metasize+sizeof(packet_meshtun_stream)) { //signature size not included in sum, so no check for ==
+		assert(false);
+		err=IOT_ERROR_CRITICAL_ERROR;
+		goto onexit;
+	}
+
+	stream=(packet_meshtun_stream *)(((char*)(req+1))+metasize);
+
+	if(memcmp(stream->streamrandom, st->random, IOT_MESHPROTO_TUNSTREAM_IDLEN)!=0) {
+		//TODO send RESET
+		assert(false);
+	}
+
+	if(flags & MTFLAG_STREAM_RESET) {
+		outlog_notice("GOT RESET");
+		//TODO check data_sequence is acceptable
+		if(!st->get_error()) st->set_error(IOT_ERROR_CONN_RESET);
+		err=0;
+		goto onexit;
+	}
+	bool writeready;
+	writeready=false;
+
+	//apply ACK
+	if(st->output_ack_pending && (flags & MTFLAG_STREAM_ACK)) {
+		outlog_notice("GOT ACK = %llu", repack_uint64(stream->ack_sequence));
+		uint64_t sack_seq[IOT_MESHTUNSTREAM_MAXHOLES];
+		uint32_t sack_len[IOT_MESHTUNSTREAM_MAXHOLES];
+		uint64_t ack=repack_uint64(stream->ack_sequence)-st->initial_sequence_out;
+		if(stream->num_sack_ranges>0) {
+			assert(repack_uint32(stream->sack_ranges[0].offset)>0 && repack_uint32(stream->sack_ranges[0].len)>0);
+			sack_seq[0]=ack+repack_uint32(stream->sack_ranges[0].offset);
+			sack_len[0]=repack_uint32(stream->sack_ranges[0].len);
+			for(uint16_t i=1; i<stream->num_sack_ranges; i++) {
+				assert(repack_uint32(stream->sack_ranges[i].offset)>0 && repack_uint32(stream->sack_ranges[i].len)>0);
+				sack_seq[i]=sack_seq[i-1]+sack_len[i-1]+repack_uint32(stream->sack_ranges[i].offset);
+				sack_len[i]=repack_uint32(stream->sack_ranges[i].len);
+			}
+
+			if(sack_seq[stream->num_sack_ranges-1]+sack_len[stream->num_sack_ranges-1]>st->sequenced_out) { //got ACK greater than outputted sequence
+				assert(false);
+				err=IOT_ERROR_CRITICAL_ERROR;
+				goto onexit;
+			}
+		} else {
+			if(ack>st->sequenced_out) { //got ACK greater than outputted sequence
+				assert(false);
+				err=IOT_ERROR_CRITICAL_ERROR;
+				goto onexit;
+			}
+		}
+		st->ack_sequence_out_merge(ack, stream->num_sack_ranges, sack_seq, sack_len, uv_now(thread->loop));
+
+		if(!st->output_ack_pending && st->output_closed) writeready=true; //all output ready and no new output allowed, so check check if state can be closed by calling on_state_update(UPD_WRITEREADY)
+	}
+	uint64_t data_seq;
+	data_seq=repack_uint64(stream->data_sequence);
+	//apply SYN
+	if((flags & MTFLAG_STREAM_SYN) && st->state==st->ST_ESTABLISHED && st->input_closed && st->maxseen_sequenced_in==0 && !st->is_passive_stream) {
+		st->input_closed=0;
+		st->initial_sequence_in=data_seq;
+		outlog_notice("GOT SYN with sequence = %llu", st->initial_sequence_in);
+		st->sequenced_in=st->maxseen_sequenced_in=1; //account for received SYN
+		st->input_ack_pending=1; //mark that ACK must be sent
+
+		writeready=true;
+		data_seq++;
+	}
+
+	if(!st->input_closed && data_seq>st->initial_sequence_in) {
+		data_seq-=st->initial_sequence_in; //calculate relative seq number
+		uint32_t datalen;
+		datalen=repack_uint32(req->datalen);
+		uint32_t has_fin=(flags & MTFLAG_STREAM_FIN) ? 1 : 0;
+
+		if(datalen || has_fin) {
+			char* data=((char*)req)+repack_uint16(req->hdrlen);
+#ifndef NDEBUG
+			if(datalen>0) outlog_notice("GOT %u bytes of DATA", unsigned(datalen));
+			if(has_fin) outlog_notice("GOT FIN");
+#endif
+			st->indata_merge(data_seq, datalen, data, has_fin);
+			st->input_ack_pending=1; //mark that ACK must be sent
+			writeready=true;
+		}
+	}
+	if(writeready) {
+		st->on_state_update(st->UPD_WRITEREADY); //TODO do by timer to wait some small time for additional output
+	} else {
+		assert(flags & MTFLAG_STREAM_ACK);
+	}
+
+	err=0;
+onexit:
+	st->unlock();
+
+	if(err==IOT_ERROR_CRITICAL_ERROR) { //mesh session should be aborted
+		outlog_notice("PROCESSING READ got protocol error");
+		return false;
+	}
+	if(err) {
+		outlog_notice("PROCESSING READ got error: %s, ignoring request", kapi_strerror(err));
+		return true;
+	}
+	//here netcon must be notified abount connection request
+	return true;
+}
+
+
+bool iot_netproto_session_mesh::process_meshtun_output(iot_meshtun_stream_state *st, uint32_t delay, uint16_t pathlen) {
+	//here st must have refcount which accounts for current thread
+	bool rval=false;
+	st->lock();
+
+	int err;
+	switch(st->state) {
+		case st->ST_SENDING_SYN: //new client connection request
+		case st->ST_ESTABLISHED: {
+			iot_meshtun_stream_state::output_inprogress_t inprogbuf;
+			auto inprog=st->lock_output_inprogress(this, delay, 3, inprogbuf);
+			if(!inprog) break; //output already being done. just release reference
+
+			if(inprog->has_syn) {
+				outlog_notice("WRITING SYN TO HOST %" IOT_PRIhostid, st->connection_key.host);
+			}
+			if(inprog->has_fin) {
+				outlog_notice("WRITING FIN TO HOST %" IOT_PRIhostid, st->connection_key.host);
+			}
+
+			authtype_t atype=AUTHTYPE_UNSET; //TODO
+			uint32_t adatasz;
+			if(!choose_authtype(atype, adatasz)) {
+				st->unlock_output_inprogress(this, true);
+				st->set_error(IOT_ERROR_CRITICAL_ERROR);
+				break;
+			}
+
+			uint32_t metasz=0;
+			if(st->outmeta_data && inprog->seq_len>0) {
+				metasz=st->outmeta_size;
+				assert(metasz>0);
+				if(metasz%8!=0) metasz += 8 - metasz%8; //align to 8-byte
+			}
+
+			uint32_t headlen=sizeof(packet_meshtun_hdr)+metasz+sizeof(packet_meshtun_stream)+adatasz;
+
+			uint16_t flags=MTFLAG_STREAM;
+			if(inprog->has_syn) flags|=MTFLAG_STREAM_SYN;
+			if(inprog->has_fin) flags|=MTFLAG_STREAM_FIN;
+			if(!st->input_closed || st->input_ack_pending) {
+				flags|=MTFLAG_STREAM_ACK;
+				headlen+=sizeof(packet_meshtun_stream::sack_range_t)*st->num_in_dis;
+				outlog_notice("WRITING ACK %llu to HOST %" IOT_PRIhostid, st->sequenced_in+st->initial_sequence_in, st->connection_key.host);
+			}
+			uint32_t datalen=inprog->seq_len - inprog->has_syn - inprog->has_fin;
+			assert(datalen<IOT_MESHTUNSTREAM_MTU);
+			if(datalen) {
+				outlog_notice("WRITING %u bytes to HOST %" IOT_PRIhostid, unsigned(datalen), st->connection_key.host);
+			}
+
+			if(headlen>0xFFFF) {
+				assert(false);
+				st->unlock_output_inprogress(this, true);
+				st->set_error(IOT_ERROR_CRITICAL_ERROR);
+				break;
+			}
+
+			packet_hdr* hdr=prepare_packet_header(CMD_MESHTUN, headlen+datalen);
+			packet_meshtun_hdr *req=(packet_meshtun_hdr*)(hdr+1);
+			char* nextpart=((char*)(req+1))+metasz;
+
+			memset(req, 0, sizeof(*req)+metasz);
+			req->srchost=repack_hostid(peer_host->gwinst->this_hostid);
+			req->dsthost=repack_hostid(st->connection_key.host);
+
+			req->srcport=repack_uint16(st->connection_key.localport);
+			req->dstport=repack_uint16(st->connection_key.remoteport);
+			req->protoid=repack_uint16(st->protometa->type_id);
+			req->flags=repack_uint16(flags);
+
+			req->datalen=repack_uint32(datalen);
+			req->hdrlen=repack_uint16(uint16_t(headlen));
+
+			if(metasz>0) {
+				req->metalen64=uint8_t(metasz>>3);
+				memcpy(req->meta, st->outmeta_data, st->outmeta_size);
+			}
+			uint32_t ttl=config->gwinst->peers_registry->get_num_peers();
+			if(ttl>pathlen+4u) ttl=pathlen+4u;
+			req->ttl=ttl>256 ? 255 : ttl < 1 ? 1 : uint8_t(ttl-1);
+
+			packet_meshtun_stream *req_s=(packet_meshtun_stream*)nextpart;
+			nextpart=(char*)(req_s+1)+sizeof(sizeof(packet_meshtun_stream::sack_range_t))*st->num_in_dis;
+			memset(req_s, 0, sizeof(*req_s));
+
+			memcpy(req_s->streamrandom, st->random, sizeof(st->random));
+
+			assert(!inprog->has_syn || st->num_in_dis==0); //must not have incoming holes during SYN
+
+			if(flags & MTFLAG_STREAM_ACK) {
+				uint64_t ack=st->sequenced_in;
+				req_s->ack_sequence=repack_uint64(ack+st->initial_sequence_in);
+				for(uint16_t i=0;i<st->num_in_dis; i++) {
+					assert(st->sequenced_in_dis[i]>ack);
+					assert(st->sequenced_in_dis_len[i]>0);
+					req_s->sack_ranges[i].offset=repack_uint32(uint32_t(st->sequenced_in_dis[i]-ack));
+					req_s->sack_ranges[i].len=repack_uint32(uint32_t(st->sequenced_in_dis_len[i]));
+					ack=st->sequenced_in_dis[i]+st->sequenced_in_dis_len[i];
+				}
+				req_s->num_sack_ranges=st->num_in_dis;
+			} else {
+//				req_s->ack_sequence=repack_uint64(0); 0 is implied by memset
+//				req_s->num_sack_ranges=0; 0 is implied by memset
+			}
+
+			req_s->data_sequence=repack_uint64(inprog->seq_pos+st->initial_sequence_out);
+			req_s->rwndsize=repack_uint32(st->buffer_in.getsize());
+
+			//add signature after all headers
+			if(!fill_authdata(atype, nextpart, adatasz, (char*)hdr, sizeof(*hdr)+headlen-adatasz)) {
+				st->unlock_output_inprogress(this, true);
+				st->set_error(IOT_ERROR_CRITICAL_ERROR);
+				break;
+			}
+			if(datalen>0) { //there is data to send
+				nextpart+=adatasz;
+				assert(nextpart==(char*)(hdr+1)+headlen);
+
+				assert(inprog->seq_pos>=st->ack_sequenced_out);
+				uint32_t sz=st->buffer_out.peek(nextpart, datalen, inprog->seq_pos - st->ack_sequenced_out); //ack_sequenced_out corresponds to readpos of buffer_out
+				assert(sz==datalen);
+			}
+
+			st->on_state_update(st->UPD_WRITTEN);//=st->ST_SENDING_SYN;
+			st->unlock();
+
+			err=coniface->write_data(hdr, sizeof(*hdr)+headlen+datalen);
+			assert(err==0);
+			return true;
+		}
+		case st->ST_RESET: {
+			iot_meshtun_stream_state::output_inprogress_t inprogbuf;
+			auto inprog=st->lock_output_inprogress(this, delay, 2, inprogbuf);
+			if(!inprog) break; //output already being done. just release reference
+
+			outlog_notice("WRITING RESET TO HOST %" IOT_PRIhostid, st->connection_key.host);
+
+			authtype_t atype=AUTHTYPE_UNSET; //TODO
+			uint32_t adatasz;
+			if(!choose_authtype(atype, adatasz)) {
+				st->unlock_output_inprogress(this, true);
+				st->set_error(IOT_ERROR_CRITICAL_ERROR);
+				break;
+			}
+
+			uint32_t headlen=sizeof(packet_meshtun_hdr)+sizeof(packet_meshtun_stream)+adatasz;
+
+			if(headlen>0xFFFF) {
+				assert(false);
+				st->unlock_output_inprogress(this, true);
+				st->set_error(IOT_ERROR_CRITICAL_ERROR);
+				break;
+			}
+			uint16_t flags=MTFLAG_STREAM | MTFLAG_STREAM_RESET;
+
+			packet_hdr* hdr=prepare_packet_header(CMD_MESHTUN, headlen);
+			packet_meshtun_hdr *req=(packet_meshtun_hdr*)(hdr+1);
+			char* nextpart=((char*)(req+1));
+
+			req->srchost=repack_hostid(peer_host->gwinst->this_hostid);
+			req->dsthost=repack_hostid(st->connection_key.host);
+
+			req->srcport=repack_uint16(st->connection_key.localport);
+			req->dstport=repack_uint16(st->connection_key.remoteport);
+			req->protoid=repack_uint16(st->protometa->type_id);
+			req->flags=repack_uint16(flags);
+
+//			req->datalen=repack_uint32(0); 0 is implied
+			req->hdrlen=repack_uint16(uint16_t(headlen));
+
+			uint32_t ttl=config->gwinst->peers_registry->get_num_peers();
+			if(ttl>pathlen+4u) ttl=pathlen+4u;
+			req->ttl=ttl>256 ? 255 : ttl < 1 ? 1 : uint8_t(ttl-1);
+
+			packet_meshtun_stream *req_s=(packet_meshtun_stream*)nextpart;
+			nextpart=(char*)(req_s+1);
+			memset(req_s, 0, sizeof(*req_s));
+
+			memcpy(req_s->streamrandom, st->random, sizeof(st->random));
+
+//			req_s->ack_sequence=repack_uint64(0); 0 is implied
+//			req_s->num_sack_ranges=0; 0 is implied
+
+			req_s->data_sequence=repack_uint64(inprog->seq_pos+st->initial_sequence_out);
+//			req_s->rwndsize=repack_uint32(0); 0 is implied
+
+			//add signature after all headers
+			if(!fill_authdata(atype, nextpart, adatasz, (char*)hdr, sizeof(*hdr)+headlen-adatasz)) {
+				st->unlock_output_inprogress(this, true);
+				st->set_error(IOT_ERROR_CRITICAL_ERROR);
+				break;
+			}
+
+//MUST NOT BE DONE HERE for RESET			st->on_state_update(st->UPD_WRITTEN);
+			st->unlock();
+
+			err=coniface->write_data(hdr, sizeof(*hdr)+headlen);
+			assert(err==0);
+			return true;
+		}
+		default:
+			assert(false);
+	}
+//onexit:
+	st->unlock();
+	return rval;
+}
+
+void iot_netproto_session_mesh::process_meshtun_outputready(iot_meshtun_stream_state *st) {
+	st->lock();
+	switch(st->state) {
+		case st->ST_SENDING_SYN: //new SYN request was sent
+		case st->ST_ESTABLISHED: {
+			st->unlock_output_inprogress(this, true);
+//			if(!st->output_ack_pending || st->get_state()!=st->ST_SENDING_SYN) break;  //connection request was cancelled (got error, shutdown or detach or promoted to established)
+//			st->sequence_out_merge(current_outmeshtun_segment.data_sequence, 1 /*SYN occupies 1 byte len in sequence*/);
+			break;
+		}
+		case st->ST_RESET:
+			st->unlock_output_inprogress(this, true);
+			st->on_state_update(st->UPD_WRITTEN);
+//			if(!st->get_error()) st->set_error(IOT_ERROR_NO_PEER); //to finish stream existance
+			break;
+		default:
+			assert(false);
+	}
+
+	st->unlock();
+}
+
+//mesh session failed
+void iot_netproto_session_mesh::process_meshtun_outputaborted(iot_meshtun_stream_state *st) {
+	st->lock();
+	switch(st->state) {
+		case st->ST_SENDING_SYN: //new SYN request was sent
+		case st->ST_RESET:
+		case st->ST_ESTABLISHED:
+			st->unlock_output_inprogress(this, false);
+//			if(!st->output_ack_pending || st->get_state()!=st->ST_SENDING_SYN ||  //connection request was cancelled (got error, shutdown or detach or promoted to established)
+//				st->is_sequence_out_ACKed(current_outmeshtun_segment.data_sequence, 1 /*SYN occupies 1 byte len in sequence*/)  //SYN-ACK was received through another mesh session before end of write reported
+//			) break;// just release meshtun
+//			//else return temporary error to tell netcon to do quick retry
+//			st->set_error(IOT_ERROR_TRY_AGAIN);
+			break;
+//		case st->ST_ESTABLISHED:
+//			assert(false); //TODO
+//			break;
+		default: //illegal state
+			assert(false);
+	}
+	st->unlock();
+}
+
+bool iot_netproto_session_mesh::process_meshtun_output(iot_meshtun_forwarding *st) {
+	//here st must have refcount which accounts for current thread
+	bool rval=false;
+	st->lock();
+
+	int err;
+	switch(st->state) {
+		case st->ST_FORWARDING: { //send packet to next hop
+			assert(!current_outmeshtun);
+outlog_notice("FORWARDING PACKET TO HOST %" IOT_PRIhostid, peer_host->host_id);
+
+			packet_meshtun_hdr* sreq=st->request;
+
+			authtype_t atype=AUTHTYPE_UNSET; //TODO
+			uint32_t adatasz;
+			if(!choose_authtype(atype, adatasz)) {
+				st->set_error(IOT_ERROR_CRITICAL_ERROR);
+				break;
+			}
+
+			uint32_t headlen=repack_uint16(sreq->hdrlen);
+			uint32_t datalen=repack_uint32(sreq->datalen);
+
+			assert(datalen==0 || st->request_body!=NULL);
+
+			packet_hdr* hdr=prepare_packet_header(CMD_MESHTUN, headlen+datalen);
+			packet_meshtun_hdr *req=(packet_meshtun_hdr*)(hdr+1);
+
+			memcpy(req, sreq, headlen); //copy whole header
+
+			assert(req->ttl>0);
+			req->ttl--;
+
+			//update signature of headers
+			if(!fill_authdata(atype, ((char*)req)+headlen-adatasz, adatasz, (char*)hdr, sizeof(*hdr)+headlen-adatasz)) { //TODO fix. must ensure datasz here and in proxied packet are the same!
+				st->set_error(IOT_ERROR_CRITICAL_ERROR);
+				break;
+			}
+
+			if(datalen>0) {
+				memcpy(((char*)req)+headlen, st->request_body, datalen);
+			}
+
+			current_outmeshtun=st; //will increase refcount!
+
+			st->unlock();
+			err=coniface->write_data(hdr, sizeof(*hdr)+headlen+datalen);
+			assert(err==0);
+			return true;
+		}
+		case st->ST_RESET: { //send back error code
+//			packet_meshtun_hdr* sreq=st->request;
+			assert(false);
+			//TODO
+		}
+		default:
+			assert(false);
+	}
+//onexit:
+	st->unlock();
+	return rval;
+}
+
+
 void iot_netproto_session_mesh::on_commandq(void) {
 	assert(uv_thread_self()==thread->thread);
 	assert(state==STATE_WORKING);
 
-	if(peer_host->is_notify_routing_update() && !routing_pending) {
-		routing_pending=true;
-		if(!current_outpacket_cmd) config->gwinst->meshcontroller->sync_routing_table_topeer(this); //begin syncing immediately if nothing being sent right now
+	if(current_outpacket_cmd) return;
+	//can send immediately, check if any service mesh-session packet must be sent
+	if(check_privileged_output()) return;
+
+	//check mesh streams which wants output
+	if(has_activeroutes.load(std::memory_order_relaxed)) {
+		iot_objref_ptr<iot_peer> peers[IOT_MESHTUN_MAXDISTRIBUTION];
+		uint32_t delays[IOT_MESHTUN_MAXDISTRIBUTION];
+		uint16_t pathlens[IOT_MESHTUN_MAXDISTRIBUTION];
+		int num_peers=config->gwinst->meshcontroller->fill_peers_from_active_routes(this, peers, delays, pathlens, IOT_MESHTUN_MAXDISTRIBUTION); //will disable has_activeroutes if no active routes
+		//check mesh stream queue of peers in this order
+		for(int i=0;i<num_peers;i++) {
+			iot_objref_ptr<iot_meshtun_packet> tunpacket;
+			while((tunpacket=peers[i]->pop_meshtun())) {
+				if(tunpacket->type==TUN_STREAM) {
+					if(process_meshtun_output(static_cast<iot_meshtun_stream_state*>((iot_meshtun_packet*)tunpacket), delays[i], pathlens[i])) return; //stop if some output was initiated
+				} else if(tunpacket->type==TUN_FORWARDING) {
+					if(process_meshtun_output(static_cast<iot_meshtun_forwarding*>((iot_meshtun_packet*)tunpacket))) return; //stop if some output was initiated
+				} else if(tunpacket->type==TUN_DATAGRAM) {
+					assert(false); //TODO
+				} else {
+					assert(false); //TUN_STREAM_LISTEN cannot be here
+				}
+				tunpacket=NULL; //release reference as soon as possible (pop_meshtun() on next iteration requires much time)
+			}
+		}
 	}
 
 //	iot_meshses_command* com, *nextcom=comq.pop_all();

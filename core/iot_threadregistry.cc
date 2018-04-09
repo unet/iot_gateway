@@ -219,11 +219,12 @@ void iot_thread_item_t::remove_netcon(iot_netcon* netcon) {
 	bool became_empty=false;
 	datalock.lock();
 		assert(cpu_loading.load(std::memory_order_relaxed) >= iot_thread_loading[cpu_loadtp]);
-		assert(netcons_head!=NULL);
 
 		cpu_loading.fetch_sub(iot_thread_loading[cpu_loadtp], std::memory_order_relaxed);
-		BILINKLIST_REMOVE(netcon, next_inthread, prev_inthread);
-		if(!netcons_head) became_empty=true;
+		if(netcon->prev_inthread && netcons_head) { //netcon can be already removed from netcons_head list by thread shutdown. in such case became_empty must remain false
+			BILINKLIST_REMOVE(netcon, next_inthread, prev_inthread);
+			if(!netcons_head) became_empty=true;
+		}
 	datalock.unlock();
 
 	if(became_empty && thread_registry->is_shutting_down()) check_thread_load_ended();
@@ -404,7 +405,8 @@ void iot_thread_registry_t::on_thread_shutdown(iot_thread_item_t* thread) {
 		BILINKLIST_REMOVE(t, next_inthread, prev_inthread);
 	}
 	while(auto t=thread->netcons_head) {
-		BILINKLIST_REMOVE(t, next_inthread, prev_inthread);
+		BILINKLIST_REMOVE(t, next_inthread, prev_inthread); //must be done before calling destroy so that remove_netcon skipped call to check_thread_load_ended()
+		t->destroy();
 	}
 
 	if(thread!=main_thread_item) {

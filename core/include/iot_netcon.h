@@ -46,14 +46,16 @@ public:
 	//check if new write request can be added. must return:
 	//1 - write_data() can be called with request data
 	//0 - request writing is in progress, so iot_netproto_session::on_write_data_status() must be waited (no need to call can_write_data() again)
-	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
+////	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
+	//IOT_ERROR_INVALID_STATE - netcon is not in RUNNING state
 	virtual int can_write_data(void) = 0;
 
 	//try to add new write request. must return:
 	//0 - request successfully added. iot_netproto_session::on_write_data_status() will be called later after completion
-	//1 - request successfully added and ready, possible for blocking mode   //CANCELLED::iot_netproto_session::on_write_data_status() was already called before return from write_data()
+	//1 - request was finished. iot_netproto_session::on_write_data_status() was NOT CALLED
 	//IOT_ERROR_TRY_AGAIN - another request writing is in progress, so iot_netproto_session::on_write_data_status() must be waited
-	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
+	//IOT_ERROR_INVALID_STATE - (must not occur in debug mode) netcon is not in RUNNING state
+////	//IOT_ERROR_NOT_READY - no request being written but netcon object is not ready to write request. iot_netproto_session::on_can_write_data() will be called when netcon is ready
 	//IOT_ERROR_INVALID_ARGS - invalid arguments (databuf is NULL or datalen==0)
 	virtual int write_data(void *databuf, size_t datalen) = 0;
 	virtual int write_data(iovec *databufvec, int veclen) = 0;
@@ -79,9 +81,13 @@ private:
 
 
 //temporary place for mesh sessions protocol IDs registry
-#define MESHSES_PROTO_IOTGW 1
+#define MESHTUN_PROTO_IOTGW 1
 
-#define MESHSES_PROTO_MAX 1
+#define MESHTUN_PROTO_MAX 1
+
+//temporary place for netcontype IDs registry
+#define NETCONTYPE_TCP 1
+
 
 
 //metaclass which represents type of protocol for sessions
@@ -90,9 +96,11 @@ class iot_netprototype_metaclass {
 	iot_netprototype_metaclass* next;
 public:
 	const char* const type_name;
-	const uint16_t meshses_protoid; //non-zero protocol ID used for tunnelled connections over mesh network. zero value means that protocol has no registered ID and cannot be used over mesh.
-	const uint16_t meshses_maxport; //for mesh-able protocols determines maximum multiplicity of connections by this protocol between same pair of hosts over mesh network.
+	const uint16_t type_id; //non-zero protocol ID. zero value means that protocol has no registered ID and cannot be tunnelled over mesh network.
+	const uint16_t meshtun_maxport; //for mesh-able protocols determines maximum multiplicity of connections by this protocol between same pair of hosts over mesh network.
 									//so zero value means one connection is posssible, N means (N+1)*(N+1) connections
+	const bool can_meshtun; //shows if protocol can be tunnelled over mesh network (if type_id>0)
+	const bool meshtun_isstream; //shows if tunnelled mesh stream connection of this protocol is streamable (must guarantee ordering or packets) or not
 
 private:
 	static iot_netprototype_metaclass*& get_listhead(void) {
@@ -102,8 +110,8 @@ private:
 	iot_netprototype_metaclass(const iot_netprototype_metaclass&) = delete; //block copy-construtors and default assignments
 
 protected:
-	iot_netprototype_metaclass(const char* type_name, uint16_t meshses_protoid=0, uint16_t meshses_maxport=0):
-					type_name(type_name), meshses_protoid(meshses_protoid), meshses_maxport(meshses_maxport) {
+	iot_netprototype_metaclass(const char* type_name, uint16_t type_id=0, bool can_meshtun=false, bool meshtun_isstream=true, uint16_t meshtun_maxport=0):
+					type_name(type_name), type_id(type_id), meshtun_maxport(meshtun_maxport), can_meshtun(can_meshtun), meshtun_isstream(meshtun_isstream) {
 		iot_netprototype_metaclass*& head=get_listhead();
 		next=head;
 		head=this;
@@ -138,6 +146,9 @@ public:
 	const char* get_typename(void) const {
 		return meta->type_name;
 	}
+	uint16_t get_typeid(void) const {
+		return meta->type_id;
+	}
 	virtual uint8_t get_cpu_loading(void) { //must return maximal possible cpu loading caused by session of corresponding protocol with accounting of present config
 		//so if current protocol session can create one or several sessions of other protocols, maximal cpu loading of those protocols must be returned
 		return 0;
@@ -149,7 +160,9 @@ public:
 //		return is_valid;
 //	}
 //	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const = 0;
-	virtual int instantiate(iot_netconiface* con) = 0; //must assign provided ses with new session object
+	virtual int instantiate(iot_netconiface* con, iot_hostid_t meshtun_peer=0) = 0; //must create new session object. meshtun_peer will be set if session is created over mesh tunnel to specified peer host
+	virtual void meshtun_set_metadata(iot_meshtun_state* state) { //protocols having true can_meshtun can redefine this method to assign meta data to meshtun before meshtun is established
+	}
 };
 
 
@@ -211,7 +224,7 @@ public:
 //	}
 
 	virtual void on_write_data_status(int) = 0;
-	virtual void on_can_write_data(void) = 0;
+//	virtual void on_can_write_data(void) = 0;
 	virtual bool on_read_data_status(ssize_t nread, char* &databuf, size_t &databufsize) = 0;
 
 private:
@@ -240,9 +253,11 @@ class iot_netcontype_metaclass {
 	iot_netcontype_metaclass* next;
 public:
 	const char* const type_name;
+	const uint16_t type_id; //non-zero protocol ID. zero value means that protocol has no registered ID and cannot be proxied over mesh.
 	const bool is_uv; //true - uses iot_thread_item_t threads and its event loop, false - uses dedicated thread with custom (own) processing 
 					//(to use sync processing if no async possible or for better performance)
 	const bool is_stream; //shows if connection type guarantees sequencing of packets (e.g. TCP). otherwise UDP or raw ip/ethernet is assumed
+	const bool can_meshproxy; //true if this netcontype can be proxied through mesh stream (if type_id > 0). if there are several netcontype implementation (UV and nonUV), both must have same value for this flag
 
 private:
 	static iot_netcontype_metaclass*& get_listhead(void) {
@@ -253,14 +268,15 @@ private:
 	iot_netcontype_metaclass(const iot_netcontype_metaclass&) = delete; //block copy-construtors and default assignments
 
 protected:
-	iot_netcontype_metaclass(const char* type_name, bool is_uv, bool is_stream): type_name(type_name), is_uv(is_uv), is_stream(is_stream) {
+	iot_netcontype_metaclass(const char* type_name, uint16_t type_id, bool is_uv, bool is_stream, bool can_meshproxy=false): type_name(type_name), type_id(type_id), is_uv(is_uv), is_stream(is_stream), can_meshproxy(can_meshproxy) {
 		iot_netcontype_metaclass*& head=get_listhead();
 		next=head;
 		head=this;
 	}
 
 public:
-	static int from_json(json_object* json, iot_netproto_config* protoconfig, iot_netcon*& obj, bool is_server=false, iot_netconregistryiface* registry=NULL, bool prefer_ownthread=false) {
+	static int from_json(json_object* json, iot_netproto_config* protoconfig, iot_netcon*& obj, bool is_server=false, iot_netconregistryiface* registry=NULL, bool prefer_ownthread=false, bool allow_meshproxy=false) {
+		//allow_meshproxy shows if "proxy" key is searched in provided json to set up mesh proxied tunnel to provided point (i.e. connect to some IP and TCP port through another host, which is reachable by mesh network from this host)
 		json_object* val=NULL;
 		const char *type="tcp";//iot_netcontype_metaclass_tcp::object.type_name; //defalt type is 'tcp'
 		if(json_object_object_get_ex(json, "type", &val)) {
@@ -281,8 +297,19 @@ public:
 			outlog_error("connection type '%s' is unknown", type);
 			return IOT_ERROR_NOT_FOUND;
 		}
-		if(!prefer_ownthread != curmeta->is_uv) { //try to find preferable con type
-			curmeta=curmeta->next;
+		iot_hostid_t proxy=0;
+		if(allow_meshproxy && json_object_object_get_ex(json, "proxy", &val)) {
+			IOT_JSONPARSE_UINT(json, iot_hostid_t, proxy);
+			if(proxy) {
+				if(!meta->can_meshproxy || !meta->type_id) {
+					outlog_error("Connection type '%s' cannot be proxied through another host");
+					return IOT_ERROR_BAD_DATA;
+				}
+			}
+		}
+
+		if(!proxy && !prefer_ownthread != meta->is_uv) { //try to find preferable con type. not applicable to proxied connections
+			curmeta=meta->next;
 			while(curmeta) {
 				if(curmeta->is_uv==!prefer_ownthread && strcmp(curmeta->type_name, type)==0) {meta=curmeta;break;}
 				curmeta=curmeta->next;
@@ -295,12 +322,15 @@ public:
 				IOT_JSONPARSE_UINT(json, uint32_t, metric);
 			}
 		}
+		if(proxy) return iot_netcontype_metaclass::meshproxy_from_json(meta, proxy, json, protoconfig, obj, is_server, registry, metric);
 
 		return meta->p_from_json(json, protoconfig, obj, is_server, registry, metric);
 	}
 	virtual void destroy_netcon(iot_netcon* obj) const = 0; //must destroy netcon object in correct way (metaclass knows how its netcon objects are created)
 private:
 	virtual int p_from_json(json_object* json, iot_netproto_config* protoconfig, iot_netcon*& obj, bool is_server, iot_netconregistryiface* registry, uint32_t metric) const = 0; //must create netcon object from json params
+
+	static int meshproxy_from_json(iot_netcontype_metaclass* meta, iot_hostid_t proxyhost, json_object* json, iot_netproto_config* protoconfig, iot_netcon*& obj, bool is_server, iot_netconregistryiface* registry, uint32_t metric); //must create netcon object from json params
 };
 
 
@@ -380,10 +410,10 @@ public:
 		return metric;
 	}
 	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const = 0;
-	int start_uv(iot_thread_item_t* use_thread=NULL, bool=false);
+	int start_uv(iot_thread_item_t* use_thread=NULL, bool always_async=false, bool finish_init=false);
 	void on_startstop_msg(void);
-	int restart(void);
-	int destroy(void);
+	int restart(bool always_async=false);
+	int destroy(bool always_async=false);
 	int on_stopped(void); //finishes STOP operation in control thread
 	int assign_registryiface(iot_netconregistryiface *iface) {
 		assert(registry==NULL && iface!=NULL);

@@ -966,7 +966,7 @@ void iot_device_connection_t::c2d_ready(void) { //called by client after writing
 //void iot_device_connection_t::d2c_write_ready(void) { //called by client after reading data from d2c stream buffer if d2c.want_write is true
 //}
 
-void iot_device_connection_t::on_c2d_ready(void) { //processes IOT_MSG_CONNECTION_C2D_READREADY msg
+void iot_device_connection_t::on_c2d_ready(void) { //processes IOT_MSG_CONNECTION_C2D_READY msg
 	assert(driver_host==iot_current_hostid);
 	assert(state>=IOT_DEVCONN_READYDRV);
 
