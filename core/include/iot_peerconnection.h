@@ -60,11 +60,11 @@ private:
 	iot_netcon* cons_head=NULL; //list of active (client) connections initiated towards this peer
 	iot_objref_ptr<iot_netproto_config_mesh> meshprotocfg;
 	iot_objref_ptr<iot_netproto_config_iotgw> iotprotocfg;
-	iot_netcon_mesh* iotgw_clientcon=NULL; //mesh netcon used to create IOT GW session. this is client connection used to connect to this peer when its host id IS GREATER than this host
-
+//	iot_netcon_mesh* iotgw_clientcon=NULL; //mesh netcon used to create IOT GW session. this is client connection used to connect to this peer when its host id IS GREATER than this host
 
 	iot_spinlock seslistlock;
-	iot_netproto_session_iotgw *iotsessions_head=NULL; //seslistlock protected list of active IOTGW sessions to this peer
+	iot_objref_ptr<iot_netproto_session_iotgw> iotsession; //seslistlock protected active IOTGW session reference
+	iot_netconiface* iotnetcon=NULL; //seslistlock protected coniface of iotsession
 
 //ROUTING* - means that variable is accessed under corresponding R/W routing lock of mesh controller
 	iot_netproto_session_mesh *meshsessions_head=NULL; //ROUTING*. mesh controller controlled list of active MESH sessions to this peer.
@@ -110,7 +110,7 @@ private:
 										//first appropriate mesh session is used to sync routing table when session sees this flag. flag is reset after
 										//successful confirmation from peer, so it is possible that several sessions to same peer can transfer the same routing table and this is OK
 	bool origroutes_unknown_host=false; //true value means that origroutes has at least one entry with unknown host, so when configuration changes and new hosts configured, routes can be applied
-	volatile std::atomic<bool> is_unreachable={false}; //shows that there are no routes to this peer for at least IOT_MESHNET_NOROUTETIMEOUT seconds, and thus peer is treated as unreachable
+	volatile std::atomic<bool> is_unreachable={true}; //ROUTING* shows that there are no routes to this peer for at least IOT_MESHNET_NOROUTETIMEOUT seconds, and thus peer is treated as unreachable
 
 public:
 	iot_peer(iot_gwinstance* gwinst, iot_hostid_t hostid, object_destroysub_t destroysub, bool is_dynamic=true) : 
@@ -135,10 +135,9 @@ public:
 
 		assert(next==NULL && prev==NULL); //must be disconnected from registry
 
-		assert(iotsessions_head==NULL);
+		assert(iotsession==NULL);
 		assert(meshsessions_head==NULL);
 		assert(cons_head==NULL);
-		assert(iotgw_clientcon==NULL);
 
 		if(origroutes) {
 			iot_release_memblock(origroutes);
@@ -170,21 +169,55 @@ public:
 	bool check_is_reachable(void) {
 		return !is_unreachable.load(std::memory_order_relaxed);
 	}
-	void push_meshtun(const iot_objref_ptr<iot_meshtun_packet> &st, bool st_islocked=false) { //adds meshtun to outgoing queue for processing, increses refcount
+	bool push_meshtun(const iot_objref_ptr<iot_meshtun_packet> &st, bool st_islocked=false, iot_hostid_t avoid_peer_id=0, uint16_t maxpathlen=0xffff) { //adds meshtun to outgoing queue for processing, increases refcount
+	//returns false if no suitable sessions was found (peer is unroutable or filter was too strict)
 		if(!st_islocked) st->lock();
 		if(is_unreachable.load(std::memory_order_relaxed)) { //generate immediate error
 			if(!st->get_error()) st->set_error(IOT_ERROR_NO_ROUTE);
 			if(!st_islocked) st->unlock();
-			return;
+			return false;
 		}
 		st->ref(); //queue keeps regular pointers, so increase refcount manually
 		meshtunq.push((iot_meshtun_packet*)st);
 		if(!st_islocked) st->unlock();
-		gwinst->meshcontroller->route_meshtunq(this);
+		return gwinst->meshcontroller->route_meshtunq(this, avoid_peer_id, maxpathlen);
 	}
-	iot_objref_ptr<iot_meshtun_packet> pop_meshtun(void) { //returns next meshtun for processing. can be called from any thread
+	bool unpop_meshtun(const iot_objref_ptr<iot_meshtun_packet> &st, bool st_islocked=false, iot_hostid_t avoid_peer_id=0, uint16_t maxpathlen=0xffff) { //adds meshtun to HEAD of outgoing queue for processing, increases refcount
+	//returns false if no suitable sessions was found (peer is unroutable or filter was too strict)
+		if(!st_islocked) st->lock();
+		if(is_unreachable.load(std::memory_order_relaxed)) { //generate immediate error
+			if(!st->get_error()) st->set_error(IOT_ERROR_NO_ROUTE);
+			if(!st_islocked) st->unlock();
+			return false;
+		}
+		st->ref(); //queue keeps regular pointers, so increase refcount manually
 		uv_mutex_lock(&meshtunq_lock);
-		iot_meshtun_packet* st=meshtunq.pop();
+		meshtunq.unpop((iot_meshtun_packet*)st);
+		uv_mutex_unlock(&meshtunq_lock);
+		if(!st_islocked) st->unlock();
+		return gwinst->meshcontroller->route_meshtunq(this, avoid_peer_id, maxpathlen);
+	}
+	iot_objref_ptr<iot_meshtun_packet> pop_meshtun(iot_hostid_t sesviahost=0, uint16_t pathlen=0xffff) { //returns next meshtun for processing. can be called from any thread
+		iot_meshtun_packet *skipped_head=NULL, *skipped_tail=NULL;
+		iot_meshtun_packet* st;
+		uv_mutex_lock(&meshtunq_lock);
+		do {
+			st=meshtunq.pop();
+			if(!st || st->type!=TUN_FORWARDING) break;
+			iot_meshtun_forwarding *fw=static_cast<iot_meshtun_forwarding*>((iot_meshtun_packet*)st);
+			if(!fw->from_host || (fw->from_host!=sesviahost && fw->request->ttl>=pathlen)) break;
+			//here we got forwarding request which cannot be forwarded via session to sesviahost or path is too long. request must be skipped
+			st->next.store(NULL, std::memory_order_relaxed);
+			if(!skipped_tail) {
+				skipped_head=skipped_tail=st;
+			} else {
+				skipped_tail->next.store(st, std::memory_order_relaxed);
+				skipped_tail=st;
+			}
+		} while(1);
+		//here st contains allowed request or is NULL if no such requests found
+		//skipped_head list of requests must be reinjected
+		if(skipped_head) meshtunq.unpop_list(skipped_head);
 		uv_mutex_unlock(&meshtunq_lock);
 		return iot_objref_ptr<iot_meshtun_packet>(true, st); //additional refcount is kept by iot_objref_ptr
 	}
@@ -198,45 +231,23 @@ public:
 		}
 		return false;
 	}
+	void abort_meshtuns(int err) { //removes all meshtuns from queue
+		uv_mutex_lock(&meshtunq_lock);
+		iot_meshtun_packet* st=meshtunq.pop_all();
+		uv_mutex_unlock(&meshtunq_lock);
 
-	void on_meshroute_set(void) { //called by mesh controller when first route in routeslist_head appears. called with active W-routing lock
-		outlog_notice("Got first route to host %" IOT_PRIhostid, host_id);
-		//create client mesh stream from lower host id to greater
-		if(host_id<gwinst->this_hostid) return;
-
-		if(!iotprotocfg) { //init IOT protocol config on first request
-			iotprotocfg=iot_objref_ptr<iot_netproto_config_iotgw>(true, new iot_netproto_config_iotgw(gwinst, this, object_destroysub_delete, true));
-			if(!iotprotocfg) goto nomem;
-//iotprotocfg->debug=true;
+		while(st) {
+			iot_meshtun_packet *next=st->next.load(std::memory_order_relaxed);
+			st->lock();
+			if(!st->get_error()) st->set_error(err);
+			st->unlock();
+			st->unref();
+			st=next;
 		}
+	}
 
-		if(!iotgw_clientcon) {
-			iotgw_clientcon=iot_netcontype_metaclass_mesh::allocate_netcon((iot_netproto_config_iotgw*)iotprotocfg);
-			if(!iotgw_clientcon) goto nomem;
-			int err;
-			err=iotgw_clientcon->init_client(gwinst->meshcontroller, host_id, 0);
-			if(err) { //invalid args? no slots? TODO
-				iotgw_clientcon->meta->destroy_netcon(iotgw_clientcon);
-				iotgw_clientcon=NULL;
-				assert(false); 
-				return;
-			}
-			iotgw_clientcon->start_uv(NULL, true); //force async start to leave routing lock
-		} else {
-			iotgw_clientcon->on_meshtun_event(iotgw_clientcon->EVENT_GOTROUTE); //wake up from NO_ROUTE error
-		}
-		return;
-nomem:
-		assert(false);
-		//TODO retry on timer?
-	}
-	void on_meshroute_reset(void) { //called by mesh controller when last route in routeslist_head disappears. called with active W-routing lock
-		outlog_notice("Lost last route to host %" IOT_PRIhostid, host_id);
-//		if(iotgw_clientcon) {
-//			iotgw_clientcon->destroy();
-//			iotgw_clientcon=NULL;
-//		}
-	}
+	int start_iot_session(void);
+	void stop_iot_session(void); //asks IOT session to stop gracefully
 /*	bool is_failed(void) { //check if peer can be treated as dead
 		if(state<STATE_INITIALSYNCING && uv_now(main_loop)-state_time>10000) return true;
 		return false;
@@ -254,10 +265,10 @@ private:
 	int resize_origroutes_buffer(uint32_t n, iot_memallocator* allocator);
 	void on_graceful_shutdown(void) {
 		reset_connections();
-		if(iotgw_clientcon) {
-			iotgw_clientcon->destroy();
-			iotgw_clientcon=NULL;
-		}
+//		if(iotgw_clientcon) {
+//			iotgw_clientcon->destroy();
+//			iotgw_clientcon=NULL;
+//		}
 	}
 };
 
@@ -303,7 +314,7 @@ class iot_peers_registry_t : public iot_netconregistryiface {
 	iot_objref_ptr<iot_netproto_config_mesh> listenprotocfg;
 	iot_objref_ptr<iot_netproto_config_iotgw> iotlistenprotocfg;
 
-	iot_netcon_mesh* iotgw_listencon=NULL; //listening mesh netcon used to accept IOT GW sessions. connecting peer must have LOWER host id than this host
+//	iot_netcon_mesh* iotgw_listencon=NULL; //listening mesh netcon used to accept IOT GW sessions. connecting peer must have LOWER host id than this host
 
 public:
 	iot_gwinstance* const gwinst;
@@ -346,11 +357,6 @@ public:
 				BILINKLIST_REMOVE(cur, registry_next, registry_prev);
 			}
 
-			if(p->iotgw_clientcon) {
-				p->iotgw_clientcon->destroy();
-				p->iotgw_clientcon=NULL;
-			}
-
 			p->unref();
 		}
 		assert(num_peers.load(std::memory_order_relaxed)==0);
@@ -366,10 +372,10 @@ public:
 //			cons=NULL;
 //			objid_keys=NULL;
 //		}
-		if(iotgw_listencon) {
-			iotgw_listencon->destroy();
-			iotgw_listencon=NULL;
-		}
+//		if(iotgw_listencon) {
+//			iotgw_listencon->destroy();
+//			iotgw_listencon=NULL;
+//		}
 
 		uv_mutex_unlock(&datamutex);
 		uv_rwlock_wrunlock(&peers_lock);
@@ -460,6 +466,8 @@ public:
 					new(p) iot_peer(gwinst, hostid, object_destroysub_memblock, true); //refcount will be 1
 					BILINKLIST_INSERTHEAD(p, peers_head, next, prev);
 					num_peers.fetch_add(1, std::memory_order_relaxed);
+
+					p->start_iot_session();
 //p->debug=true;
 				}
 			}
@@ -479,19 +487,22 @@ onexit:
 
 	int add_listen_connections(json_object *json, bool prefer_ownthread=false); //add several server (listening) connections by given JSON array with parameters for iot_netcon-derived classes
 
+	void on_meshroute_set(iot_peer* peer);
+	void on_meshroute_reset(iot_peer* peer);
+
 	int start_iot_listen(void) { //must be started to start listening for IOTGW connections over mesh network
-		if(iotgw_listencon) return IOT_ERROR_NO_ACTION;
+//		if(iotgw_listencon) return IOT_ERROR_NO_ACTION;
 		if(!iotlistenprotocfg) {
 			assert(false);
 			return IOT_ERROR_NOT_INITED;
 		}
-		iotgw_listencon=iot_netcontype_metaclass_mesh::allocate_netcon((iot_netproto_config_iotgw*)iotlistenprotocfg);
+		auto iotgw_listencon=iot_netcontype_metaclass_mesh::allocate_netcon((iot_netproto_config_iotgw*)iotlistenprotocfg);
 		if(!iotgw_listencon) return IOT_ERROR_NO_MEMORY;
 		int err;
-		err=iotgw_listencon->init_server(gwinst->meshcontroller, 0);
+		err=iotgw_listencon->init_server(gwinst->meshcontroller, 0, this);
 		if(err) { //invalid args? no slots? TODO
 			iotgw_listencon->meta->destroy_netcon(iotgw_listencon);
-			iotgw_listencon=NULL;
+//			iotgw_listencon=NULL;
 			assert(false);
 			return err;
 		}
@@ -521,6 +532,10 @@ onexit:
 //		}
 //		assign_con(conobj, newidx);
 //		conobj->assign_objid(iot_objid_t(iot_objid_t::OBJTYPE_PEERCON, newidx, objid_keys[newidx]));
+
+//		if(conobj->protoconfig && conobj->protoconfig->get_metaclass()==&iot_netprototype_metaclass_iotgw::object) {
+//		}
+
 		if(!conobj->protoconfig || !conobj->protoconfig->customarg) {
 			BILINKLIST_INSERTHEAD(conobj, passive_cons_head, registry_next, registry_prev);
 		} else {

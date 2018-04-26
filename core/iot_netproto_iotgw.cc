@@ -60,7 +60,7 @@ iot_netproto_session_iotgw::iot_netproto_session_iotgw(iot_netconiface* coniface
 		}
 	}
 iot_netproto_session_iotgw::~iot_netproto_session_iotgw() {
-		if(peer_host && peer_prev) {
+		if(peer_host/* && peer_prev*/) {
 			peer_host->on_dead_iotsession(this);
 		}
 		//todo do something with requests in queue
@@ -68,17 +68,16 @@ iot_netproto_session_iotgw::~iot_netproto_session_iotgw() {
 			current_outpacket->on_session_close();
 			current_outpacket=NULL;
 		}
-		for(iot_gwprotoreq* nextreq, *curreq=outpackets_head; curreq; curreq=nextreq) {
-			nextreq=curreq->next;
+		iot_gwprotoreq *curreq;
+		while((curreq=outpackets_head)) {
 			BILINKLISTWT_REMOVE(curreq, next, prev);
 			curreq->on_session_close();
 		}
-		for(iot_gwprotoreq* nextreq, *curreq=waitingpackets_head; curreq; curreq=nextreq) {
-			nextreq=curreq->next;
+		while((curreq=waitingpackets_head)) {
 			BILINKLISTWT_REMOVE(curreq, next, prev);
 			curreq->on_session_close();
 		}
-		outlog_notice("IOTGW SESSION DESTROYED");
+		outlog_debug_iotgw("IOTGW SESSION DESTROYED");
 	}
 
 
@@ -87,13 +86,17 @@ int iot_netproto_session_iotgw::start(void) {
 
 		if(!peer_host) { //this should be listening side of connection which yet doesn't know its peer, setup timer to get intoduction from other side
 		} else { //if(!introduced) { //this is connecting side of connection which knows its peer (as it should be according to config) and introduction to another side is required
+			assert(introduced);
 			iot_gwprotoreq_introduce* req=iot_gwprotoreq_introduce::create_out_request(coniface->allocator);
 			if(!req) return IOT_ERROR_NO_MEMORY;
 			add_req(req);
+
+			peer_host->on_new_iotsession(this);
 		}
 		readbuf_offset=0;
 		int err=coniface->read_data(readbuf, sizeof(readbuf));
-		return err;
+		assert(err>=0);
+		return 0;
 	}
 
 void iot_netproto_session_iotgw::on_stop(bool graceful) {
@@ -135,7 +138,7 @@ void iot_netproto_session_iotgw::on_stop(bool graceful) {
 			}
 		}
 		//initiate/continue hard stop
-		if(peer_host && peer_prev) { //unregister from peer
+		if(peer_host/* && peer_prev*/) { //unregister from peer
 			peer_host->on_dead_iotsession(this);
 		}
 
@@ -238,8 +241,8 @@ int iot_netproto_session_iotgw::on_introduce(iot_gwprotoreq_introduce* req, iot_
 			if(host_id!=0) peer_host=config->gwinst->peers_registry->find_peer(host_id);
 			if(!peer_host) return iot_gwprotoreq_introduce::ERRCODE_UNKNOWN_HOST;
 			introduced=true;
+			peer_host->on_new_iotsession(this);
 		}
-		if(!peer_prev) peer_host->on_new_iotsession(this);
 		return 0;
 	}
 

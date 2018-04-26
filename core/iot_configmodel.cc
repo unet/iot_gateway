@@ -352,7 +352,7 @@ bool iot_nodemodel::execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal
 	}
 	//sync mode
 	if(is_sync==1) { //delayed sync execution
-		outlog_debug("Scheduling delayed sync execution for node %" IOT_PRIiotid, node_id);
+		outlog_debug_modelling("Scheduling delayed sync execution for node %" IOT_PRIiotid, node_id);
 		msg->bytearg=0;
 		modinstlk.modinst->thread->send_msg(msg);
 		msg=NULL;
@@ -361,7 +361,7 @@ bool iot_nodemodel::execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal
 	//simple sync mode
 	assert(modinstlk.modinst->thread==main_thread_item);
 
-	outlog_debug("Doing simple sync execution for node %" IOT_PRIiotid, node_id);
+	outlog_debug_modelling("Doing simple sync execution for node %" IOT_PRIiotid, node_id);
 	return do_execute(false, msg, outsignals);
 }
 
@@ -401,7 +401,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 			}
 			//check value type is compatible
 			if(!node_iface->valueinput[j].is_compatible(item->data)) {
-				outlog_debug("New value for input %u of node %" IOT_PRIiotid " is not compatible with config (is type '%s', must be type '%s')", unsigned(j), node_id, item->data ? item->data->get_typename() : "UNDEF", node_iface->valueinput[j].dataclass->type_name);
+				outlog_debug_modelling("New value for input %u of node %" IOT_PRIiotid " is not compatible with config (is type '%s', must be type '%s')", unsigned(j), node_id, item->data ? item->data->get_typename() : "UNDEF", node_iface->valueinput[j].dataclass->type_name);
 				continue;
 			}
 			if(item->data==valuesignals[j].prev_value || (item->data && valuesignals[j].prev_value && *(item->data)==*(valuesignals[j].prev_value))) continue; //value unchanged
@@ -453,7 +453,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 	}
 
 	int err=static_cast<iot_node_base*>(modinst->instance)->process_input_signals(eventid, node_iface->num_valueinputs, valuesignals, node_iface->num_msginputs, msgsignals);
-printf("Got error %d from process_input_signals of node %" IOT_PRIiotid "\n", err, node_id);
+	outlog_debug_modelling("Got error %d from process_input_signals of node %" IOT_PRIiotid, err, node_id);
 	//now release previous values (instance will incref if it needs to keep some)
 	for(uint16_t i=0; i<node_iface->num_valueinputs; i++)
 		if(valuesignals[i].prev_value && valuesignals[i].prev_value!=valuesignals[i].new_value) valuesignals[i].prev_value->release();
@@ -509,7 +509,7 @@ int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8
 		if(!syncexec.result_set() && reason_eventid && syncexec.event_id==*reason_eventid) { //this is first call to this func
 			sync=true;//modinstlk.modinst->thread==main_thread_item ? sync : 1; //this->is_sync can be accessed from main thread only
 		} else { //this is repeated call or with another reason event
-			outlog_debug("Node %" IOT_PRIiotid " sets output for event %" PRIu64 " during sync execution of event %" PRIu64, reason_eventid ? reason_eventid->numerator : 0, syncexec.event_id);
+			outlog_debug_modelling("Node %" IOT_PRIiotid " sets output for event %" PRIu64 " during sync execution of event %" PRIu64, reason_eventid ? reason_eventid->numerator : 0, syncexec.event_id);
 			sync=false;
 			if(syncexec.result_set()) { //there was first call with correct reason event. must send it out
 				iot_release_msg(syncexec.msg, true); //leave only msg struct

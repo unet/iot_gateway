@@ -357,7 +357,7 @@ iot_thread_item_t* iot_thread_registry_t::assign_thread(uint8_t cpu_loadtp){ //f
 		if(thitem->init()) {delete thitem; goto onerr;}
 		BILINKLIST_INSERTHEAD(thitem, threads_head, next, prev);
 		num_threads++;
-		outlog_notice("New thread created with ID %u", thitem->thread_id);
+		outlog_debug("New thread created with ID %u", thitem->thread_id);
 		return thitem;
 
 onerr:

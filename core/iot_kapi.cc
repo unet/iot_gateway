@@ -497,7 +497,7 @@ template <bool shared> int iot_fixprec_timer<shared>::init(uint32_t prec_, uint6
 		assert(!wheelbuf); //forbid double init
 
 		if(prec_==0 || maxdelay_<prec_) return IOT_ERROR_INVALID_ARGS;
-		uint64_t num=(maxdelay_ + prec_/2) / prec_ + 1;
+		uint64_t num=(maxdelay_ + prec_/2) / prec_ + 2;
 		if(num>2048) return IOT_ERROR_INVALID_ARGS;
 		thread=thread_registry->find_thread(uv_thread_self());
 		if(!thread) {

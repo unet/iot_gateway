@@ -66,6 +66,11 @@ int iot_netcon::start_uv(iot_thread_item_t* use_thread, bool always_async, bool 
 			return 0;
 		}
 
+		if(commsg_pending.test_and_set(std::memory_order_acq_rel)) { //here this flag must be always unset
+			assert(false);
+			return IOT_ERROR_NOT_READY;
+		}
+
 		assert(com_msg.is_free());
 		iot_threadmsg_t *msg=&com_msg;
 		int err=iot_prepare_msg(msg,IOT_MSG_NETCON_STARTSTOP, NULL, 0, this, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
@@ -84,6 +89,7 @@ void iot_netcon::on_startstop_msg(void) {
 	assert(uv_thread_self() == thread->thread);
 
 	com_msg.clear();
+	commsg_pending.clear(std::memory_order_release); //this is end of critical section which could be initiated in restart()
 
 	state_t curstate=state.load(std::memory_order_acquire);
 	if(curstate==STATE_STARTING) { //this is initial start which could be cancelled
@@ -101,14 +107,22 @@ void iot_netcon::on_startstop_msg(void) {
 	}
 	//must be in STATE_STARTED
 	assert(curstate==STATE_STARTED);
-	do_stop();
+	if(graceful_sesstop && protosession) { //graceful stop of session requested
+		protosession->stop(true);
+	} else {
+		do_stop();
+	}
 }
 
 
 //errors
 //IOT_ERROR_NOT_READY - destroying will began in async way
-int iot_netcon::destroy(bool always_async) {
+int iot_netcon::destroy(bool always_async, bool graceful_stop) {
 	destroy_pending=true;
+
+	char outbuf[256];
+	sprint(outbuf, sizeof(outbuf));
+outlog_debug("Netcon %s is destroying", outbuf);
 
 	std::atomic_thread_fence(std::memory_order_acq_rel);
 
@@ -132,41 +146,64 @@ int iot_netcon::destroy(bool always_async) {
 		break;
 	} while(1);
 	//here state is STARTED
-	return restart(always_async);
+	return restart(always_async, graceful_stop);
 }
 
-int iot_netcon::restart(bool always_async) {
+int iot_netcon::restart(bool always_async, bool graceful_stop) {
 	state_t curstate=state.load(std::memory_order_acquire);
 	if(curstate!=STATE_STARTED) return IOT_ERROR_NO_ACTION;
 
-	if(stop_pending.test_and_set(std::memory_order_acq_rel)) return IOT_ERROR_NOT_READY;
+	if(gracefulstop_pending.test_and_set(std::memory_order_acq_rel)) { //set gracefulstop_pending on any type of restart
+		//here either graceful or hard restart was already initiated
+		if(graceful_stop) return IOT_ERROR_NOT_READY; //
+		//else try to initiate hard restart
+		if(stop_pending.test_and_set(std::memory_order_acq_rel)) return IOT_ERROR_NOT_READY; //hard stop already in progress
+	} else { //neither type of restart was initiated, so both types can be initiated now
+		//only one thread can arrive here for started netcon which was not requested to restart
+		if(!graceful_stop)
+			if(stop_pending.test_and_set(std::memory_order_acq_rel)) return IOT_ERROR_NOT_READY;
+	}
 	//only one thread can arrive here for started netcon
+	graceful_sesstop=graceful_stop;
 
 	if(!always_async && uv_thread_self() == thread->thread) {
 		return do_stop();
 	}
 
-	assert(com_msg.is_free()); //state is STARTED, so msg must be free already
+	//try to start critical section till execution of on_startstop_msg() or end of on_stopped()
+	if(commsg_pending.test_and_set(std::memory_order_acq_rel)) { //msg can be busy when we had previous graceful stop request and now we have hard OR if on_stopped is in progress
+		return IOT_ERROR_NOT_READY;
+	}
+	assert(com_msg.is_free());
+
 	iot_threadmsg_t *msg=&com_msg;
 	int err=iot_prepare_msg(msg,IOT_MSG_NETCON_STARTSTOP, NULL, 0, this, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
 	if(err) {
 		assert(false);
+		commsg_pending.clear(std::memory_order_release);
 		stop_pending.clear(std::memory_order_release);
+		gracefulstop_pending.clear(std::memory_order_release);
 		return err;
 	}
 	thread->send_msg(msg);
 	return IOT_ERROR_NOT_READY;
 }
 
-int iot_netcon::on_stopped(void) { //finishes STOP operation for base class
+int iot_netcon::on_stopped(void) { //finishes hard STOP operation for base class
 	state_t curstate=state.load(std::memory_order_acquire);
 	assert(curstate!=STATE_STARTED || uv_thread_self() == thread->thread);
 
-	if(curstate==STATE_STARTED && !com_msg.is_free()) return IOT_ERROR_NOT_READY; //msg is in fly. wait for it to arrive
+	if(commsg_pending.test_and_set(std::memory_order_acq_rel)) { //msg is busy till execution of on_startstop_msg()
+		assert(curstate==STATE_STARTED);
+		graceful_sesstop=false; //switch to hard stop in case graceful stop was scheduled
+		return IOT_ERROR_NOT_READY;
+	}
+	assert(com_msg.is_free());
+
 	char outbuf[256];
 	sprint(outbuf, sizeof(outbuf));
-	if(destroy_pending || is_passive || curstate!=STATE_STARTED || thread_registry->is_shutting_down()) {
-outlog_notice("Netcon %s (%lu) stopped, destroying...", outbuf, uintptr_t(this));
+	if(destroy_pending || is_passive || curstate!=STATE_STARTED || thread_registry->is_shutting_down() || (protoconfig->gwinst && protoconfig->gwinst->is_shutdown)) {
+outlog_debug("Netcon %s (%lu) stopped, destroying...", outbuf, uintptr_t(this));
 		if(registry && registry_prev) {
 			registry->on_destroyed_connection(this);
 			registry=NULL;
@@ -176,8 +213,12 @@ outlog_notice("Netcon %s (%lu) stopped, destroying...", outbuf, uintptr_t(this))
 		return IOT_ERROR_OBJECT_INVALIDATED;
 	}
 	//restart
-outlog_notice("Netcon %s stopped, restarting...", outbuf);
+outlog_debug("Netcon %s stopped, restarting...", outbuf);
+
+	commsg_pending.clear(std::memory_order_release);
 	stop_pending.clear(std::memory_order_release);
+	gracefulstop_pending.clear(std::memory_order_release);
+
 	if(meta->is_uv) {
 		do_start_uv();
 	}
@@ -188,56 +229,6 @@ outlog_notice("Netcon %s stopped, restarting...", outbuf);
 }
 
 
-
-/*
-int iot_netcon::on_stopped(bool ismsgproc) { //finishes STOP operation in control thread OR sends message to control thread. ismsgproc is used internally and must be
-											//false if not in processing of IOT_MSG_NETCON_STOPPED
-outlog_error("on_stopped for %lu", uintptr_t(this));
-		if(uv_thread_self()==control_thread_item->thread) {
-			iot_thread_item_t* use_thread=NULL;
-			bool needrestart=false;
-			if(state==STATE_STARTED) {
-				assert(stop_pending);
-				state=STATE_INITED;
-				stop_pending=false;
-				needrestart=true;
-				if(meta->is_uv) {
-					assert(thread!=NULL);
-					use_thread=thread;
-					thread->remove_netcon(this); //will nullify thread pointer
-				}
-			}
-			char outbuf[256];
-			sprint(outbuf, sizeof(outbuf));
-			if(destroy_pending || is_passive || !needrestart || thread_registry->is_shutting_down()) {
-outlog_notice("Netcon %s (%lu) stopped, destroying...", outbuf, uintptr_t(this));
-				if(registry && registry_prev) {
-					registry->on_destroyed_connection(this);
-					registry=NULL;
-				}
-				state=STATE_UNINITED;
-				meta->destroy_netcon(this);
-				return IOT_ERROR_OBJECT_INVALIDATED;
-			} else { //restart
-outlog_notice("Netcon %s stopped, restarting...", outbuf);
-				if(meta->is_uv) {
-					int err=start_uv(use_thread);
-					assert(err==0); //restart must succeed
-				} //else //TODO
-			}
-			return 0;
-		}
-		if(ismsgproc) { //should not happen
-			assert(false);
-			return IOT_ERROR_CRITICAL_BUG;
-		}
-		iot_threadmsg_t* msg=start_msg && start_msg->is_free() ? start_msg : NULL; //use start_msg if it was allocated and is already free, otherwise new msg will be allocated
-		int err=iot_prepare_msg(msg,IOT_MSG_NETCON_STOPPED, NULL, 0, this, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
-		if(err) return err;
-		control_thread_item->send_msg(msg); //processing will call this func again with ismsgproc=true
-		return IOT_ERROR_OBJECT_INVALIDATED; //always return such error when async signal is sent because we cannot be sure destroy_pending isn't ot will not be set at any point in time
-	}
-*/
 
 iot_netcontype_metaclass_tcp iot_netcontype_metaclass_tcp::object;
 

@@ -328,6 +328,15 @@ private:
 	virtual uint8_t p_get_cpu_loading(void) override { //must return pure cpu loading of netcon layer implementation
 		return 3;
 	}
+	virtual bool do_compare_params(iot_netcon* op_) override { //must return true if parameters of same typed netcons are the same. is_passive is already checked to be the same
+		iot_netcon_tcp *op=static_cast<iot_netcon_tcp*>(op_);
+		if(phase==PHASE_UNINITED || op->phase==PHASE_UNINITED) return false;
+		if(is_passive) return !server.bindport || server.bindport!=op->server.bindport ? false : true;
+		//client connection
+		if(client.dstport==op->client.dstport && strcmp(client.dsthost, op->client.dsthost)==0) return true;
+		return false;
+	}
+
 	virtual int do_stop(void) override {
 		assert(!is_started() || uv_thread_self()==thread->thread);
 
@@ -339,7 +348,7 @@ private:
 			if(session_state>=HS_INIT) {
 				session_state=HS_CLOSING;
 				num_closing++;
-				if(!protosession->stop(true)) { //session won't call on_sesion_closed()
+				if(!protosession->stop(false)) { //session won't call on_sesion_closed()
 					num_closing--;
 					session_state=HS_UNINIT;
 				}
@@ -453,11 +462,12 @@ private:
 			}
 		} else {
 			assert(phase==PHASE_INITIAL);
+			connect_errors=0;
 			if(peer_closed_restart) {
-				connect_errors=1;
 				peer_closed_restart=false;
-			} else {
-				connect_errors=0;
+				retry_delay=2*1000;
+				retry_phase();
+				return;
 			}
 			process_client_phase();
 		}
@@ -539,7 +549,7 @@ private:
 //again:
 		switch(phase) {
 			case PHASE_CONNECTED:
-outlog_notice("in common phase %u", unsigned(phase));
+//outlog_notice("in common phase %u", unsigned(phase));
 				assert(h_tcp_state==HS_ACTIVE);
 				assert(protosession==NULL);
 				err=protoconfig->instantiate(this);
@@ -580,11 +590,11 @@ again:
 				phase=PHASE_PREPLISTEN;
 				goto again;
 			case PHASE_RESOLVING:
-outlog_notice("in phase %u", unsigned(phase));
+//outlog_notice("in phase %u", unsigned(phase));
 				resolve_host(server.bindhost, server.bindport);
 				return;
 			case PHASE_PREPLISTEN: { //determine number of listen sockets, allocate memory for interfaces list
-outlog_notice("in phase %u", unsigned(phase));
+//outlog_notice("in phase %u", unsigned(phase));
 				int num_sockets=0;
 				phasedata.preplisten={};
 
@@ -684,7 +694,7 @@ outlog_notice("in phase %u", unsigned(phase));
 				phase=PHASE_PREPLISTEN2;
 			}
 			case PHASE_PREPLISTEN2: { //run num_sockets-1 duplicates for each sockaddr
-outlog_notice("in phase %u, numsocks=%d", unsigned(phase), phasedata.preplisten.num_sockets);
+//outlog_notice("in phase %u, numsocks=%d", unsigned(phase), phasedata.preplisten.num_sockets);
 				assert(phasedata.preplisten.num_ready<phasedata.preplisten.num_sockets);
 				int cur_idx=0;
 				if(!server.bindiface) {
@@ -755,7 +765,7 @@ outlog_notice("in phase %u, numsocks=%d", unsigned(phase), phasedata.preplisten.
 				phase=PHASE_LISTENING;
 			}
 			case PHASE_LISTENING: {
-outlog_notice("in phase %u, obj=%p", unsigned(phase), this);
+//outlog_notice("in phase %u, obj=%p", unsigned(phase), this);
 				assert(server.cur_sockaddr.ss_family!=0);
 				if(h_tcp_state<HS_INIT) {
 					if(h_tcp_state==HS_CLOSING) return;
@@ -793,7 +803,7 @@ outlog_notice("in phase %u, obj=%p", unsigned(phase), this);
 					return;
 				}
 				h_tcp_state=HS_ACTIVE;
-				outlog_notice("Now listening for incoming connections on host '%s' and interface '%s' [%s:%u]", server.bindhost ? server.bindhost : "ANY", server.bindiface ? server.bindiface : "ANY", ipstr, unsigned(server.bindport));
+				outlog_info("Now listening for incoming connections on host '%s' and interface '%s' [%s:%u]", server.bindhost ? server.bindhost : "ANY", server.bindiface ? server.bindiface : "ANY", ipstr, unsigned(server.bindport));
 				listen_errors=0;
 				return;
 			}
@@ -835,11 +845,11 @@ outlog_notice("in phase %u, obj=%p", unsigned(phase), this);
 			case PHASE_INITIAL:
 				phase=PHASE_RESOLVING;
 			case PHASE_RESOLVING:
-outlog_notice("in client phase %u", unsigned(phase));
+//outlog_notice("in client phase %u", unsigned(phase));
 				resolve_host(client.dsthost, client.dstport);
 				return;
 			case PHASE_CONNECTING:
-outlog_notice("in client phase %u", unsigned(phase));
+//outlog_notice("in client phase %u", unsigned(phase));
 				assert(client.cur_addr!=NULL);
 				if(h_tcp_state<HS_INIT) {
 					if(h_tcp_state==HS_CLOSING) return;

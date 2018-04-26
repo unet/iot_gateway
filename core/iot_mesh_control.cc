@@ -37,7 +37,7 @@ void iot_meshnet_controller::sync_routing_table_frompeer(iot_netproto_session_me
 			uv_rwlock_wrunlock(&routing_lock);
 			return;
 		}
-outlog_notice("Got routing table from %" IOT_PRIhostid " with %u items, version %llu:", peer->host_id, numroutes, ver);
+outlog_debug_mesh("Got routing table from %" IOT_PRIhostid " with %u items, version %llu:", peer->host_id, numroutes, ver);
 		uint32_t maxhosts=gwinst->config_registry->get_num_hosts();
 		uint32_t maxpathlen=maxhosts > 1 ? maxhosts-2 : 0;
 
@@ -78,14 +78,14 @@ outlog_notice("Got routing table from %" IOT_PRIhostid " with %u items, version 
 			iot_meshorigroute_entry *olditem=&peer->origroutes[oldidx];
 			if(newidx<numroutes) { //list of new routes is not exhausted
 				iot_netproto_session_mesh::packet_rtable_req::item_t &newitem=req->items[newidx];
-outlog_notice("item dst=%" IOT_PRIhostid ", delay=%u", newitem.hostid, newitem.delay);
+outlog_debug_mesh("item dst=%" IOT_PRIhostid ", delay=%u", newitem.hostid, newitem.delay);
 
 				newhostid=newitem.hostid;
 				if(newhostid==prevnewhostid || newhostid==peer->host_id || newhostid==gwinst->this_hostid || newitem.delay>ROUTEENTRY_MAXDELAY || newitem.pathlen>maxpathlen) {newidx++; continue;} //skip duplicate or illegal hosts or routes
 				if(oldidx>=numoldroutes || olditem->hostid > newhostid) { //new entry must be added
 					//make space for new entry
 					if(oldidx<numoldroutes) {
-						memmove(&peer->origroutes[oldidx+1], olditem, sizeof(*olditem)*(numoldroutes-oldidx));
+						iot_meshorigroute_entry::array_extend(peer->origroutes, numoldroutes, oldidx, 1);
 						if(fixheadfrom==0xffffffff) fixheadfrom=oldidx+1;
 					}
 					numoldroutes++;
@@ -133,15 +133,13 @@ outlog_notice("item dst=%" IOT_PRIhostid ", delay=%u", newitem.hostid, newitem.d
 					curentry->pendmod=curentry->MOD_REMOVE;
 					BILINKLIST_REMOVE(curentry, orig_next, orig_prev);
 				}
-				olditem->hostpeer=NULL; //clear peer reference
+//is done in array_shrink				olditem->hostpeer=NULL; //clear peer reference
 			}
 			assert(olditem->routeslist_head==NULL);
 
 			//remove oldentry
-			if(oldidx+1<numoldroutes) { //not the last entry
-				memmove(olditem, &peer->origroutes[oldidx+1], sizeof(*olditem)*(numoldroutes-oldidx-1));
-				if(fixheadfrom>oldidx) fixheadfrom=oldidx;
-			}
+			iot_meshorigroute_entry::array_shrink(peer->origroutes, numoldroutes, oldidx, 1);
+			if(fixheadfrom>oldidx) fixheadfrom=oldidx;
 			numoldroutes--;
 		}
 		peer->numorigroutes=numoldroutes;
@@ -695,16 +693,17 @@ void iot_meshnet_controller::apply_session_routes_change(iot_netproto_session_me
 				assert(!waslast);
 				peer->noroute_timer_item.unschedule(); //disable noroute timer for this peer
 				peer->is_unreachable.store(false, std::memory_order_relaxed);
-				peer->on_meshroute_set();
-				//TODO loop over all netcon_mesh with remote_host of current peer and send them event signal so they could wake up from NO_ROUTE error. now 
-				//peer->on_meshroute_set will only wake up its netcon for iot session
+				gwinst->peers_registry->on_meshroute_set(peer);
+				on_meshtun_keepalive_timer(peer->host_id);
 			} else if(waslast) { //last route to peer's just disappeared
 				timer.schedule(peer->noroute_timer_item, IOT_MESHNET_NOROUTETIMEOUT*1000); //start noroute timer
-				peer->on_meshroute_reset();
+				gwinst->peers_registry->on_meshroute_reset(peer);
 			}
 		}
 
+#ifdef IOTDEBUG_MESH
 		print_routingtable(NULL, true);
+#endif
 		if(need_resync) {
 			uint32_t maxnum_peers=gwinst->peers_registry->get_num_peers();
 			if(maxnum_peers>0) {
@@ -727,7 +726,9 @@ void iot_meshnet_controller::apply_session_routes_change(iot_netproto_session_me
 						else if(ver<peerbuf[dst]->routing_altactualversionpart) ver=peerbuf[dst]->routing_altactualversionpart;
 					}
 					if(to_peer->current_routingversion<ver) { //routing table for peer changed
+#ifdef IOTDEBUG_MESH
 						print_routingtable(to_peer, true);
+#endif
 
 						to_peer->current_routingversion=ver;
 						to_peer->notify_routing_update=true;
@@ -760,11 +761,11 @@ void iot_meshnet_controller::try_sync_routing_tables(void) {
 		break;
 	}
 	if(!have) return;
-outlog_notice("Will sync routing table");
+outlog_debug_mesh("Will sync routing table");
 	uv_rwlock_rdlock(&routing_lock);
 	for(iot_peer *peer : *gwinst->peers_registry) {
 		if(!peer->notify_routing_update) continue;
-outlog_notice("to peer %" IOT_PRIhostid " : %d", peer->host_id, int(peer->meshsessions_head!=NULL));
+outlog_debug_mesh("to peer %" IOT_PRIhostid " : %d", peer->host_id, int(peer->meshsessions_head!=NULL));
 
 		if(!peer->meshsessions_head)
 			peer->notify_routing_update=false;
@@ -786,14 +787,14 @@ void iot_meshnet_controller::print_routingtable(iot_peer* forpeer, bool waslocke
 			num_peers=gwinst->peers_registry->copy_meshpeers(peerbuf, sz, gwinst->peers_registry->MODE_ROUTABLE); //list of peers with mesh sessions cannot change while routing is locked
 		}
 		if(!num_peers) {
-			outlog_notice("ROUTING TABLE of %" IOT_PRIhostid " IS EMPTY", gwinst->this_hostid);
+			outlog_debug_mesh("ROUTING TABLE of %" IOT_PRIhostid " IS EMPTY", gwinst->this_hostid);
 			goto onexit;
 		}
 
 		if(forpeer)
-			outlog_notice("ROUTING TABLE of %" IOT_PRIhostid " for %" IOT_PRIhostid ":", gwinst->this_hostid, forpeer->host_id);
+			outlog_debug_mesh("ROUTING TABLE of %" IOT_PRIhostid " for %" IOT_PRIhostid ":", gwinst->this_hostid, forpeer->host_id);
 		else
-			outlog_notice("ROUTING TABLE of %" IOT_PRIhostid ":", gwinst->this_hostid);
+			outlog_debug_mesh("ROUTING TABLE of %" IOT_PRIhostid ":", gwinst->this_hostid);
 
 		for(uint32_t i=0;i<num_peers;i++) {
 			iot_peer *p=peerbuf[i];
@@ -805,19 +806,19 @@ void iot_meshnet_controller::print_routingtable(iot_peer* forpeer, bool waslocke
 				if(p->routeslist_head->session->peer_host==forpeer) { //must use altrouting
 					if(p->routing_altactualpathlen) {
 						assert(p->routeslist_althead!=NULL);
-						outlog_notice("dst=%" IOT_PRIhostid ", gw=%" IOT_PRIhostid ", delay=%u, len=%d, ver=%llu", p->host_id, p->routeslist_althead->session->peer_host->host_id, p->routing_altactualdelay, p->routing_altactualpathlen, p->routing_altactualversionpart);
+						outlog_debug_mesh("dst=%" IOT_PRIhostid ", gw=%" IOT_PRIhostid ", delay=%u, len=%d, ver=%llu", p->host_id, p->routeslist_althead->session->peer_host->host_id, p->routing_altactualdelay, p->routing_altactualpathlen, p->routing_altactualversionpart);
 					}
 				} else {
-					outlog_notice("dst=%" IOT_PRIhostid ", gw=%" IOT_PRIhostid ", delay=%u, len=%d, ver=%llu", p->host_id, p->routeslist_head->session->peer_host->host_id, p->routing_actualdelay, p->routing_actualpathlen, p->routing_actualversionpart);
+					outlog_debug_mesh("dst=%" IOT_PRIhostid ", gw=%" IOT_PRIhostid ", delay=%u, len=%d, ver=%llu", p->host_id, p->routeslist_head->session->peer_host->host_id, p->routing_actualdelay, p->routing_actualpathlen, p->routing_actualversionpart);
 				}
 			} else { //print local routing table
-				outlog_notice("dst=%" IOT_PRIhostid ", ACTUAL gw=%" IOT_PRIhostid ", delay=%u, len=%d, ver=%llu", p->host_id, p->routeslist_head->session->peer_host->host_id, p->routing_actualdelay, p->routing_actualpathlen, p->routing_actualversionpart);
+				outlog_debug_mesh("dst=%" IOT_PRIhostid ", ACTUAL gw=%" IOT_PRIhostid ", delay=%u, len=%d, ver=%llu", p->host_id, p->routeslist_head->session->peer_host->host_id, p->routing_actualdelay, p->routing_actualpathlen, p->routing_actualversionpart);
 				if(p->routing_altactualpathlen) {
 					assert(p->routeslist_althead!=NULL);
-					outlog_notice("dst=%" IOT_PRIhostid ", ALT ACTUAL gw=%" IOT_PRIhostid ", delay=%u, len=%d, ver=%llu", p->host_id, p->routeslist_althead->session->peer_host->host_id, p->routing_altactualdelay, p->routing_altactualpathlen, p->routing_altactualversionpart);
+					outlog_debug_mesh("dst=%" IOT_PRIhostid ", ALT ACTUAL gw=%" IOT_PRIhostid ", delay=%u, len=%d, ver=%llu", p->host_id, p->routeslist_althead->session->peer_host->host_id, p->routing_altactualdelay, p->routing_altactualpathlen, p->routing_altactualversionpart);
 				}
 				for(auto e=p->routeslist_head; e; e=e->next)
-					outlog_notice("dst=%" IOT_PRIhostid ", gw=%" IOT_PRIhostid " (%p), delay=%u, len=%d%s", p->host_id, e->session->peer_host->host_id, e->session, e->realdelay, e->pathlen, e==p->routeslist_althead ? " ISALT" : "");
+					outlog_debug_mesh("dst=%" IOT_PRIhostid "%s, gw=%" IOT_PRIhostid " (%p), delay=%u, len=%d%s", p->host_id, e->is_active ? " act" : "", e->session->peer_host->host_id, e->session, e->realdelay, e->pathlen, e==p->routeslist_althead ? " ISALT" : "");
 			}
 		}
 onexit:
@@ -826,18 +827,48 @@ onexit:
 
 
 //notifies mesh sessions from active routes that there are mesh streams ready for output
-void iot_meshnet_controller::route_meshtunq(iot_peer* peer) { //called from any thread
+bool iot_meshnet_controller::route_meshtunq(iot_peer* peer, iot_hostid_t avoid_peer_id, uint16_t maxpathlen) { //called from any thread
+//returns false if no active or suitable sessions found
 		uv_rwlock_rdlock(&routing_lock);
 		int left=meshtun_distribution;
+		int notified=0;
 
 		for(auto entry=peer->routeslist_head; entry && left>0; entry=entry->next) { //loop over active entries stopping when meshtun_distribution notified
-			if(!entry->is_active) continue;
-			entry->session->send_signal(); //wake up session
+			if(!entry->is_active) {
+outlog_debug_meshtun("Skipping inactive session %p to host %" IOT_PRIhostid " to send packet to host %" IOT_PRIhostid, entry->session, entry->session->peer_host->host_id, peer->host_id);
+				continue;
+			}
+			if(entry->session->peer_host->host_id!=avoid_peer_id && entry->pathlen<=maxpathlen) {
+outlog_debug_meshtun("Waking session %p to host %" IOT_PRIhostid " to send packet to host %" IOT_PRIhostid " with pathlen=%d", entry->session, entry->session->peer_host->host_id, peer->host_id, int(entry->pathlen));
+				entry->session->send_signal(); //wake up session
+				notified++;
+			} else {
+outlog_debug_meshtun("Skipping session %p to host %" IOT_PRIhostid " to send packet to host %" IOT_PRIhostid " with pathlen=%d: avoid host=%" IOT_PRIhostid ", maxpath=%d", entry->session, entry->session->peer_host->host_id, peer->host_id, int(entry->pathlen), avoid_peer_id, int(maxpathlen));
+			}
 			left--;
 		}
 
 		uv_rwlock_rdunlock(&routing_lock);
+		if(!notified) return false;
+		return true;
 }
+
+//fired by keepalive timer or when first route to peer appears
+void iot_meshnet_controller::on_meshtun_keepalive_timer(iot_hostid_t hostid) {
+	if(is_shutdown) return;
+	uv_rwlock_rdlock(&protostate_lock);
+
+	if(hostid) {
+		for(iot_netcon_mesh *con=cons_head; con; con=con->controller_next)
+			if(!con->is_passive && con->is_stream && con->phase==con->PHASE_RUNNING && con->remote_host==hostid) con->on_meshtun_event(con->EVENT_NEEDCONNCHECK);
+	} else {
+		for(iot_netcon_mesh *con=cons_head; con; con=con->controller_next)
+			if(!con->is_passive && con->is_stream && con->phase==con->PHASE_RUNNING) con->on_meshtun_event(con->EVENT_NEEDCONNCHECK);
+	}
+
+	uv_rwlock_rdunlock(&protostate_lock);
+}
+
 
 //fired when some time passes after loosing last route to peer
 void iot_meshnet_controller::on_noroute_timer(iot_peer *peer) { //peer can be NULL to set NO_ROUTE error FOR ALL bound meshtuns
@@ -850,10 +881,15 @@ void iot_meshnet_controller::on_noroute_timer(iot_peer *peer) { //peer can be NU
 		}
 		peer->is_unreachable.store(true, std::memory_order_relaxed); //now treat this peer as unreachable
 		uv_rwlock_wrunlock(&routing_lock);
-	}
 
-	//start by aborting all meshtuns which are currently in peer's queue, requesting output
-//todo optimization	peer->abort_meshtuns();
+		//start by aborting all meshtuns which are currently in peer's queue, requesting output
+		peer->abort_meshtuns(IOT_ERROR_NO_ROUTE);
+	} else {
+		//start by aborting all meshtuns which are currently in peer's queue, requesting output
+		for(iot_peer *peer : *gwinst->peers_registry) {
+			peer->abort_meshtuns(IOT_ERROR_NO_ROUTE);
+		}
+	}
 	
 	int64_t totaln=0;
 	iot_meshconnmapkey_t keyfrom(peer ? peer->host_id : 0, 0, 0);
@@ -971,6 +1007,11 @@ int iot_meshnet_controller::meshtun_bind(iot_meshtun_state *tunstate, const iot_
 
 	auto &pstate=proto_state[protoid-1];
 
+	if(is_shutdown) {
+		err=IOT_ERROR_ACTION_CANCELLED;
+		goto onexit;
+	}
+
 	if(!pstate) { //protocol state was not yet allocated
 		pstate=new proto_state_t;
 		if(!pstate) {
@@ -1067,16 +1108,41 @@ void iot_meshnet_controller::meshtun_unbind(iot_meshtun_state *tunstate) {
 
 	assert(err==1);
 
+	if(is_shutdown && connmap.getamount()==0) { //check if shutdown phase is completed
+		bool waslast=true;
+
+		delete proto_state[protoid-1];
+		proto_state[protoid-1]=NULL;
+
+		for(uint32_t i=0;i<max_protoid;i++) {
+			if(!proto_state[i]) continue;
+			if(proto_state[i]->connmap.getamount()>0) {
+				waslast=false;
+				break;
+			}
+			delete proto_state[i];
+			proto_state[i]=NULL;
+		}
+		if(waslast) {
+			free(proto_state);
+			proto_state=NULL;
+			if(!cons_head && timer.is_init() && shutdown_timer_item.is_on()) {
+				uv_rwlock_wrunlock(&protostate_lock);
+
+				timer.schedule(shutdown_timer_item, 0); //continue shutdown step 2
+				return;
+			}
+		}
+	}
+
 	uv_rwlock_wrunlock(&protostate_lock);
 }
 
 
 
-int iot_meshnet_controller::on_new_connection(iot_netcon *conobj) {
-	if(!conobj || conobj->get_metaclass()!=&iot_netcontype_metaclass_mesh::object) return IOT_ERROR_INVALID_ARGS;
+int iot_meshnet_controller::on_new_meshtun(iot_netcon_mesh *con) {
+	if(!con) return IOT_ERROR_INVALID_ARGS;
 	int err=0;
-
-	iot_netcon_mesh* con=static_cast<iot_netcon_mesh*>(conobj);
 
 	uv_rwlock_wrlock(&protostate_lock);
 
@@ -1085,50 +1151,67 @@ int iot_meshnet_controller::on_new_connection(iot_netcon *conobj) {
 		goto onexit;
 	}
 
-	//duplicate connection in linked list
-	BILINKLIST_INSERTHEAD(con, cons_head, registry_next, registry_prev);
+	BILINKLIST_INSERTHEAD(con, cons_head, controller_next, controller_prev);
 
 onexit:
 	uv_rwlock_wrunlock(&protostate_lock);
 	return err;
 }
 
-void iot_meshnet_controller::on_destroyed_connection(iot_netcon *conobj) {
-	if(!conobj || conobj->get_metaclass()!=&iot_netcontype_metaclass_mesh::object) return;
-
-	iot_netcon_mesh* con=static_cast<iot_netcon_mesh*>(conobj);
+void iot_meshnet_controller::on_destroyed_meshtun(iot_netcon_mesh *con) {
+	if(!con) return;
 
 	uv_rwlock_wrlock(&protostate_lock);
 
-	BILINKLIST_REMOVE(con, registry_next, registry_prev);
-	bool waslast=!cons_head;
+	BILINKLIST_REMOVE(con, controller_next, controller_prev);
+	bool waslast = is_shutdown && !cons_head && !proto_state;
 
 	uv_rwlock_wrunlock(&protostate_lock);
 
-	if(waslast && is_shutdown) 
+	if(waslast && timer.is_init() && shutdown_timer_item.is_on()) {
 		timer.schedule(shutdown_timer_item, 0); //continue shutdown step 2
+	}
 }
 
 
 void iot_meshnet_controller::graceful_shutdown(void) {
 	is_shutdown=true;
-	uv_rwlock_rdlock(&protostate_lock);
+//uncomment to test hard loss of meshtun connection
+//graceful_shutdown_step2();
+//return;
 
-	if(!cons_head) {
-		uv_rwlock_rdunlock(&protostate_lock);
-		graceful_shutdown_step2();
-		return;
-	}
-	for(iot_netcon *cur, *next=cons_head; (cur=next); ) {
-		next=next->registry_next;
+
+	uv_rwlock_wrlock(&protostate_lock);
+
+	bool needwait=false;
+
+	for(iot_netcon_mesh *cur, *next=cons_head; (cur=next); ) {
+		next=next->controller_next;
+		needwait=true;
 		cur->destroy(true);
 	}
 
-	uv_rwlock_rdunlock(&protostate_lock);
+	if(proto_state) 
+		for(uint32_t i=0;i<max_protoid;i++) {
+			if(!proto_state[i]) continue;
+			if(proto_state[i]->connmap.getamount()>0) {
+outlog_debug_meshtun("connmap is busy");
+				needwait=true;
+			} else {
+				delete proto_state[i];
+				proto_state[i]=NULL;
+			}
+		}
+
+	uv_rwlock_wrunlock(&protostate_lock);
+
+	if(!needwait) {
+		graceful_shutdown_step2();
+		return;
+	}
 
 	timer.schedule(shutdown_timer_item, 2000); //give max 2 sec to all meshtuns
 }
-
 
 
 //create appropriate meshtun_state object for netcon_mesh
@@ -1171,11 +1254,14 @@ int iot_meshtun_forwarding::set_state(state_t newstate) {
 
 		switch(newstate) {
 			case ST_CLOSED:
+				assert(!meshses);
 				if(request_body) iot_release_memblock(request_body);
 				request_body=NULL;
-
+				timer_item.unschedule();
+outlog_debug_meshtun("CLOSING %s packet to %" IOT_PRIhostid, state==ST_FORWARDING ? "forwarding" : "status", state==ST_FORWARDING ? dst_host : src_host);
 				//remove from peer's queue
 				if(in_queue) {
+					assert(get_refcount()>1); //if queue holds last reference, current object will be destroyed just after remove_meshtun() which is not acceptable as lock must be currently locked
 					if(state==ST_FORWARDING) {
 						if(dst_peer) dst_peer->remove_meshtun(this);
 						else assert(false);
@@ -1197,16 +1283,32 @@ int iot_meshtun_forwarding::set_state(state_t newstate) {
 					set_error(IOT_ERROR_NO_ROUTE);
 					break;
 				}
-				dst_peer->push_meshtun(this, true);
+				retries=0;
+				on_state_update(UPD_WRITEREADY);
 				break;
-			case ST_RESET:
+			case ST_RESET: {
 				assert(state==ST_FORWARDING);
+				assert(get_error()!=0); //??? may be some other statuses (positive) can be sent, not only negative errors
 				if(request_body) iot_release_memblock(request_body);
 				request_body=NULL;
+				request->datalen=0;
 
+				if(in_queue) {
+					assert(get_refcount()>1); //if queue holds last reference, current object will be destroyed just after remove_meshtun() which is not acceptable as lock must be currently locked
+					if(dst_peer) dst_peer->remove_meshtun(this);
+					else assert(false);
+				}
+
+outlog_debug_meshtun("ERROR %d FORWARDING packet to %" IOT_PRIhostid, get_error(), dst_host);
 				state=newstate;
 
 				if(get_error()!=IOT_ERROR_NO_ROUTE) { //only no route is reported to source peer. other errors silently drop the packet
+					set_closed();
+					break;
+				}
+
+				if((repack_uint16(request->flags) & (iot_netproto_session_mesh::MTFLAG_STREAM | iot_netproto_session_mesh::MTFLAG_STREAM_RESET))==(iot_netproto_session_mesh::MTFLAG_STREAM | iot_netproto_session_mesh::MTFLAG_STREAM_RESET)) {
+					//do nothing. this was RESET request, it cannot be repeated by originator
 					set_closed();
 					break;
 				}
@@ -1216,10 +1318,34 @@ int iot_meshtun_forwarding::set_state(state_t newstate) {
 					set_closed();
 					break;
 				}
-				
+
+				//swap source and destination
+				auto tmp1=request->dsthost;
+				request->dsthost=request->srchost;
+				request->srchost=tmp1;
+				auto tmp2=request->dstport;
+				request->dstport=request->srcport;
+				request->srcport=tmp2;
+
+				//set STATUS flag
+				auto flags=repack_uint16(request->flags);
+				request->flags=repack_uint16(flags | iot_netproto_session_mesh::MTFLAG_STATUS);
+				request->datalen=0;
+				request->ttl=0; //mark that ttl must be assigned during output
+				if(flags & iot_netproto_session_mesh::MTFLAG_STREAM) {
+					uint16_t metasize=uint16_t(request->metalen64)<<3;
+					iot_netproto_session_mesh::packet_meshtun_stream *stream=(iot_netproto_session_mesh::packet_meshtun_stream *)(((char*)(request+1))+metasize);
+					stream->statuscode=repack_int16(int16_t(get_error()));
+				} else {
+					assert(false); //TODO for datagrams?
+				}
+
+				from_host=0; //any host can be next hop
+				retries=0;
 				set_error(0);
-				src_peer->push_meshtun(this, true);
+				on_state_update(UPD_WRITEREADY);
 				break;
+			}
 			default:
 				assert(false);
 				set_closed();
@@ -1237,14 +1363,29 @@ void iot_meshtun_forwarding::on_state_update(update_t upd) { //must be called IN
 					set_state(ST_RESET);
 					break;
 				}
-				assert(false); //only error can be reason for call?
+				if(upd==UPD_WRITEREADY) {
+					if(retries<=2) { //first try, add request to tail of queue
+						if(dst_peer->push_meshtun(this, true, from_host, from_host && request->ttl>0 ? request->ttl : 0xffff)) {retries++;break;}
+					}
+					//limit tries to forward packet. retry is attempted if selected mesh session leads to from_host or too long path
+					set_error(IOT_ERROR_NO_ROUTE);
+					return;
+				}
+				assert(false); //no other reasons for call?
 				break;
 			case ST_RESET:
 				if(get_error()) { //error during sending error to source host, just drop
 					set_closed();
 					break;
 				}
-				assert(false); //only error can be reason for call?
+				if(upd==UPD_WRITEREADY) {
+					if(retries<=2) { //first try, add request to tail of queue
+						if(src_peer->push_meshtun(this, true)) {retries++;break;}
+					}
+					set_closed();
+					break;
+				}
+				assert(false); //no other reasons for call?
 				break;
 			default:
 				assert(false);
@@ -1304,8 +1445,6 @@ int iot_meshtun_stream_state::connect(const iot_netprototype_metaclass* protomet
 			goto onexit;
 		}
 
-//		output_closed=0;
-
 		err=controller->meshtun_bind(this, protometa, remote_host, remote_port, auto_local_port, local_port);
 		if(err) goto onexit;
 
@@ -1318,12 +1457,15 @@ int iot_meshtun_stream_state::connect(const iot_netprototype_metaclass* protomet
 		ack_sequenced_in=sequenced_in=maxseen_sequenced_in=0;
 //		used_buffer_in=0;
 		peer_rwnd=0;
-		local_rwnd=buffer_in.getsize();
+		local_rwnd.store(buffer_in.getsize(), std::memory_order_relaxed);
 //		acception_time=0;
 		num_in_dis=0;
 		num_output_inprog=0;
 		iot_gen_random((char*)random, IOT_MESHPROTO_TUNSTREAM_IDLEN);
 		creation_time=((iot_get_systime()+500000000)/1000000000)-1000000000; //round to integer seconds and offset by 1e9 seconds
+
+		cancel_timer();
+		finalize_expires=input_ack_expires=UINT64_MAX;
 
 		err=set_state(ST_SENDING_SYN);
 onexit:
@@ -1358,8 +1500,6 @@ int iot_meshtun_stream_state::accept_connection(iot_meshtun_stream_listen_state:
 			goto onexit;
 		}
 
-		input_closed=0;
-//		output_closed=0;
 
 		err=controller->meshtun_bind(this, protometa_, item->remotehost, item->remoteport, false, local_port);
 		if(err) goto onexit;
@@ -1375,7 +1515,7 @@ int iot_meshtun_stream_state::accept_connection(iot_meshtun_stream_listen_state:
 		sequenced_in=maxseen_sequenced_in=1; //account for received SYN
 //		used_buffer_in=0;
 		peer_rwnd=item->peer_rwnd;
-		local_rwnd=buffer_in.getsize();
+		local_rwnd.store(buffer_in.getsize(), std::memory_order_relaxed);
 //		acception_time=0;
 		num_in_dis=0;
 		num_output_inprog=0;
@@ -1387,6 +1527,9 @@ int iot_meshtun_stream_state::accept_connection(iot_meshtun_stream_listen_state:
 			inmeta_data=inmeta;
 			inmeta_size=inmeta_size_;
 		}
+
+		cancel_timer();
+		finalize_expires=input_ack_expires=UINT64_MAX;
 
 		set_state(ST_SENDING_SYN);
 		set_state(ST_ESTABLISHED);
@@ -1401,7 +1544,7 @@ onexit:
 
 void iot_meshtun_stream_state::on_state_update(update_t upd) { //reacts to setting error, detaching, changing substate flags, shutting down
 		assert(uv_thread_self()==lockowner);
-outlog_notice("!!!! UPDATING STATE %u, event %u", unsigned(state), unsigned(upd));
+outlog_debug_meshtun("--UPDATING STREAM STATE %u, event %u", unsigned(state), unsigned(upd));
 
 		if(upd==UPD_ERROR_SET && con && get_error()) {
 			con->on_meshtun_event(con->EVENT_ERROR); //must sent async signal to netcon
@@ -1412,77 +1555,15 @@ outlog_notice("!!!! UPDATING STATE %u, event %u", unsigned(state), unsigned(upd)
 				assert(output_closed && input_closed && !output_pending && !output_ack_pending && !input_pending && !input_ack_pending && !in_queue);
 				break;
 			case ST_SENDING_SYN:
-//				assert(!output_ack_pending && input_closed && !input_pending && !input_ack_pending);
-
-				//UPD_SHUTDOWN does nothing for this state (only output_closed is set to true in base class)
-				if(upd==UPD_WRITEREADY) { //SYN must be sent or repeated
-					if(output_closed) goto try_close;
-					check_output_inprogress();
-					break;
-				}
-				if(upd==UPD_WRITTEN) { //SYN or SYN-ACK was sent
-					assert(num_output_inprog==1);
-//					if(sequenced_out>ack_sequenced_out) output_ack_pending=1; //we're waiting ACK to our SYN from peer
-					input_ack_pending=0; //any output send current pending input ACK, so always reset here
-					break;
-				}
-				if(upd==UPD_ERROR_SET && get_error()) { //error was just set. notification to attached netcon already signaled
-					output_closed=1;
-					output_pending=0;
-					output_ack_pending=0;
-
-					input_closed=1;
-					input_ack_pending=0;
-					//input_pending can remain true if con is not detached
-					goto try_close;
-				}
-				if(upd==UPD_SHUTDOWN) { //output was just closed, netcon not detached
-					if(output_ack_pending) { //SYN can be already sent by client
-						if(is_passive_stream) {
-							//do graceful stop
-							sequenced_out++; //for FIN bit
-							output_ack_pending=1; //for STREAM_FIN
-							check_output_inprogress();
-						} else {
-							set_state(ST_RESET);
-						}
-						return;
-					}
-					output_pending=0;
-					//output_ack_pending is checked to be false
-					goto try_close;
-				}
-				if(upd==UPD_DETACH) { //netcon detached
-					if(output_ack_pending) { //SYN can be already sent
-						set_state(ST_RESET);
-						return;
-					}
-					output_closed=1;
-					output_pending=0;
-					//output_ack_pending is checked to be false
-
-					input_closed=1;
-					buffer_in.clear();
-					input_pending=0;
-					input_ack_pending=0;
-
-					goto try_close;
-				}
-				break;
-			case ST_ESTABLISHED:
 				switch(upd) {
-					case UPD_WRITESPACEFREED: //got free space in buffer_out and there was failed write
-						if(con && !output_closed && output_wanted) con->on_meshtun_event(con->EVENT_WRITABLE);
-						break;
-					case UPD_READREADY: //input is available for reading
-						if(con && input_wanted) con->on_meshtun_event(con->EVENT_READABLE);
-						break;
 					case UPD_WRITEREADY: //output must be sent or repeated or output closed and ACKed
-						if(output_closed) goto try_close;
-						check_output_inprogress();
-						break;
+						if(!output_closed || input_ack_pending) {
+							check_output_inprogress();
+							break;
+						}
+						if(!input_closed || (sequenced_in>0 && !input_finalized)) break; //timer finalize_expires must be active if output_ack_pending is also false
+						goto try_close;
 					case UPD_WRITTEN: //some output is to be written to socket
-						input_ack_pending=0; //any output always sendd current pending input ACK, so always reset here
 						break;
 					case UPD_ERROR_SET: //error was just set. notification to attached netcon already signaled
 						if(!get_error()) break;
@@ -1495,14 +1576,66 @@ outlog_notice("!!!! UPDATING STATE %u, event %u", unsigned(state), unsigned(upd)
 						//input_pending can remain true if con is not detached
 						goto try_close;
 					case UPD_DETACH: //netcon detached
-						if(!input_closed) { //no error occured and peer did not close connection
-							input_closed=1;
-							if(buffer_in.pending_read()>0) { //there is unread data, need to reset even if graceful shutdown is in progress (it will be interrupted)
-								set_state(ST_RESET);
-								return;
-							}
+						if(output_ack_pending || buffer_in.pending_read()>0) { //SYN can be already sent or there is unread data, need to reset even if graceful shutdown is in progress (it will be interrupted)
+							set_state(ST_RESET);
+							return;
 						}
-						buffer_in.clear();
+						input_closed=1;
+						input_pending=0;
+						output_closed=1;
+						goto try_close;
+					case UPD_SHUTDOWN: //output was just closed, netcon not detached
+						if(output_ack_pending) { //SYN can be already sent by client
+							if(is_passive_stream) {
+								//do graceful stop
+								sequenced_out++; //for FIN bit
+								output_ack_pending=1; //for STREAM_FIN
+								check_output_inprogress();
+							} else {
+								set_state(ST_RESET);
+							}
+							return;
+						}
+						output_pending=0;
+						//output_ack_pending is checked to be false
+						goto try_close;
+					default: break;
+				}
+				break;
+			case ST_ESTABLISHED:
+				switch(upd) {
+					case UPD_WRITESPACEFREED: //got free space in buffer_out and there was failed write
+						if(con && !output_closed && output_wanted) con->on_meshtun_event(con->EVENT_WRITABLE);
+						break;
+					case UPD_READREADY: //input is available for reading
+						if(con && input_wanted) con->on_meshtun_event(con->EVENT_READABLE);
+						break;
+					case UPD_WRITEREADY: //output must be sent or repeated or output closed and ACKed
+						if(!output_closed || input_ack_pending) {
+//							if(output_pending || output_ack_pending || input_ack_pending)
+							check_output_inprogress();
+							break;
+						}
+						if(!input_closed || (sequenced_in>0 && !input_finalized)) break; //timer finalize_expires must be active if output_ack_pending is also false
+						goto try_close;
+					case UPD_WRITTEN: //some output is to be written to socket
+						break;
+					case UPD_ERROR_SET: //error was just set. notification to attached netcon already signaled
+						if(!get_error()) break;
+						output_closed=1;
+						output_pending=0;
+						output_ack_pending=0;
+
+						input_closed=1;
+						input_ack_pending=0;
+						//input_pending can remain true if con is not detached
+						goto try_close;
+					case UPD_DETACH: //netcon detached
+						if(buffer_in.pending_read()>0) { //there is unread data, need to reset even if graceful shutdown is in progress (it will be interrupted)
+							set_state(ST_RESET);
+							return;
+						}
+						input_closed=1;
 						input_pending=0;
 						if(output_closed) goto try_close;
 						output_closed=1;
@@ -1518,7 +1651,7 @@ outlog_notice("!!!! UPDATING STATE %u, event %u", unsigned(state), unsigned(upd)
 				break;
 			case ST_RESET:
 				assert(output_closed && input_closed && !output_pending && !input_pending && !input_ack_pending);
-				if(get_error() || upd==UPD_WRITTEN) { //RESET sent successfully or error is set
+				if(get_error()/* || upd==UPD_WRITTEN*/) { //RESET sent successfully or error is set
 					output_ack_pending=0;
 				}
 				if(!output_ack_pending) goto try_close;
@@ -1554,7 +1687,7 @@ iot_hostid_t iot_meshtun_stream_state::get_peer_id(void) const {
 
 int iot_meshtun_stream_state::set_state(state_t newstate) {
 		assert(uv_thread_self()==lockowner);
-outlog_notice("!!!! SETTING STATE %u", unsigned(newstate));
+outlog_debug_meshtun("--SETTING STREAM STATE %u", unsigned(newstate));
 
 		switch(newstate) {
 			case ST_CLOSED:
@@ -1575,7 +1708,7 @@ outlog_notice("!!!! SETTING STATE %u", unsigned(newstate));
 
 				assert(is_bound);
 				if(is_passive_stream) {
-					assert(!input_closed);
+					input_closed=0;
 					input_ack_pending=1; //mark that ACK must be added
 				} else {
 					output_wanted=1; //connection status will be signaled to netcon
@@ -1609,6 +1742,11 @@ outlog_notice("!!!! SETTING STATE %u", unsigned(newstate));
 				//invalidate output
 				output_closed=1;
 				output_pending=0;
+				output_ack_pending=0; //for unbind to succeed
+
+				if(!unbind_base()) {
+					assert(false);
+				}
 				output_ack_pending=1; //for RESET request
 
 				cancel_timer();
@@ -1688,32 +1826,59 @@ void iot_meshtun_stream_state::check_output_inprogress(void) {
 				len=0;
 			} else if(len>0 && last_inprog.is_pending && last_inprog.retries==0) { //new output can be appended to last inprog block if it is pending, untried and MTU allows
 				assert(!last_inprog.is_ack); //ACKed blocks must not be pending
-				int32_t deltalen=uint32_t(IOT_MESHTUNSTREAM_MTU)-uint32_t(last_inprog.seq_len-last_inprog.has_syn-last_inprog.has_fin); //how many sequence can be appended
-				assert(deltalen>=0);
+				assert(!last_inprog.meshses);
+				assert(!last_inprog.has_fin);
+				int32_t deltalen=uint32_t(IOT_MESHTUNSTREAM_MTU)-uint32_t(last_inprog.seq_len-last_inprog.has_syn); //how many sequence can be appended
 				if(deltalen>0) {
 					if(uint32_t(deltalen)>len) deltalen=len;
 					last_inprog.seq_len+=deltalen; //enlarge last inprog block
 					len-=deltalen;
+					if(output_closed && sequenced_out>1 && len<=1) { //output is finalized and this block will be the last. len can be 1 only if datalen was limited by MTU
+						last_inprog.has_fin=1;
+						if(len==1) { //FIN is here
+							len=0; //substract hasfin from len
+							last_inprog.seq_len++;
+						} //else len==0, FIN already added to seq_len
+					}
+				} else {
+					assert(deltalen==0);
 				}
 			}
 		}
 		//add new blocks if possible and necessary (i.e. if there is space and new output is available)
 		while(len>0 && num_output_inprog<IOT_MESHTUNSTREAM_MAXOUTPUTSPLIT) { //new block can be added
 			uint64_t start=sequenced_out-len;
-			uint8_t hassyn = start==0 ? 1 : 0;
-			uint8_t hasfin = sequenced_out>1 && output_closed ? 1 : 0;
+			uint8_t hassyn = sequenced_out==len ? 1 : 0;
+			uint32_t datalen;
+			uint8_t hasfin;
+			len-=hassyn;
+			if(!len) {
+				datalen=0;
+				hasfin=0;
+			} else { //len>0
+				datalen=len >= IOT_MESHTUNSTREAM_MTU ? IOT_MESHTUNSTREAM_MTU : len; //datalen is limited by IOT_MESHTUNSTREAM_MTU
+				len-=datalen;
+				if(output_closed && sequenced_out>1 && len<=1) { //output is finalized and this block will be the last. len can be 1 only if datalen was limited by MTU
+					hasfin=1;
+					if(len==1) { //FIN is here, datalen correct
+						len=0; //substract hasfin from len
+					} else { //len==0, FIN went to datalen
+						datalen--; //substract hasfin from datalen
+					}
+				} else hasfin=0;
+			}
 			output_inprogress[num_output_inprog]={
 				.meshses=NULL,
 				.seq_pos=start,
 				.retry_after=UINT64_MAX,
-				.seq_len=uint32_t(len-hassyn-hasfin >= IOT_MESHTUNSTREAM_MTU ? IOT_MESHTUNSTREAM_MTU+hassyn+hasfin : len), //datalen is limited by IOT_MESHTUNSTREAM_MTU
+				.seq_len=hassyn+datalen+hasfin,
 				.has_syn=hassyn,
 				.has_fin=hasfin,
 				.is_ack=0,
 				.is_pending=1,
 				.retries=0
 			};
-			len-=output_inprogress[num_output_inprog].seq_len;
+outlog_debug_meshtun("NEW OUTPUT BLOCK %d ADDED: seq_pos=%llu, seq_len=%u", int(num_output_inprog), output_inprogress[num_output_inprog].seq_pos, output_inprogress[num_output_inprog].seq_len);
 			num_output_inprog++;
 		}
 
@@ -1723,6 +1888,7 @@ void iot_meshtun_stream_state::check_output_inprogress(void) {
 			for(uint16_t i=0; i<num_output_inprog; i++) {
 				if(!output_inprogress[i].is_pending) continue;
 				assert(!output_inprogress[i].is_ack);
+				if(ack_sequenced_out==0 && output_inprogress[i].seq_pos>1) break; //while our SYN is not ACKed, allow to send only first chunk of output (SYN can be prepended to it) or to repeat SYN
 				if(output_inprogress[i].meshses) { //already locked by meshses
 					num_busy_ses++;
 					continue;
@@ -1739,7 +1905,7 @@ void iot_meshtun_stream_state::check_output_inprogress(void) {
 
 void iot_meshtun_stream_listen_state::on_state_update(update_t upd) { //reacts to setting error, detaching, changing substate flags, shutting down
 		assert(uv_thread_self()==lockowner);
-outlog_notice("!!!! UPDATING STATE OF LISTEN %u, event %u", unsigned(state), unsigned(upd));
+outlog_debug_meshtun("--UPDATING STATE OF LISTEN %u, event %u", unsigned(state), unsigned(upd));
 
 		if(upd==UPD_ERROR_SET && con && get_error()) {
 			con->on_meshtun_event(con->EVENT_ERROR); //must sent async signal to netcon
@@ -1786,7 +1952,7 @@ try_close:
 
 int iot_meshtun_stream_listen_state::set_state(state_t newstate) {
 		assert(uv_thread_self()==lockowner);
-outlog_notice("!!!! SETTING STATE OF LISTEN %u", unsigned(newstate));
+outlog_debug_meshtun("--SETTING STATE OF LISTEN %u", unsigned(newstate));
 
 		switch(newstate) {
 			case ST_CLOSED:

@@ -45,9 +45,12 @@ public:
 		EVENT_READABLE=1, //connection is ready for reading (got incoming data or graceful close)
 		EVENT_WRITABLE=2,   //connection is ready for writing (connection succeeded or write buffer got space)
 		EVENT_ERROR=4,      //connection got error state (connection failed or broken)
-		EVENT_GOTROUTE=8    //mesh network got first route to remote host
+		EVENT_GOTROUTE=8,    //mesh network got first route to remote host
+		EVENT_NEEDCONNCHECK=16, //connection must be checked to be alive (keepalive_check() called for streams)
 	};
 private:
+	iot_meshnet_controller* controller=NULL;
+	iot_netcon_mesh *controller_next=NULL, *controller_prev=NULL;
 	iot_hostid_t remote_host=0; //remote host (for connected passive, 0 for listening) or destination host (for non-passive)
 //	iot_objref_ptr<iot_peer> remote_peer;
 
@@ -114,6 +117,11 @@ public:
 		}
 		if(connection_state) connection_state->detach_netcon(); //must be done to clear internal reference to this netcon inside state and to free the state which could be preserved in on_stop()
 		connection_state=NULL;
+		if(controller) {
+			controller->on_destroyed_meshtun(this);
+			controller=NULL;
+		}
+		assert(controller_prev==NULL);
 	}
 
 	void set_reconnection_policy(uint32_t connect_maxretries_, uint32_t connect_timeout_, uint32_t connect_retry_delay_, uint32_t connect_retry_mult_=0, uint32_t connect_retry_limitmult_=0) {
@@ -133,13 +141,11 @@ public:
 	static int accept_server(const iot_netcon_mesh* srv) { //creates server instance in connected state (accepts incoming connection)
 		if(!srv || !srv->is_passive || !srv->is_stream || srv->phase!=srv->PHASE_LISTENING) return IOT_ERROR_INVALID_ARGS;
 
-		iot_meshnet_controller* controller=static_cast<iot_meshnet_controller*>(srv->registry);
-
 		iot_netcon_mesh* rep=iot_netcontype_metaclass_mesh::allocate_netcon((iot_netproto_config*)srv->protoconfig);
 		if(!rep) return IOT_ERROR_NO_MEMORY;
 
 		iot_meshtun_stream_state* st;
-		int err=controller->meshtun_create(rep, srv->allocator, TUN_STREAM, true);
+		int err=srv->controller->meshtun_create(rep, srv->allocator, TUN_STREAM, true);
 		if(err) goto onexit;
 
 		//now try to accept connection
@@ -149,7 +155,7 @@ public:
 		if(err) goto onexit;
 		//meshtun is active and able to receive data just after accepting!
 
-		err=rep->init_server(controller, 0, srv->is_stream, true);
+		err=rep->init_server(srv->controller, 0, srv->registry, srv->is_stream, true, st->get_peer_id(), st->get_remote_port());
 		if(err) goto onexit;
 
 		rep->phase=PHASE_CONNECTED;
@@ -174,9 +180,9 @@ onexit:
 	}
 
 
-	int init_server(iot_meshnet_controller* controller, uint16_t port_, bool force_stream=false, bool noinit=false, iot_hostid_t remote_host_=0, uint16_t remote_port_=0) { //true noinit to leave object in INITING state on success
+	int init_server(iot_meshnet_controller* controller_, uint16_t port_, iot_netconregistryiface* registryiface, bool force_stream=false, bool noinit=false, iot_hostid_t remote_host_=0, uint16_t remote_port_=0) { //true noinit to leave object in INITING state on success
 		//for listening socket remote_port_ and remote_host_ should be zero
-		if(!controller) return IOT_ERROR_INVALID_ARGS;
+		if(!controller_) return IOT_ERROR_INVALID_ARGS;
 		const iot_netprototype_metaclass* protometa=protoconfig->get_metaclass();
 		if(!protometa->can_meshtun || !protometa->type_id) return IOT_ERROR_NOT_SUPPORTED;
 		if(port_>protometa->meshtun_maxport || (remote_host_!=0 && remote_port_>protometa->meshtun_maxport)) return IOT_ERROR_INVALID_ARGS;
@@ -197,7 +203,11 @@ onexit:
 		auto_local_port=false;
 
 		phase=PHASE_INITIAL;
-		int err=assign_registryiface(controller);
+		int err=controller_->on_new_meshtun(this);
+		if(err) goto onerror;
+		controller=controller_;
+
+		err=assign_registryiface(registryiface);
 		if(err) goto onerror;
 
 		if(!noinit) mark_inited();
@@ -207,9 +217,9 @@ onerror:
 		return err;
 	}
 
-	int init_client(iot_meshnet_controller* controller, iot_hostid_t host_, uint16_t port_, bool force_stream=false, bool auto_local_port_=true, uint16_t localport_=0) {
+	int init_client(iot_meshnet_controller* controller_, iot_hostid_t host_, uint16_t port_, iot_netconregistryiface* registryiface, bool force_stream=false, bool auto_local_port_=true, uint16_t localport_=0) {
 		//force_stream can true for non-streamable protocols to force strict packet ordering. for streamable protocols does not matter
-		if(!controller) return IOT_ERROR_INVALID_ARGS;
+		if(!controller_) return IOT_ERROR_INVALID_ARGS;
 		const iot_netprototype_metaclass* protometa=protoconfig->get_metaclass();
 		if(!protometa->can_meshtun || !protometa->type_id) return IOT_ERROR_NOT_SUPPORTED;
 		if(!host_ || port_>protometa->meshtun_maxport || (!auto_local_port_ && localport_>protometa->meshtun_maxport)) return IOT_ERROR_INVALID_ARGS;
@@ -230,7 +240,11 @@ onerror:
 		auto_local_port=auto_local_port_;
 
 		phase=PHASE_INITIAL;
-		int err=assign_registryiface(controller);
+		int err=controller_->on_new_meshtun(this);
+		if(err) goto onerror;
+		controller=controller_;
+
+		err=assign_registryiface(registryiface);
 		if(err) goto onerror;
 
 		mark_inited();
@@ -257,6 +271,16 @@ private:
 	virtual uint8_t p_get_cpu_loading(void) override { //must return pure cpu loading of netcon layer implementation
 		return 3; //test value to force separate thread
 	}
+	virtual bool do_compare_params(iot_netcon* op_) override { //must return true if parameters of same typed netcons are the same. is_passive is already checked to be the same
+		iot_netcon_mesh *op=static_cast<iot_netcon_mesh*>(op_);
+		if(phase==PHASE_UNINITED || op->phase==PHASE_UNINITED) return false;
+		if(is_passive) return local_port!=op->local_port ? false : true;
+		//client connection
+
+		if(is_stream==op->is_stream && remote_host==op->remote_host && remote_port==op->remote_port) return true;
+		return false;
+	}
+
 	virtual void do_start_uv(void) override;
 	virtual int do_stop(void) override;
 	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const override;
@@ -304,14 +328,21 @@ private:
 	void process_client_phase(void) {
 		assert(uv_thread_self()==thread->thread);
 		int err;
-		iot_meshnet_controller* controller=static_cast<iot_meshnet_controller*>(registry);
 		cancel_retry_phase();
 //again:
 		switch(phase) {
 			case PHASE_INITIAL:
+				assert(connect_timer_state==HS_UNINIT);
+				err=uv_timer_init(loop, &connect_timer);
+				assert(err==0);
+				connect_timer.data=this;
+				connect_timer_state=HS_INIT;
+				setup_connect_timer();
+
 				phase=PHASE_CONNECTING;
+				//pass through
 			case PHASE_CONNECTING:
-outlog_notice("meshtun in connecting phase");
+outlog_debug_meshtun("meshtun in connecting phase");
 				waiting_route=false;
 				if(is_stream) {
 					if(!connection_state) err=controller->meshtun_create(this, allocator, TUN_STREAM, is_passive);
@@ -350,13 +381,12 @@ outlog_notice("meshtun in connecting phase");
 	void process_server_phase(void) {
 		assert(uv_thread_self()==thread->thread);
 		int err;
-		iot_meshnet_controller* controller=static_cast<iot_meshnet_controller*>(registry);
 //again:
 		switch(phase) {
 			case PHASE_INITIAL:
 				phase=PHASE_LISTENING;
 			case PHASE_LISTENING: {
-outlog_notice("meshtun in listening phase");
+outlog_debug_meshtun("meshtun in listening phase");
 				if(is_stream) {
 					if(!connection_state) err=controller->meshtun_create(this, allocator, TUN_STREAM_LISTEN);
 					else {
@@ -386,7 +416,7 @@ outlog_notice("meshtun in listening phase");
 					retry_phase();
 					return;
 				}
-				outlog_notice("Now listening for incoming mesh tunnel connections on port %u", unsigned(local_port));
+				outlog_debug_meshtun("Now listening for incoming mesh tunnel connections on port %u", unsigned(local_port));
 				connect_errors=0;
 				return;
 			}
@@ -402,7 +432,7 @@ outlog_notice("meshtun in listening phase");
 		int err;
 		switch(phase) {
 			case PHASE_CONNECTED:
-outlog_notice("meshtun in connected phase");
+outlog_debug_meshtun("meshtun in connected phase");
 				assert(protosession==NULL);
 
 				iot_hostid_t peer_id;
@@ -440,49 +470,7 @@ outlog_notice("meshtun in connected phase");
 				return;
 		}
 	}
-	void on_connect_status(int err, bool from_instantiate=false) { //from_instantiate means that actually error occured during session instantiation, to skip some checks and messages
-		if(!err) { //successful connection
-			assert(!from_instantiate); //success of instantiation cannot go here
-			connect_errors=0;
-			num_quick_retries=0;
-			phase=PHASE_CONNECTED;
-			process_common_phase();
-			return;
-		}
-		if(err==IOT_ERROR_NO_ROUTE) { //allow quick retry when route appears
-			waiting_route=true;
-		}
-
-		if(connection_state->detach_netcon(true)) { //cannot be closed immediately, so detach from state
-			connection_state=NULL;
-		}
-
-		if(from_instantiate) {
-			phase=PHASE_CONNECTING;
-			goto doretry;
-		}
-
-		//there is connection error
-		if(err==IOT_ERROR_TRY_AGAIN) {
-			if(num_quick_retries<10) {
-				retry_delay=100;
-				num_quick_retries++;
-				outlog_notice("Got TRY_AGAIN creating mesh tunnel to host '%" IOT_PRIhostid "', retrying in %u msecs", remote_host, retry_delay);
-				retry_phase();
-				return;
-			}
-		}
-doretry:
-		retry_delay=calc_reconnect_delay();
-		connect_errors++;
-		num_quick_retries=0;
-		if(connect_maxretries>0 && connect_errors>=connect_maxretries) {
-			on_reconnects_exceeded();
-			return;
-		}
-		if(!from_instantiate) outlog_notice("Error creating mesh tunnel to host '%" IOT_PRIhostid "': %s, retrying in %u msecs", remote_host, kapi_strerror(err), retry_delay);
-		retry_phase();
-	}
+	void on_connect_status(int err, bool from_instantiate=false); //from_instantiate means that actually error occured during session instantiation, to skip some checks and messages
 
 	void on_signal(void); //is called to notify about connection readability/writability/incoming connection/closing by peer
 

@@ -715,7 +715,8 @@ private:
 	}
 	bool event_start(iot_modelevent* ev) { //checks if event processing involves any blocked node or rule. if no, then starts processing and returns true
 		if(ev->is_blocked) return false;
-printf("CHECKING EVENT %" PRIu64 " CAN BE STARTED\n", ev->id.numerator);
+
+		outlog_debug_modelling("CHECKING EVENT %" PRIu64 " CAN BE STARTED", ev->id.numerator);
 
 		iot_modelsignal* sig;
 		//check if event is not blocked by other events being executed. also fill node_out field for all valid signals
@@ -791,7 +792,7 @@ printf("CHECKING EVENT %" PRIu64 " CAN BE STARTED\n", ev->id.numerator);
 			return false;
 		}
 
-printf("EXECUTION OF EVENT %" PRIu64 " STARTED\n", ev->id.numerator);
+outlog_debug_modelling("EXECUTION OF EVENT %" PRIu64 " STARTED", ev->id.numerator);
 		BILINKLIST_INSERTHEAD(ev, current_events_head, qnext, qprev);
 
 
@@ -834,7 +835,7 @@ nextstep: //begin loop of execution steps {
 			ev->step++;
 			assert(ev->step<=nodes_index.getamount());
 
-printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numerator);
+outlog_debug_modelling("STEP %u MODELLING EVENT %" PRIu64, unsigned(ev->step), ev->id.numerator);
 
 			//PROCESS SIGNALS by assigning updated outputs to corresponding out and propagating to corresponding inputs
 			while((sig=ev->get_signal())) {
@@ -861,8 +862,7 @@ printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numer
 						continue;
 					}
 					//apply output update
-					char buf1[128],buf2[128];
-					outlog_debug("Value of output '%s' of node %" IOT_PRIiotid " changed from \"%s\" into \"%s\"", sig->node_out->label+1,
+					outlog_debug_modelling_vars(char buf1[128];char buf2[128], "Value of output '%s' of node %" IOT_PRIiotid " changed from \"%s\" into \"%s\"", sig->node_out->label+1,
 						sig->node_out->node->node_id, sig->node_out->current_value ? sig->node_out->current_value->sprint(buf1, sizeof(buf1)) : "Undef",
 						sig->data ? sig->data->sprint(buf2, sizeof(buf2)) : "Undef");
 
@@ -880,8 +880,7 @@ printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numer
 						continue;
 					}
 
-					char buf1[128];
-					outlog_debug("New message from output '%s' of node %" IOT_PRIiotid ": \"%s\"", sig->node_out->label+1,
+					outlog_debug_modelling_vars(char buf1[128], "New message from output '%s' of node %" IOT_PRIiotid ": \"%s\"", sig->node_out->label+1,
 						sig->node_out->node->node_id, sig->data->sprint(buf1, sizeof(buf1)));
 				}
 
@@ -899,11 +898,9 @@ printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numer
 						if(link->in->fixed_value) continue; //input value fixed
 						if(link->in->current_value==sig->data || (link->in->current_value && sig->data && *sig->data==*link->in->current_value)) continue; //input value unchanged
 
-						char buf1[128],buf2[128];
-						outlog_debug("\tValue of input '%s' of node %" IOT_PRIiotid " changed from \"%s\" into \"%s\"", link->in->label+1,
+						outlog_debug_modelling_vars(char buf1[128];char buf2[128], "\tValue of input '%s' of node %" IOT_PRIiotid " changed from \"%s\" into \"%s\"", link->in->label+1,
 							dnode->node_id, link->in->current_value ? link->in->current_value->sprint(buf1, sizeof(buf1)) : "Undef",
 							sig->data ? sig->data->sprint(buf2, sizeof(buf2)) : "Undef");
-
 						//update input
 						if(link->in->current_value) link->in->current_value->release();
 						if(sig->data) {
@@ -916,16 +913,14 @@ printf("STEP %u MODELLING EVENT %" PRIu64 "\n", unsigned(ev->step), ev->id.numer
 						if(link->in->real_index<0) continue; //signal to unknown input cannot be delivered
 
 					} else {
-						char buf1[128];
-						outlog_debug("\tNew message for input '%s' of node %" IOT_PRIiotid ": \"%s\"", link->in->label+1,
+						
+						outlog_debug_modelling_vars(char buf1[128], "\tNew message for input '%s' of node %" IOT_PRIiotid ": \"%s\"", link->in->label+1,
 							dnode->node_id, sig->data->sprint(buf1, sizeof(buf1)));
-
 						if(link->in->real_index<0) continue; //signal to unknown input cannot be delivered, so drop msg
 
 						//copy msg to list
 						if(link->current_msg) {
-							char buf[128];
-							outlog_notice("Overwriting duplicated input message \"%s\" for node %" IOT_PRIiotid " input '%s'", link->current_msg->sprint(buf, sizeof(buf)), dnode->node_id, link->in->label+1);
+							outlog_debug_modelling_vars(char buf[128], "Overwriting duplicated input message \"%s\" for node %" IOT_PRIiotid " input '%s'", link->current_msg->sprint(buf, sizeof(buf)), dnode->node_id, link->in->label+1);
 							link->current_msg->release();
 						}
 						sig->data->incref();
@@ -1030,7 +1025,7 @@ memory_prealloc:
 				if(node->maxpathlen>minpathlen) continue; //not selected for this step
 				assert(node->maxpathlen==minpathlen); // minpathlen must be minimal among maxpathlens
 
-printf("\tSELECTED NODE %" IOT_PRIiotid " for execution on this step\n", node->node_id);
+outlog_debug_modelling("\tSELECTED NODE %" IOT_PRIiotid " for execution on this step", node->node_id);
 				node->acted=true;
 				node->clear_initial();
 
@@ -1084,7 +1079,7 @@ nosignals:
 			ULINKLIST_REMOVEHEAD(ev->blocked_nodes_head, blocked_next);
 		}
 
-printf("EXECUTION OF EVENT %" PRIu64 " FINISHED\n", ev->id.numerator);
+outlog_debug_modelling("EXECUTION OF EVENT %" PRIu64 " FINISHED", ev->id.numerator);
 		ev->continue_phase=ev->CONT_NONE;
 		BILINKLIST_REMOVE(ev, qnext, qprev); //remove from current events list
 		ev->destroy();
@@ -1092,7 +1087,7 @@ printf("EXECUTION OF EVENT %" PRIu64 " FINISHED\n", ev->id.numerator);
 	}
 	void recursive_calcpath(iot_config_item_node_t* node, int depth) { //calculate potential path for initial nodes
 
-printf("\t\tTracing potential path from node %" IOT_PRIiotid "\n", node->node_id);
+outlog_debug_modelling("\t\tTracing potential path from node %" IOT_PRIiotid, node->node_id);
 
 		depth++;
 		//eval every output of node to all connected inputs
@@ -1121,7 +1116,7 @@ printf("\t\tTracing potential path from node %" IOT_PRIiotid "\n", node->node_id
 		}
 	}
 	void recursive_block(iot_config_node_out_t* out, iot_modelevent* ev, int depth) { //block all connected nodes by specified event
-		outlog_debug("(depth %d) Blocking nodes from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
+		outlog_debug_modelling("(depth %d) Blocking nodes from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
 		if(!out->is_connected) return; //no valid links
 		for(iot_config_item_link_t* link=out->ins_head; link; link=link->next_input) { //loop by inputs connected to provided out
 			if(!link->valid()) continue;
@@ -1129,7 +1124,7 @@ printf("\t\tTracing potential path from node %" IOT_PRIiotid "\n", node->node_id
 			if(/*dnode->probing_mark || */dnode->blockedby==ev) continue; //probing_mark must be checked here to protect initial signal nodes from blocking
 			assert(dnode->blockedby==NULL);
 			dnode->blockedby=ev;
-printf("Node %" IOT_PRIiotid " blocked\n", dnode->node_id);
+outlog_debug_modelling("Node %" IOT_PRIiotid " blocked", dnode->node_id);
 
 			assert(!dnode->is_initial());
 			ULINKLIST_INSERTHEAD(dnode, ev->blocked_nodes_head, blocked_next);
@@ -1158,12 +1153,12 @@ printf("Node %" IOT_PRIiotid " blocked\n", dnode->node_id);
 		}
 	}
 	iot_modelevent* recursive_checkblocked(iot_config_node_out_t* out, int depth) { //check if any node connected to provided out is blocked by event processing
-		outlog_debug("(depth %d) Probing blocked nodes from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
+		outlog_debug_modelling("(depth %d) Probing blocked nodes from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
 		for(iot_config_item_link_t* link=out->ins_head; link; link=link->next_input) { //loop by inputs connected to provided out
 			if(!link->valid() || link->in->node->probing_mark) continue;
 			auto dnode=link->in->node;
 			if(dnode->blockedby) {
-				outlog_debug("blocked by event %" PRIu64 " (common node %" IOT_PRIiotid ")", dnode->blockedby->id.numerator, dnode->node_id);
+				outlog_debug_modelling("blocked by event %" PRIu64 " (common node %" IOT_PRIiotid ")", dnode->blockedby->id.numerator, dnode->node_id);
 				return dnode->blockedby;
 			}
 			if(!dnode->outputs_connected) continue;

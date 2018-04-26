@@ -108,8 +108,26 @@ struct iot_meshorigroute_entry {
 	iot_objref_ptr<iot_peer> hostpeer; //iot_peer corresponding to host (evaluated on this side for purpose of speedup)
 	uint32_t delay; //path delay in microseconds (us) as was reported by direct peer of session. hard limited to ROUTEENTRY_MAXDELAY us
 	uint16_t pathlen; //pathlen as was reported by direct peer of session (this value is incremented by 1 when route entry is copied to mesh session's iot_meshroute_entry)
-};
 
+	static void array_extend(iot_meshorigroute_entry *array, uint32_t cur_len, uint32_t start_idx, uint32_t num) { //extends array of cur_len iot_meshorigroute_entry items by inserting num empty items at start_idx and moving existing items
+		if(start_idx<cur_len) {
+			memmove(array+start_idx+num, array+start_idx, sizeof(*array)*(cur_len-start_idx));
+			memset(array+start_idx, 0, sizeof(*array)*num); //IMPORTANT to invalidate hostpeer as it was copied and helds unaccounted reference
+		} else {
+			assert(start_idx==cur_len);
+		}
+	}
+	static void array_shrink(iot_meshorigroute_entry *array, uint32_t cur_len, uint32_t start_idx, uint32_t remove_num) { //extends array of cur_len iot_meshorigroute_entry items by inserting num empty items at start_idx and moving existing items
+		assert(start_idx+remove_num<=cur_len);
+		if(!remove_num) return;
+		for(uint32_t i=start_idx; i<start_idx+remove_num; i++) array[i].hostpeer=NULL; //free reference to host in items which will be overwritten
+		if(start_idx+remove_num<cur_len) {
+			memmove(array+start_idx, array+start_idx+remove_num, sizeof(*array)*(cur_len-start_idx-remove_num));
+			memset(array+cur_len-remove_num, 0, sizeof(*array)*remove_num); //IMPORTANT to invalidate hostpeer as it was copied and helds unaccounted reference
+		}
+	}
+};
+/*
 struct iot_meshses_command {
 	volatile std::atomic<iot_meshses_command*> next=NULL; //points to next command in command queue
 	enum code_t : uint8_t {
@@ -139,7 +157,7 @@ struct iot_meshses_command_check_streamq : public iot_meshses_command {
 	}
 };
 
-
+*/
 
 
 //metaclass for MESH protocol type
@@ -155,10 +173,9 @@ public:
 //keeps configuration for MESH protocol sessions
 class iot_netproto_config_mesh : public iot_netproto_config {
 public:
-	iot_gwinstance *gwinst;
 	iot_objref_ptr<iot_peer> const peer; //is NULL for listening connections
 	iot_netproto_config_mesh(iot_gwinstance *gwinst, iot_peer* peer, object_destroysub_t destroysub, bool is_dynamic, void* customarg=NULL) : 
-		iot_netproto_config(&iot_netprototype_metaclass_mesh::object, destroysub, is_dynamic, customarg), gwinst(gwinst), peer(peer)
+		iot_netproto_config(&iot_netprototype_metaclass_mesh::object, gwinst, destroysub, is_dynamic, customarg), peer(peer)
 	{
 		assert(gwinst!=NULL);
 	}
@@ -191,14 +208,6 @@ class iot_netproto_session_mesh : public iot_netproto_session {
 		CMD_MESHTUN, //incapsulated mesh stream packet to some host which can be behind direct peer. if not destined locally then is proxied to another peer using routing table
 	};
 	enum headflags_t : uint16_t {
-	};
-	enum meshtunflags_t : uint16_t {
-		MTFLAG_STREAM=1<<0,		//this is tunneled stream and packet_meshtun_stream follows (relative order 1) 
-		MTFLAG_STREAM_SYN=1<<1,	//this packet is initiation of stream from src to dst
-		MTFLAG_STREAM_FIN=1<<2,	//this packet FINALIZES stream from src to dst (i.e. src will not send more data, but can receive)
-		MTFLAG_STREAM_ACK=1<<3,	//flag that ack_sequence field of packet_meshtun_stream is valid
-		MTFLAG_STREAM_WANTACK=1<<4,	//can be set to ask peer to send ACK of received data as soon as possible (e.g. if output buffer is filled more than half, ACK will allow to clean it)
-		MTFLAG_STREAM_RESET=1<<5,	//cannot be set together with other stream flags. means that connection must be reset, if exists. no reply is assumed
 	};
 	enum srvcode_t : uint8_t {
 //		SRVCODE_SEQUENCE_ACK, //acknowledge of seq_id of received packets (it will be in qword_param). FOR DATAGRAM connections only
@@ -324,6 +333,16 @@ class iot_netproto_session_mesh : public iot_netproto_session {
 	);
 	static_assert(sizeof(packet_service) % 8==0);
 public:
+	enum meshtunflags_t : uint16_t {
+		MTFLAG_STREAM=1<<0,		//this is tunneled stream and packet_meshtun_stream follows (relative order 1) 
+		MTFLAG_STREAM_SYN=1<<1,	//this packet is initiation of stream from src to dst
+		MTFLAG_STREAM_FIN=1<<2,	//this packet FINALIZES stream from src to dst (i.e. src will not send more data, but can receive)
+		MTFLAG_STREAM_ACK=1<<3,	//flag that ack_sequence field of packet_meshtun_stream is valid
+		MTFLAG_STREAM_WANTACK=1<<4,	//can be set to ask peer to send ACK of received data as soon as possible (e.g. if output buffer is filled more than half, ACK will allow to clean it)
+		MTFLAG_STREAM_RESET=1<<5,	//cannot be set together with other stream flags. means that connection must be reset, if exists. no reply is assumed
+		MTFLAG_STATUS=1<<6,	//shows that packet returns status to mirrored packet. status code is in packet_meshtun_stream::statuscode for MTFLAG_STREAM, TODO for datagrams
+	};
+
 	PACKED (
 		struct packet_meshtun_hdr { //tunnel over mesh net (incapsulation of connection) to another host. fixed common part for stream and datagram tunnels
 			iot_hostid_t srchost;
@@ -334,7 +353,7 @@ public:
 			uint16_t protoid;
 			uint16_t flags; //bit field with flags from meshtunflags_t. determines optional header parts
 			//24 bytes
-			uint32_t datalen; //length of mesh stream data present in this packet after this header and all optional parts
+			uint32_t datalen; //length of meshtun data present in this packet after this header and all optional parts
 			uint16_t hdrlen; //total length of this and optional header parts and authdata. hdrlen+datalen gives total packet length without packet_hdr
 			uint8_t metalen64; //length of meta data in 'meta[]' in 8-byte qwords
 			uint8_t ttl; //Time To Live. decremented after every forwarding. packet is dropped if ttl gets to zero
@@ -354,8 +373,9 @@ public:
 			uint64_t data_sequence; //sequence number of mesh stream data present in this packet after this header and all optional parts. must be zero if MSFLAG_INITIATE is set
 			//24 bytes
 			uint32_t rwndsize; //size of receive window on sending side (i.e. how many bytes after ack_sequence+sum(sack_ranges[i].offset+sack_ranges[i].len) can be received)
+			int16_t statuscode; //when MTFLAG_STATUS flag is set keeps status code
 			uint8_t num_sack_ranges;
-			uint8_t reserved[3];
+			uint8_t reserved;
 			//32 bytes
 			PACKED (
 				struct sack_range_t { //
@@ -416,15 +436,15 @@ public:
 	iot_objref_ptr<iot_peer> peer_host; //is NULL for passive connections before authentication
 private:
 	iot_objref_ptr<iot_netproto_config_mesh> const config;
-	mpsc_queue<iot_meshses_command, iot_meshses_command, &iot_meshses_command::next> comq;
+//	mpsc_queue<iot_meshses_command, iot_meshses_command, &iot_meshses_command::next> comq;
 
 	uint64_t next_seq_id=0; //this connection side next sequence id to use. incremented for each outgoing packet
 	uint64_t next_peer_seq_id=0; //peer's connection side next assumed sequence id for incoming packet
 
 	void (iot_netproto_session_mesh::* state_handler)(hevent_t)=NULL;
 
-	uv_timer_t phase_timer;
-	uv_async_t comq_watcher; //gets signal when new command arrives
+	uv_timer_t phase_timer={};
+	uv_async_t comq_watcher={}; //gets signal when new command arrives
 
 	packet_hdr *current_inpacket_hdr=NULL;
 	cmd_t current_outpacket_cmd=CMD_ILLEGAL; //request being currently sent
@@ -466,12 +486,13 @@ private:
 //	bool routing_pending=false; //true value means that routing table must be sent to peer after current request is sent
 	bool routing_syncing=false; //true value means that routing table sync to peer is waiting for configrmation from peer
 	uint8_t routing_needconfirm=0; //>0 when routing table was received from peer and confirmation must be sent. 1 means 'no error', >1 means error
-	volatile std::atomic<bool> has_activeroutes; //is set when any route in routes list becomes active. signal must also be sent when activation occurs. clearing must occur inside session code with obtained R-routing lock
+	volatile std::atomic<bool> has_activeroutes={false}; //is set when any route in routes list becomes active. signal must also be sent when activation occurs. clearing must occur inside session code with obtained R-routing lock
 
 	enum state_t : uint8_t {
+		STATE_INITIAL,
 		STATE_BEFORE_AUTH, //authentication is in progress
 		STATE_WORKING, //authentication done
-	} state;
+	} state=STATE_INITIAL;
 
 
 
@@ -500,25 +521,27 @@ public:
 		//any thread
 		uv_async_send(&comq_watcher);
 	}
-	void send_command(iot_meshses_command* com) { //any thread
+/*	void send_command(iot_meshses_command* com) { //any thread
 		assert(com!=NULL);
 		if(comq.push(com)) {
 			uv_async_send(&comq_watcher);
 		}
 	}
-
+*/
 
 private:
 	bool check_privileged_output(void);
 	void on_commandq(void);
 	bool process_meshtun_output(iot_meshtun_stream_state *st, uint32_t delay, uint16_t pathlen);
-	bool process_meshtun_output(iot_meshtun_forwarding *st);
+	bool process_meshtun_output(iot_meshtun_forwarding *st, uint16_t pathlen);
 	void process_meshtun_outputready(iot_meshtun_stream_state *st);
 	void process_meshtun_outputaborted(iot_meshtun_stream_state *st);
 	bool process_meshtun_proxy_input(packet_meshtun_hdr* req);
 	bool process_meshtun_local_input(packet_meshtun_hdr* req);
 	bool process_meshtun_input(iot_meshtun_stream_listen_state *st, packet_meshtun_hdr* req);
 	bool process_meshtun_input(iot_meshtun_stream_state *st, packet_meshtun_hdr* req);
+	bool process_meshtun_status(iot_meshtun_stream_state *st, packet_meshtun_hdr* req);
+	bool reset_meshtun_stream(packet_meshtun_hdr* req);
 
 	void send_service_packet(srvcode_t code, uint8_t byte_param=0, uint16_t word_param=0, uint32_t dword_param=0, uint64_t qword_param=0, uint64_t qword_param2=0) {
 		assert(uv_thread_self()==thread->thread);
@@ -640,37 +663,6 @@ private:
 		sendbuf_offset=0;
 		(this->*state_handler)(HEVENT_WRITE_READY);
 
-/*		assert(current_outpacket);
-		assert(current_outpacket->state==iot_gwprotoreq::STATE_BEING_SENT);
-
-
-		if(current_outpacket_offset==current_outpacket_size) {
-			in_processing=true;
-
-			int err;
-			if((current_outpacket->reqtype & (IOTGW_IS_REPLY | IOTGW_IS_ASYNC)) == 0) { //sync request
-				current_outpacket->state=iot_gwprotoreq::STATE_WAITING_REPLY;
-				BILINKLISTWT_INSERTTAIL(current_outpacket, waitingpackets_head, waitingpackets_tail, next, prev);
-				err=current_outpacket->p_req_outpacket_sent(this);
-			} else { //reply or async request
-				current_outpacket->state=iot_gwprotoreq::STATE_SENT;
-				err=current_outpacket->reqtype & IOTGW_IS_REPLY ?
-						current_outpacket->p_reply_outpacket_sent(this) :
-						current_outpacket->p_req_outpacket_sent(this);
-			}
-			if(err) {
-				assert(false);
-				//todo  (remember about in_processing)
-			}
-			if(current_outpacket->state==iot_gwprotoreq::STATE_FINISHED) current_outpacket->release(current_outpacket);
-			current_outpacket=NULL;
-
-			in_processing=false;
-			if(pending_close) stop();
-			return;
-		}
-		assert(current_outpacket_offset<current_outpacket_size);
-*/
 		//on_can_write_data will be called automatically
 	}
 /*	virtual void on_can_write_data(void) override {

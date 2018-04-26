@@ -178,7 +178,10 @@ void iot_device_connection_t::deinit(void) {
 	client_host=0;
 
 	if(clientclose_msg)  {iot_release_msg(clientclose_msg); clientclose_msg=NULL;}
-	if(driverclose_msg)  {iot_release_msg(driverclose_msg); driverclose_msg=NULL;}
+	if(driverclose_msg)  {
+		iot_release_msg(driverclose_msg);
+		driverclose_msg=NULL;
+	}
 	if(driverstatus_msg)  {iot_release_msg(driverstatus_msg); driverstatus_msg=NULL;}
 	if(c2d_ready_msg)  {iot_release_msg(c2d_ready_msg); c2d_ready_msg=NULL;}
 	if(d2c_ready_msg)  {iot_release_msg(d2c_ready_msg); d2c_ready_msg=NULL;}
@@ -206,6 +209,9 @@ int iot_device_connection_t::close(iot_threadmsg_t* asyncmsg) { //can be called 
 		}
 		main_thread_item->send_msg(msg);
 		return IOT_ERROR_NOT_READY; //successful status for case with different threads
+	} else if(asyncmsg) {
+		iot_release_msg(asyncmsg);
+		asyncmsg=NULL;
 	}
 	//main thread
 	assert(connident);

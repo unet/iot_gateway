@@ -271,7 +271,7 @@ void iot_gen_random(char* buf, uint16_t len);
 #define BILINKLISTWT_REMOVE_NOCL(itemptr, nextfld, prevfld) \
 	do {																									\
 		if(!(itemptr)->nextfld || !(itemptr)->prevfld) { /*disconnected item*/								\
-			assert((itemptr)->nextfld==(itemptr)->prevfld); /*check that both posinters are NULL*/			\
+			assert((itemptr)->nextfld==(itemptr)->prevfld); /*check that both pointers are NULL*/			\
 			break;																							\
 		}																									\
 		if(!(uintptr_t((itemptr)->nextfld) & 1)) (itemptr)->nextfld->prevfld=(itemptr)->prevfld;/*not last*/	\
@@ -719,6 +719,9 @@ public:
 //		return uv_thread_self()==thread->thread;
 //	}
 	int init(uint32_t prec_, uint64_t maxdelay_);
+	bool is_init(void) const {
+		return wheelbuf!=NULL;
+	}
 	bool deinit(void (*on_deinit_)(void *arg)=NULL, void* arg=NULL) { //returns true if deinit finished, false if memory cannot be released until on_deinit is called (it can be NULL if no such notification is necessary)
 		if(!wheelbuf) return true;
 		for(uint32_t i=0;i<numitems;i++) {
@@ -752,35 +755,55 @@ public:
 		iot_fixprec_timer_item<shared> * head;
 
 		if(shared) {
+			lock.lock();
+			uint32_t tmpcuritem=curitem;
+			uint32_t tmpperiod_id=period_id;
+			//set correct curitem and period_id before calling any notify() because it can reschedule timer and must do this with correct delay relative to time of moment AFTER all steps are processed
+			curitem+=steps; //increment curitem BEFORE running notify() because otherwise rescheduling timer with zero delay will readd item to the same linked list and cause enless loop
+			period_id+=steps;
+			if(curitem>=numitems) {
+				curitem-=numitems;
+				starttime=now+prec-uint64_t(curitem)*prec; //realign starttime when curitem passes 0
+			}
+
 			while(steps>0) {
 again:
-				lock.lock();
-				head=wheelbuf[curitem];
+				head=wheelbuf[tmpcuritem];
 				if(head) {
 					BILINKLIST_REMOVE(head, next, prev);
 					lock.unlock();
-					head->notify(head->param, period_id, now);
+					head->timer.store(NULL, std::memory_order_release);
+					head->notify(head->param, tmpperiod_id, now); //reschedule() called from notify() will see updated curitem and period_id
+					lock.lock();
 					goto again;
 				}
-				curitem++;
-				period_id++;
-				if(curitem>=numitems) curitem=0;
-				lock.unlock();
-				if(curitem==0) starttime=now+uint64_t(steps)*prec; //realign starttime when curitem passes 0
+				tmpcuritem++;
+				tmpperiod_id++;
+				if(tmpcuritem>=numitems) tmpcuritem=0;
 				steps--;
 			}
+			lock.unlock();
 		} else {
 			assert(thread_valid());
+			uint32_t tmpcuritem=curitem;
+			uint32_t tmpperiod_id=period_id;
+			//set correct curitem and period_id before calling any notify() because it can reschedule timer and must do this with correct delay relative to time of moment AFTER all steps are processed
+			curitem+=steps; //increment curitem BEFORE running notify() because otherwise rescheduling timer with zero delay will readd item to the same linked list and cause enless loop
+			period_id+=steps;
+			if(curitem>=numitems) {
+				curitem-=numitems;
+				starttime=now+prec-uint64_t(curitem)*prec; //realign starttime when curitem passes 0
+			}
 
 			while(steps>0) {
-				while((head=wheelbuf[curitem])) {
+				while((head=wheelbuf[tmpcuritem])) {
 					BILINKLIST_REMOVE(head, next, prev);
-					head->notify(head->param, period_id, now);
+					head->timer.store(NULL, std::memory_order_relaxed);
+					head->notify(head->param, tmpperiod_id, now);
 				}
-				curitem++;
-				period_id++;
-				if(curitem>=numitems) curitem=0;
-				if(curitem==0) starttime=now+uint64_t(steps)*prec; //realign starttime when curitem passes 0
+				tmpcuritem++;
+				tmpperiod_id++;
+				if(tmpcuritem>=numitems) tmpcuritem=0;
 				steps--;
 			}
 		}
@@ -790,6 +813,7 @@ again:
 	//IOT_ERROR_ACTION_CANCELLED - for shared timer concurrent schedule() was running in another thread
 	int schedule(iot_fixprec_timer_item<shared> &it, uint64_t delay, uint32_t *pper_id=NULL) { //delay in ms
 		//when no errors and per_id is not NULL, it is filled with period ID at which item will be notified if won't be updated/cancelled
+		if(!wheelbuf) return IOT_ERROR_NOT_INITED;
 		assert(numitems>0);
 		if(expect_false(!it.notify)){
 			assert(false);
@@ -820,8 +844,8 @@ again:
 			assert(thread_valid());
 		}
 		uint32_t per_id=relidx+period_id;
-		auto &head=wheelbuf[(per_id) % numitems];
-		//add to the tail
+		auto &head=wheelbuf[(curitem+relidx) % numitems];
+
 		BILINKLIST_INSERTHEAD(&it, head, next, prev);
 
 		if(shared) lock.unlock();

@@ -513,7 +513,7 @@ public:
 			nback=backtrace(tmp, 4);
 			if(nback>1) {
 				char **symb=backtrace_symbols(tmp+1,3);
-				outlog_notice("Object 0x%lx reffered (now %d times) from %s <- %s <- %s", long(uintptr_t(this)), refcount, symb[0] ? symb[0] : "NULL", symb[1] ? symb[1] : "NULL", symb[2] ? symb[2] : "NULL");
+				outlog_notice("Object 0x%lx refered (now %d times) from %s <- %s <- %s", long(uintptr_t(this)), refcount, symb[0] ? symb[0] : "NULL", symb[1] ? symb[1] : "NULL", symb[2] ? symb[2] : "NULL");
 				free(symb);
 			}
 		}
@@ -537,7 +537,7 @@ public:
 			nback=backtrace(tmp, 4);
 			if(nback>1) {
 				char **symb=backtrace_symbols(tmp+1,3);
-				outlog_notice("Object 0x%lx UNreffered (now %d times) from %s <- %s <- %s", long(uintptr_t(this)), refcount, symb[0] ? symb[0] : "NULL", symb[1] ? symb[1] : "NULL", symb[2] ? symb[2] : "NULL");
+				outlog_notice("Object 0x%lx UNrefered (now %d times) from %s <- %s <- %s", long(uintptr_t(this)), refcount, symb[0] ? symb[0] : "NULL", symb[1] ? symb[1] : "NULL", symb[2] ? symb[2] : "NULL");
 				free(symb);
 			}
 		}

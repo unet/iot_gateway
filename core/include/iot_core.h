@@ -139,11 +139,11 @@ struct iot_gwinstance { //represents IOT gateway per-user state instance
 	const uint32_t guid;
 	const iot_hostid_t this_hostid; //ID of current host in user config
 
+	iot_spinlock event_lock; //MUST COME BEFORE registries!!!! otherwise lock will be uninitialized during construction of registries (meshcontroller uses this lock)
 	iot_peers_registry_t *const peers_registry;
 	iot_configregistry_t *const config_registry;
 	hwdev_registry_t *const hwdev_registry;
 	iot_meshnet_controller *const meshcontroller;
-	iot_spinlock event_lock;
 
 	iot_modinstance_item_t *node_instances_head=NULL, *driver_instances_head=NULL, *detector_instances_head=NULL;
 

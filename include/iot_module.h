@@ -19,6 +19,7 @@
 #define LNOTICE 2
 #define LERROR  3
 
+
 #ifdef NDEBUG
 	#define LMIN    LNOTICE
 #else

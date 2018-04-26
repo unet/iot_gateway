@@ -79,7 +79,7 @@ struct iot_meshconnmapkey_t {
 #define IOT_MESHNET_TIMER_PREC 100
 
 //keeps routing tables, routes inter-host traffic by most optimal way
-class iot_meshnet_controller : public iot_netconregistryiface {
+class iot_meshnet_controller {
 public:
 	iot_gwinstance *const gwinst;
 
@@ -89,7 +89,9 @@ public:
 
 private:
 	iot_netcon_mesh *cons_head=NULL;
-	iot_fixprec_timer_item<true> shutdown_timer_item;
+	iot_fixprec_timer_item<true> shutdown_timer_item;  //used during graceful shutdown of controller
+	iot_fixprec_timer_item<true> keepalive_timer_item; //used to send keepalive on client streamed meshtuns
+	iot_fixprec_timer_item<true> routesync_timer_item; //used to resync routing tables to peers
 
 
 	uv_rwlock_t routing_lock; //protects all routing related staff in iot_peer, iot_netproto_session_mesh, here (noroute_atimer, myroutes_lastversion)
@@ -97,8 +99,6 @@ private:
 //	iot_atimer noroute_atimer; //action timer to detect no-route event per peer, after fixed period of routes absence
 
 	uint64_t myroutes_lastversion; //updated at startup and when any peer looses last mesh session. gives initial value for calculating outgoing routing table for peers
-	uv_timer_t routesync_timer; //used to resync routing tables to peers
-	h_state_t routesync_timer_state=HS_UNINIT;
 	uint32_t max_protoid=0;
 	uint8_t meshtun_distribution=2; //each mesh stream is distributed over such number of direct mesh sessions (routes). must be at least 1 and not more than IOT_MESHTUN_MAXDISTRIBUTION!
 
@@ -126,6 +126,16 @@ public:
 			iot_meshnet_controller *c=(iot_meshnet_controller *)controller;
 			c->graceful_shutdown_step2();
 		});
+		keepalive_timer_item.init(this, [](void *controller, uint32_t period_id, uint64_t now_ms)->void {
+			iot_meshnet_controller *c=(iot_meshnet_controller *)controller;
+			c->on_meshtun_keepalive_timer();
+			c->timer.schedule(c->keepalive_timer_item, 30'000);
+		});
+		routesync_timer_item.init(this, [](void *controller, uint32_t period_id, uint64_t now_ms)->void {
+			iot_meshnet_controller *c=(iot_meshnet_controller *)controller;
+			c->try_sync_routing_tables();
+			c->timer.schedule(c->routesync_timer_item, 2'000);
+		});
 	}
 	int init(void) {
 		assert(uv_thread_self()==main_thread);
@@ -139,18 +149,11 @@ public:
 			memset(proto_state, 0, sz);
 		}
 
-		int err=timer.init(IOT_MESHNET_TIMER_PREC, 60000);
+		int err=timer.init(IOT_MESHNET_TIMER_PREC, 60'000);
 		if(err) return err;
 
-		err=uv_timer_init(main_thread_item->loop, &routesync_timer);
-		assert(err==0);
-		routesync_timer.data=this;
-		routesync_timer_state=HS_INIT;
-
-		uv_timer_start(&routesync_timer, [](uv_timer_t* handle)->void {
-			iot_meshnet_controller* obj=(iot_meshnet_controller*)handle->data;
-			obj->try_sync_routing_tables();
-		}, 2*1000, 2*1000); //TODO start timer by msg or async when really necessary?
+		timer.schedule(keepalive_timer_item, 30'000);
+		timer.schedule(routesync_timer_item, 2'000);
 
 //		noroute_atimer.init(IOT_MESHNET_NOROUTETIMEOUT*1000, main_thread_item->loop, true);
 
@@ -159,22 +162,19 @@ public:
 	~iot_meshnet_controller(void) {
 		timer.deinit();
 
-		if(routesync_timer_state==HS_INIT) {
-			routesync_timer_state=HS_UNINIT;
-			uv_close((uv_handle_t*)&routesync_timer, NULL); //TODO move to graceful shutdown when such function appears
-		}
-
 		if(proto_state) {
 			on_noroute_timer(NULL); //tries to set NO_ROUTE error for all bound meshtuns. this action MUST unbind them immediately
-			for(uint32_t i=0;i<max_protoid;i++) {
-				if(proto_state[i]) {
-					assert(proto_state[i]->connmap.getamount()==0); //ensure tree is empty
-					delete proto_state[i];
-					proto_state[i]=NULL;
+			if(proto_state) { //on_noroute_timer can free proto state
+				for(uint32_t i=0;i<max_protoid;i++) {
+					if(proto_state[i]) {
+						assert(proto_state[i]->connmap.getamount()==0); //ensure tree is empty
+						delete proto_state[i];
+						proto_state[i]=NULL;
+					}
 				}
+				free(proto_state);
+				proto_state=NULL;
 			}
-			free(proto_state);
-			proto_state=NULL;
 		}
 		max_protoid=0;
 
@@ -183,6 +183,7 @@ public:
 	}
 	void graceful_shutdown(void);
 	void graceful_shutdown_step2(void) {
+outlog_notice("STEP 2 of mesh controll shutting down initiated");
 		is_shutdown=true;
 
 		if(proto_state) {
@@ -195,6 +196,7 @@ public:
 		return meshtun_distribution;
 	}
 	void on_noroute_timer(iot_peer *peer);
+	void on_meshtun_keepalive_timer(iot_hostid_t hostid=0);
 
 	int register_session(iot_netproto_session_mesh* ses); //called from session's thread
 
@@ -212,7 +214,7 @@ public:
 
 	int fill_peers_from_active_routes(iot_netproto_session_mesh* ses, iot_objref_ptr<iot_peer> *peers, uint32_t *delays, uint16_t *pathlens, size_t max_peers); //called from session's thread
 
-	void route_meshtunq(iot_peer* peer);
+	bool route_meshtunq(iot_peer* peer, iot_hostid_t avoid_peer_id=0, uint16_t maxpathlen=0xffff);
 
 	//binds provided iot_meshtun_state to connection map.
 	int meshtun_bind(iot_meshtun_state *tunstate, const iot_netprototype_metaclass* protometa, iot_hostid_t remote_host, uint16_t remote_port, bool auto_local_port=true, uint16_t local_port=0);
@@ -224,12 +226,13 @@ public:
 	int meshtun_create(iot_netcon_mesh* con, iot_memallocator* allocator, iot_meshtun_type_t type, bool is_passive=false);
 	int meshtun_connect(iot_netcon_mesh* con, bool is_stream);
 
+	int on_new_meshtun(iot_netcon_mesh *conobj);
+	void on_destroyed_meshtun(iot_netcon_mesh *conobj);
+
 private:
 
 	void try_sync_routing_tables(void);
 
-	virtual int on_new_connection(iot_netcon *conobj) override;
-	virtual void on_destroyed_connection(iot_netcon *conobj) override;
 };
 
 
@@ -382,26 +385,41 @@ protected:
 
 
 class iot_meshtun_forwarding : public iot_meshtun_packet { //keeps task for packets forwarding to another host (proxying)
-//	friend class iot_meshnet_controller;
+	friend class iot_peer;;
 	friend class iot_netproto_session_mesh;
 
 	iot_hostid_t dst_host, src_host;
+	iot_hostid_t from_host; //host which proxied this packet to this host
 	iot_objref_ptr<iot_peer> dst_peer;
 	iot_objref_ptr<iot_peer> src_peer;
 	void *request_body=NULL;
 	iot_netproto_session_mesh::packet_meshtun_hdr* request; //will point to address just after this object (i.e. in the same memory block)
+	iot_netproto_session_mesh *meshses=NULL;
+	iot_fixprec_timer_item<true> timer_item;
 
-	iot_meshtun_forwarding(iot_meshnet_controller* controller, iot_hostid_t dst_host, iot_hostid_t src_host, iot_netproto_session_mesh::packet_meshtun_hdr *req)
-		 : iot_meshtun_packet(controller, TUN_FORWARDING), dst_host(dst_host), src_host(src_host), request(req)
+	int retries;
+
+public:
+	iot_meshtun_forwarding(iot_meshnet_controller* controller, iot_hostid_t dst_host, iot_hostid_t src_host, iot_hostid_t from_host, iot_netproto_session_mesh::packet_meshtun_hdr *req)
+		 : iot_meshtun_packet(controller, TUN_FORWARDING), dst_host(dst_host), src_host(src_host), from_host(from_host), request(req)
 	{
-		assert(dst_host>0 && src_host>0 && req!=NULL);
+		assert(dst_host>0 && src_host>0 && req!=NULL); //from_host can be zero if RESET to stream is generated
+		assert(dst_host!=from_host);
+
+		timer_item.init(this, [](void *stp, uint32_t period_id, uint64_t now_ms)->void {
+			iot_meshtun_forwarding *st=(iot_meshtun_forwarding *)stp;
+			st->on_timer();
+		});
 	}
 
 	~iot_meshtun_forwarding() {
 		if(request_body) iot_release_memblock(request_body);
 		request_body=NULL;
+
+		timer_item.unschedule();
 	}
 	int forward(void *data) { //data - pointer to separate memblock with meshtun data (without any packet_meshtun_hdr headers). can be NULL of data size is zero
+		//reference to data memblock will be increased on success
 		lock();
 		int err=0;
 		if(state!=ST_CLOSED) {
@@ -418,11 +436,26 @@ class iot_meshtun_forwarding : public iot_meshtun_packet { //keeps task for pack
 		request_body=data;
 
 		set_state(ST_FORWARDING);
+
+		err=controller->timer.schedule(timer_item, 5000); //TODO calculate timeout somehow?
+		assert(err==0); //must not have concurrent problem because of single-thread use of current function
 onexit:
 		unlock();
 		return err;
 	}
 private:
+	void on_timer(void) {
+		//for this timer is used to close request only
+		ref(); //meshtun queue helds the only reference, so current object will be removed inside set_closed which will lead to segfault
+		lock();
+		if(state==ST_FORWARDING || state==ST_RESET) {
+outlog_debug_meshtun("CLOSING %s packet to %" IOT_PRIhostid " due to timeout", state==ST_FORWARDING ? "forwarding" : "status", state==ST_FORWARDING ? dst_host : src_host);
+			set_closed();
+		}
+		unlock();
+		unref();
+	}
+
 	virtual int set_state(state_t newstate) override;//must be called INSIDE LOCK
 	virtual void on_state_update(update_t upd) override; //must be called INSIDE LOCK. reacts to setting error, detaching, changing substate flags
 
@@ -479,7 +512,6 @@ protected:
 			output_pending=0,		//if true, output buffer has data to be sent.
 			output_ack_pending=0,	//if true, there is unacknowledged output (for TUN_STREAM only), so space in output buffer is still busy with unacknowledged data
 			input_ack_pending=0,	//if true, there is unacknowledged input (for TUN_STREAM only)
-			input_finalized=0,		//when input_closed==0 shows if STREAM_FIN request was received and maxseen_sequenced_in cannot grow.
 			is_bound=0;				//if true, connection_key and proto_typeid are valid and shows positions in controller's connmap
 
 	iot_meshtun_state(iot_meshnet_controller* controller, iot_meshtun_type_t type, bool is_passive_stream=false)
@@ -705,6 +737,13 @@ static inline bool stream_sequence_before(uint64_t seq1, uint64_t seq2) {
 //such maximum number of bytes of data can be outputted in single meshtun packet
 #define IOT_MESHTUNSTREAM_MTU 32768
 
+//timeout in ms to get FIN of input stream after output is finished and no data input allowed
+#define IOT_MESHTUNSTREAM_INPUTFIN_TIMEOUT 500
+
+//timeout in ms to wait for some output before sending ACK for input
+#define IOT_MESHTUNSTREAM_INPUTACK_DELAY 1
+
+
 class iot_meshtun_stream_state : public iot_meshtun_state { //keeps state of connected or accepted tunnelled stream
 	friend class iot_netproto_session_mesh;
 
@@ -712,6 +751,9 @@ class iot_meshtun_stream_state : public iot_meshtun_state { //keeps state of con
 	iot_fixprec_timer_item<true> timer_item;
 
 	uint64_t timer_expires=UINT64_MAX; //show time when timer_item is set to expire
+
+	uint64_t finalize_expires=UINT64_MAX; //time when input is forcibly finalized if not getting FIN from peer
+	uint64_t input_ack_expires=UINT64_MAX; //time when pure ACK is sent to peer if no any output occured (normally ACK after input is delayed for the change to be combined with some output)
 
 	uint8_t random[IOT_MESHPROTO_TUNSTREAM_IDLEN]; //random session identifier
 	byte_fifo_buf buffer_in;
@@ -721,7 +763,7 @@ class iot_meshtun_stream_state : public iot_meshtun_state { //keeps state of con
 
 //	uint32_t used_buffer_in; //how many bytes of input data is currently unread in buffer_in. maxseen_sequenced_in-used_buffer_in gives position in stream corresponding to writepos of buffer_in
 	uint32_t peer_rwnd; //receive window size of peer. obtained together with each ack_sequenced_out and determines maximum of sequenced_out-ack_sequenced_out. write must stop if this difference is >= than peer_rwnd
-	uint32_t local_rwnd; //local receive window size to tell it to peer
+	volatile std::atomic<uint32_t> local_rwnd; //local receive window size to tell it to peer
 	uint32_t creation_time; //timestamp - 1e9 in seconds when connection was created by client side (by clock of client) or accepted by server side (by clock of server)
 //	uint32_t acception_time; //timestamp - 1e9 in seconds when connection was accepted by server side (by clock of server)
 
@@ -736,6 +778,7 @@ class iot_meshtun_stream_state : public iot_meshtun_state { //keeps state of con
 	uint64_t ack_sequenced_in; //0-based greatest acknowledged to peer input sequence number without holes.
 	uint64_t sequenced_in; //0-based greatest received input sequence number without holes. writepos of buffer_out corresponds to this position in stream
 	uint64_t maxseen_sequenced_in; //0-based maximum seen (and saved)  incoming sequence number. ==sequenced_in when no holes (lost packets), >sequenced_in when there are holes
+									//matches end of last sequenced_in_dis[] block
 
 	uint64_t sequenced_in_dis[IOT_MESHTUNSTREAM_MAXHOLES]; //ordered array of disordered (not adjusent to sequenced_in) blocks of incoming data
 												//incoming hole means that writepos of buffer_in was not updated, but write was made after it.
@@ -773,7 +816,10 @@ class iot_meshtun_stream_state : public iot_meshtun_state { //keeps state of con
 															//and sequenced_out.
 
 	uint8_t num_in_dis:4, //number of items in sequenced_in_dis[], sequenced_in_dis_len[], in_dis_ack[])
-			num_output_inprog:4; //number of items in sequenced_out_sack[], sequenced_out_sack_len[], out_hole_pending[+1]
+			num_output_inprog:4, //number of items in sequenced_out_sack[], sequenced_out_sack_len[], out_hole_pending[+1]
+			input_finalized=0;		//when sequenced_in > 0 (and thus SYN was received) shows if STREAM_FIN request was received and maxseen_sequenced_in cannot grow.
+
+
 //	uint8_t syn_retries:3; //number of made syn retries
 //			_reserv:6; //number of items in output_inprogress[]
 //	enum timer_type_t : uint8_t {
@@ -805,10 +851,25 @@ public:
 	int accept_connection(iot_meshtun_stream_listen_state::listenq_item* item, const iot_netprototype_metaclass* protometa, uint16_t local_port, void* inmeta, uint16_t inmeta_size_);
 
 	int connect(const iot_netprototype_metaclass* protometa, iot_hostid_t remote_host, uint16_t remote_port, bool auto_local_port=true, uint16_t local_port=0);
+
+	void keepalive_check(uint64_t now) { //schedules async keepalive check if appropriate
+		lock();
+		if(state==ST_ESTABLISHED && input_ack_expires==UINT64_MAX) { //timer is not scheduled already
+			input_ack_pending=1; //mark that ACK must be sent
+			input_ack_expires=now;
+			set_timer(now, 0);
+		}
+		unlock();
+	}
+
 	const iot_objref_ptr<iot_peer>& get_peer(void) const {
 		return remote_peer;
 	}
 	iot_hostid_t get_peer_id(void) const;
+	uint16_t get_remote_port(void) const {
+		if(!is_bound) return 0;
+		return connection_key.remoteport;
+	}
 	bool is_writable(void) { //should be called from netcon thread
 		assert(con!=NULL);
 		if(output_closed) return false; //this var can become true just after this check but this is not harmful (it shouldn't)
@@ -866,7 +927,6 @@ onerr:
 		//on success returns value which is 0 <= value <= datalen
 		//on error negative error core:
 		//	IOT_ERROR_INVALID_ARGS
-		//	IOT_ERROR_STREAM_CLOSED
 		//	IOT_ERROR_NO_PEER
 		//	IOT_ERROR_TRY_AGAIN - read buffer is empty. try again when signal WRITEREADY arrives
 		//	IOT_ERROR_NO_ROUTE
@@ -881,12 +941,14 @@ onerr:
 		sz=buffer_in.read(databuf, datalen);
 		if(!sz) return IOT_ERROR_TRY_AGAIN;
 
+		local_rwnd.fetch_add(sz, std::memory_order_relaxed); //increase receive window if readpos is moved
+
 		return sz;
 
 onerr:
 		int err;
 		if((err=get_error())) return err;
-		if(state==ST_ESTABLISHED) return IOT_ERROR_STREAM_CLOSED;
+		if(state==ST_ESTABLISHED) return 0;
 		return IOT_ERROR_NO_PEER;
 	}
 
@@ -894,8 +956,11 @@ private:
 	void on_timer(uint32_t period_id, uint64_t now_ms) {
 		lock();
 
-//outlog_notice("TIMER signalled, type=%u, got per_id=%u, must have per_id=%u", unsigned(timer_type), unsigned(period_id), unsigned(timer_period_id));
-outlog_notice("TIMER signalled, got per_id=%u, must have per_id=%u", unsigned(period_id), unsigned(timer_period_id));
+//outlog_debug_meshtun("TIMER signalled, type=%u, got per_id=%u, must have per_id=%u", unsigned(timer_type), unsigned(period_id), unsigned(timer_period_id));
+outlog_debug_meshtun("TIMER signalled for meshtun to HOST %" IOT_PRIhostid, is_bound ? connection_key.host : 0);
+
+		uint64_t acttime; //greater among now_ms and timer_expires gives actual time which determines event activation
+		uint64_t mintime; //gives minimal among future events
 
 		if(timer_period_id!=period_id || timer_expires==UINT64_MAX) goto onexit; //this is cancelled timer invocation (cancelled/updated after point of non-prevention)
 
@@ -912,8 +977,9 @@ outlog_notice("TIMER signalled, got per_id=%u, must have per_id=%u", unsigned(pe
 				}
 				break;
 		}*/
-		timer_expires=UINT64_MAX;
-		//TODO check all places, where timer can be engaged to determine action
+		acttime=timer_expires>=now_ms ? timer_expires : now_ms; //greater among now_ms and timer_expires gives actual time which determines event activation
+		mintime=UINT64_MAX; //gives minimal among future events
+
 		bool check_output;
 		check_output=false;
 		for(uint16_t i=0; i<num_output_inprog; i++) {
@@ -921,8 +987,8 @@ outlog_notice("TIMER signalled, got per_id=%u, must have per_id=%u", unsigned(pe
 				assert(!output_inprogress[i].meshses);
 				continue;
 			}
-			if(output_inprogress[i].retry_after>now_ms) { //event in future or disabled
-				if(output_inprogress[i].retry_after<timer_expires) timer_expires=output_inprogress[i].retry_after;
+			if(output_inprogress[i].retry_after>acttime) { //event in future or disabled
+				if(output_inprogress[i].retry_after<mintime) mintime=output_inprogress[i].retry_after;
 				continue;
 			}
 			//fired event
@@ -933,15 +999,34 @@ outlog_notice("TIMER signalled, got per_id=%u, must have per_id=%u", unsigned(pe
 				output_inprogress[i].meshses=NULL;
 			}
 			output_inprogress[i].is_pending=1;
+			assert(output_ack_pending);
+			check_output=true;
+		}
+		if(finalize_expires>acttime) { //event in future or disabled
+			if(finalize_expires<mintime) mintime=finalize_expires;
+		} else { //finalize timer fired
+			finalize_expires=UINT64_MAX; //disable timer
+			input_finalized=1;
 			check_output=true;
 		}
 
-		if(timer_expires<UINT64_MAX) {
-			int err=controller->timer.schedule(timer_item, timer_expires-now_ms, &timer_period_id);
+		if(input_ack_expires>acttime) { //event in future or disabled
+			if(input_ack_expires<mintime) mintime=input_ack_expires;
+		} else { //input ack timer fired
+outlog_debug_meshtun("input ACK event fired");
+			input_ack_expires=UINT64_MAX; //disable timer
+			if(input_ack_pending) check_output=true;
+		}
+
+		timer_expires=mintime;
+		if(mintime<UINT64_MAX) { //reschedule timer for existing future events
+outlog_debug_meshtun("TIMER rescheduled after %u ms for meshtun to HOST %" IOT_PRIhostid, unsigned(mintime-now_ms), is_bound ? connection_key.host : 0);
+			assert(mintime>now_ms);
+			int err=controller->timer.schedule(timer_item, mintime-now_ms, &timer_period_id);
 			assert(err==0);
 		}
 
-		if(check_output) check_output_inprogress();
+		if(check_output) on_state_update(UPD_WRITEREADY);
 onexit:
 		unlock();
 	}
@@ -955,6 +1040,9 @@ onexit:
 			if(output_inprogress[i].is_ack) continue;
 			if(output_inprogress[i].retry_after<mintime) mintime=output_inprogress[i].retry_after;
 		}
+		if(finalize_expires<mintime) mintime=finalize_expires;
+		if(input_ack_expires<mintime) mintime=input_ack_expires;
+
 		if(timer_expires==mintime) return; //no change in timer schedule
 		if(mintime==UINT64_MAX) {
 			cancel_timer();
@@ -962,6 +1050,8 @@ onexit:
 		}
 		uint32_t delay = mintime<=now ? 0 : mintime-now;
 
+		timer_expires=mintime;
+outlog_debug_meshtun("TIMER rescheduled after %u ms for meshtun to HOST %" IOT_PRIhostid, unsigned(delay), is_bound ? connection_key.host : 0);
 		int err=controller->timer.schedule(timer_item, delay, &timer_period_id);
 		assert(err==0); //must not have concurrent problem because of single-thread use of current function
 	}
@@ -972,31 +1062,16 @@ onexit:
 //		timer_type=TIMER_NONE;
 		timer_item.unschedule();
 		timer_expires=UINT64_MAX;
-
+outlog_debug_meshtun("TIMER cancelled for meshtun to HOST %" IOT_PRIhostid, is_bound ? connection_key.host : 0);
 	}
 //	void set_timer(timer_type_t tp) {
 	void set_timer(uint64_t now, uint32_t delay_ms) { //now must be taken from uv_now()
 		//MUST BE CALLED under lock()
 		assert(uv_thread_self()==lockowner);
 
-outlog_notice("Setting Timer to expire after %u", unsigned(delay_ms));
+outlog_debug_meshtun("TIMER set to expire after %u ms for meshtun to HOST %" IOT_PRIhostid, unsigned(delay_ms), is_bound ? connection_key.host : 0);
 		if(now+delay_ms>=timer_expires) return;
 
-/*		uint64_t delay=0;
-
-		switch(tp) {
-			case TIMER_NONE:
-				assert(false);
-				cancel_timer();
-				return;
-			case TIMER_SYNRETRY:
-				delay=3000; //ms
-				break;
-		}
-
-		assert(delay>0);
-		timer_type=tp;
-		int err=controller->timer.schedule(timer_item, delay, &timer_period_id);*/
 		int err=controller->timer.schedule(timer_item, delay_ms, &timer_period_id);
 		assert(err==0); //must not have concurrent problem because of single-thread use of current function
 		timer_expires=now+delay_ms;
@@ -1015,8 +1090,11 @@ outlog_notice("Setting Timer to expire after %u", unsigned(delay_ms));
 		//try to find block with pending output
 		uint8_t i;
 		for(i=0; i<num_output_inprog; i++) {
-			if(!output_inprogress[i].is_pending); //continue
+			if(!output_inprogress[i].is_pending) continue;
 			assert(!output_inprogress[i].is_ack);
+
+			if(ack_sequenced_out==0 && output_inprogress[i].seq_pos>1) break; //while our SYN is not ACKed, allow to send only first chunk of output (SYN can be prepended to it) or to repeat SYN
+
 			if(output_inprogress[i].meshses) { //is being processed (being writed) by another session
 				assert(output_inprogress[i].meshses!=ses);
 				continue;
@@ -1026,14 +1104,26 @@ outlog_notice("Setting Timer to expire after %u", unsigned(delay_ms));
 				return NULL;
 			}
 			uint64_t now=uv_now(ses->thread->loop);
-			uint32_t delay=((rtt_us+50)*3)*(1u << output_inprogress[i].retries)/1000+1;
-			if(delay>10000) delay=10000;
+
+			if(output_inprogress[i].has_syn) {
+				if(rtt_us<100'000) rtt_us=100'000; //ensure SYN has larger minimum timeout
+			} else {
+				if(rtt_us<10'000) rtt_us=10'000;
+			}
+
+			uint32_t delay=(rtt_us*3)*(1u << output_inprogress[i].retries)/1000;
+			if(delay<IOT_MESHNET_TIMER_PREC) delay=IOT_MESHNET_TIMER_PREC;
+				else if(delay>10000) delay=10000;
 			output_inprogress[i].retry_after=now+delay;
 			output_inprogress[i].retries++;
+			output_inprogress[i].meshses=ses;
 			ses->current_outmeshtun=this;
 			ses->current_outmeshtun_segment=i;
-			output_inprogress[i].meshses=ses;
+			if(output_inprogress[i].retries==2) {
+				outlog_debug_meshtun("ku");
+			}
 			set_timer(now, delay);
+outlog_debug_meshtun("PENDING OUTPUT FOR BLOCK %d: offset=%u, len=%u, seq_out=%llu, ack_out=%llu, retries=%d", int(i), unsigned(output_inprogress[i].seq_pos), output_inprogress[i].seq_len, sequenced_out, ack_sequenced_out, int(output_inprogress[i].retries));
 			return &output_inprogress[i];
 		}
 		if(input_ack_pending) {
@@ -1062,17 +1152,17 @@ outlog_notice("Setting Timer to expire after %u", unsigned(delay_ms));
 		assert(ses && ses->current_outmeshtun==this);
 
 		auto idx=ses->current_outmeshtun_segment; //this var is accessed under lock of current_outmeshtun only!!!
-		if(idx<0) return; //locking was cancelled outside session thread
+		if(idx<0) return; //locking was cancelled outside session thread OR it was pure output of input ACK
 
 		if(idx<num_output_inprog) {
 			if(output_inprogress[idx].meshses==ses) {
 				output_inprogress[idx].meshses=NULL;
 				ses->current_outmeshtun_segment=-1;
+outlog_debug_meshtun("OUTPUT BLOCK %d %s", int(idx), clear_pending ? "non-pending" : "will retry");
 				if(clear_pending) output_inprogress[idx].is_pending=0; //pending should be cleared if output was successful OR critical error is set or to be set
 				else { //session broken? retry immediately. revert previous try
 					if(output_inprogress[idx].retries>0 && state!=ST_RESET) output_inprogress[idx].retries--;
 					output_inprogress[idx].retry_after=UINT64_MAX;
-					check_output_inprogress();
 				}
 				return;
 			} else {
@@ -1082,9 +1172,9 @@ outlog_notice("Setting Timer to expire after %u", unsigned(delay_ms));
 			assert(false);
 		}
 	}
-	//creates new output_inprogress (after sequenced_out increase), checks timer expiration for retries, schedules output of pending block
+	//creates new output_inprogress (after sequenced_out increase), schedules output of pending blocks
 	//must be called after:
-	//- outputting (locking by mesh session) of some block
+	//- outputting of some block
 	void check_output_inprogress(void); //MUST BE CALLED under lock()
 
 /*
@@ -1177,9 +1267,12 @@ outlog_notice("Setting Timer to expire after %u", unsigned(delay_ms));
 			}
 			if(datalen>0) { //there is data for a hole
 				uint32_t sz=buffer_in.write(data, datalen);
-				assert(sz==datalen); //there is data over current writepos, so write must return exactly requested size
-				sequenced_in+=datalen;
-				datalen=0;
+				if(sz<datalen) {
+					assert(dis_idx==num_in_dis); //write can be partial if writing after last dis-range only
+					has_fin=0; //not all data bytes were saved, so FIN must be dropped in any case
+				}
+				sequenced_in+=sz;
+				datalen-=sz;
 			}
 			//process fin
 			if(has_fin) {
@@ -1189,6 +1282,9 @@ outlog_notice("Setting Timer to expire after %u", unsigned(delay_ms));
 				maxseen_sequenced_in=sequenced_in;
 				input_finalized=1;
 				input_closed=1;
+				if(finalize_expires!=UINT64_MAX) {
+					finalize_expires=UINT64_MAX;
+				}
 			} else {
 				if(sequenced_in>maxseen_sequenced_in) maxseen_sequenced_in=sequenced_in;
 				if(input_finalized && sequenced_in==maxseen_sequenced_in) {
@@ -1332,142 +1428,23 @@ outlog_notice("Setting Timer to expire after %u", unsigned(delay_ms));
 		if(has_fin) input_finalized=1;
 
 recalc_rwnd:
-		local_rwnd=buffer_in.avail_write()+input_finalized;
-		for(i=0; i<num_in_dis; i++) {
-			if(local_rwnd<sequenced_in_dis_len[i]) {
-				assert(false);
-				local_rwnd=0;
-				break;
+		//receive window is all space after write_pos (which corresponds to sequenced_in) with substraction of on_dis blocks
+		uint32_t rwnd=buffer_in.avail_write();
+		if(num_in_dis>0) {
+			rwnd+=input_finalized; //if input is finalized, then last in_dis block has length inclusive with FIN bit and it will be substracted below
+			for(i=0; i<num_in_dis; i++) {
+				if(rwnd<sequenced_in_dis_len[i]) {
+					assert(false);
+					rwnd=0;
+					break;
+				}
+				rwnd-=sequenced_in_dis_len[i];
 			}
-			local_rwnd-=sequenced_in_dis_len[i];
 		}
-
+		local_rwnd.store(rwnd, std::memory_order_relaxed);
 	}
 
 
-
-
-/*	
-	//merges in ACKs from peer updating ack_sequenced_out, sequenced_out_sack[], sequenced_out_sack_len[], out_hole_pending[0]
-	void ack_sequence_out_merge(uint64_t ack, uint8_t num_sack, uint64_t *sack_seq, uint32_t* sack_len) {
-		uint16_t cur_idx=0; //holds current running index in sequenced_out_sack
-		uint16_t req_idx=0; //holds current running index in sack_req
-		uint16_t i;
-		//first merge continious ACKs with ranges
-		bool restart=false;
-		do { //repeat cycle until ack_sequenced_out and ack becomes equal
-			if(ack>ack_sequenced_out) { //ack_sequenced_out moved forward. check existing sequenced_out_sack[] if they can be spliced or updated
-				ack_sequenced_out=ack;
-				//all ranges whose start is <= than ack, can be removed
-				for(;cur_idx<num_out_sack && ack>=sequenced_out_sack[cur_idx];cur_idx++) {
-					//sack range becomes unnecessary
-					//check if end of range is beyond current ack. then end of range becomes new ack_sequenced_out
-					if(ack<sequenced_out_sack[cur_idx]+sequenced_out_sack_len[cur_idx])) {
-						ack_sequenced_out=sequenced_out_sack[cur_idx]+sequenced_out_sack_len[cur_idx];
-						cur_idx++;
-						restart=true;
-						break;
-					}
-				}
-			} else if(ack<ack_sequenced_out) { //ack_sequenced_out is greater, so check if sack_seq[] items can be removed (by increasing start_sack_idx)
-				ack=ack_sequenced_out;
-				for(; req_idx<num_sack && ack_sequenced_out>=sack_seq[req_idx]; req_idx++) {
-					//new sack range becomes unnecessary
-					if(ack_sequenced_out<sack_req[req_idx]+sack_len[req_idx])) {
-						ack=sack_req[req_idx]+sack_len[req_idx];
-						req_idx++;
-						restart=true;
-						break;
-					}
-				}
-			} else break; //ack_sequenced_out  == ack, goto to merging ranges
-		} while(restart);
-
-		if(cur_idx>0) { //do actual splice of sequenced_out_sack[], sequenced_out_sack_len[], out_hole_pending[0]
-			if(cur_idx==num_out_sack) num_out_sack=0;
-			else {
-				memmove(sequenced_out_sack, sequenced_out_sack+cur_idx, (num_out_sack-cur_idx)*sizeof(sequenced_out_sack[0]));
-				memmove(sequenced_out_sack_len, sequenced_out_sack_len+cur_idx, (num_out_sack-cur_idx)*sizeof(sequenced_out_sack_len[0]));
-				memmove(out_hole_pending, out_hole_pending+cur_idx, (num_out_sack-cur_idx)*sizeof(out_hole_pending[0]));
-				num_out_sack-=cur_idx;
-			}
-			cur_idx=0; //holds current running index in sequenced_out_sack
-		}
-		if(req_idx>0) {
-			assert(req_idx<=num_sack);
-			sack_seq+=req_idx;
-			sack_len+=req_idx;
-			num_sack-=req_idx;
-			req_idx=0; //holds current running index in sack_req
-		}
-
-		//here we need to merge ranges, not touching ack and ack_sequenced_out. sequenced_out_sack is one of operand AND IS DESTINATION for result
-		while(req_idx<num_sack && cur_idx<num_out_sack) {
-			if(sequenced_out_sack[cur_idx]<=sack_req[req_idx]+sack_len[req_idx] && sack_req[req_idx]<=sequenced_out_sack[cur_idx]+sequenced_out_sack_len[cur_idx]) { //ranges have intersection (possible zero)
-				//ranges can be combined
-				if(sack_req[req_idx]<sequenced_out_sack[cur_idx]) sequenced_out_sack[cur_idx]=sack_req[req_idx]; //extend left edge if necessary
-				//right edge of either operand can include SEVERAL ranges of another operand
-				restart=false;
-				do {
-					uint64_t right_req=sack_req[req_idx]+sack_len[req_idx]; //get right edge of req's range
-					uint64_t right=sequenced_out_sack[cur_idx]+sequenced_out_sack_len[cur_idx]; //get right edge of present range
-					if(right_req>right) { //right edge of sack_req is greater
-						sequenced_out_sack_len[cur_idx]=uint32_t(right_req-sequenced_out_sack[cur_idx]);
-						//check if new right edge spans neighbour sequenced_out_sack items
-						for(i=cur_idx+1; i<num_out_sack && right_req>=sequenced_out_sack[i]; i++) { //while next range is touched/covered by current req's range
-							if(sequenced_out_sack[i]+sequenced_out_sack_len[i]>right_req) {
-								sequenced_out_sack_len[cur_idx]=uint32_t((sequenced_out_sack[i]+sequenced_out_sack_len[i])-sequenced_out_sack[cur_idx]); //last item can expand right edge
-								i++;
-								restart=true;
-								break;
-							}
-						}
-						if(i>cur_idx+1) { //splice unnecessary ranges
-							if(i==num_out_sack) num_out_sack=cur_idx+1; //all the rest must be spliced
-							else {
-								memmove(sequenced_out_sack+cur_idx+1, sequenced_out_sack+i, (num_out_sack-i)*sizeof(sequenced_out_sack[0]));
-								memmove(sequenced_out_sack_len+cur_idx+1, sequenced_out_sack_len+i, (num_out_sack-i)*sizeof(sequenced_out_sack_len[0]));
-								memmove(out_hole_pending+cur_idx+1, out_hole_pending+i, (num_out_sack-i)*sizeof(out_hole_pending[0]));
-								num_out_sack-=i-(cur_idx+1);
-							}
-						}
-					} else if(right>right_req) {
-						//check if current right edge spans several next sack_req items
-						for(i=req_idx+1; i<num_sack && right>=sack_req[i]; i++) {
-							if(sack_req[i]+sack_len[i]>right) {
-								i++;
-								restart=true;
-								break;
-							}
-						}
-						req_idx=i-1;
-					} else break; //right edges equal
-				} while(restart);
-				req_idx++;
-				cur_idx++;
-				continue;
-			}
-			//no intersection
-			if(sequenced_out_sack[cur_idx]<sack_req[req_idx]) { //current range remains, req's range must be checked against next one
-				cur_idx++;
-				continue;
-			}
-			//current req's range must be copied to current position in sequenced_out_sack[] pushing apart existing items
-			if(num_out_sack<IOT_MESHTUNSTREAM_MAXHOLES) num_out_sack++;
-			if(cur_idx+1<num_out_sack) {
-				memmove(sequenced_out_sack+cur_idx+1, sequenced_out_sack+cur_idx, (num_out_sack-1-cur_idx)*sizeof(sequenced_out_sack[0]));
-				memmove(sequenced_out_sack_len+cur_idx+1, sequenced_out_sack_len+cur_idx, (num_out_sack-1-cur_idx)*sizeof(sequenced_out_sack_len[0]));
-				memmove(out_hole_pending+cur_idx+1, out_hole_pending+cur_idx, (num_out_sack-1-cur_idx)*sizeof(out_hole_pending[0]));
-			}
-			//out_hole_pending[cur_idx] remains unchanged
-			sequenced_out_sack[cur_idx]=sack_req[req_idx];
-			sequenced_out_sack_len[cur_idx]=sack_len[req_idx];
-			req_idx++;
-			cur_idx++;
-		}
-
-	}
-*/
 	//merges in ACKs from peer updating ack_sequenced_out and output_inprogress[]
 	void ack_sequence_out_merge(uint64_t ack, int16_t num_sack, uint64_t *sack_seq, uint32_t* sack_len, uint64_t now_ms) {
 		int16_t inprog_idx=0; //holds current running index in output_inprogress
@@ -1480,7 +1457,6 @@ recalc_rwnd:
 		//first block must be unACKed and exactly at ack_sequenced_out, last block must end at sequenced_out
 		assert((inprog_num==0 && new_ack_sequenced_out==sequenced_out) || 
 			(inprog_num>0 && !output_inprogress[0].is_ack && output_inprogress[0].seq_pos==new_ack_sequenced_out && output_inprogress[inprog_num-1].seq_pos+output_inprogress[inprog_num-1].seq_len==sequenced_out));
-
 
 		//first merge continious ACKs with ranges
 		bool restart_timer=false; //any timers were cancelled, so must be recalculated
@@ -1507,7 +1483,7 @@ recalc_rwnd:
 				} //else process possible partial ACK
 				else if(ack>output_inprogress[inprog_idx].seq_pos) {
 					//causes problems if ack is not exactly at start. need to split this block so it could be partially ACKed
-					outlog_notice("GOT PARTIAL ACK");
+					outlog_debug_meshtun("GOT PARTIAL ACK");
 					auto &cur=output_inprogress[inprog_idx];
 					uint32_t deltaacklen=uint32_t(ack-cur.seq_pos); //part of this block which is ACKed
 					cur.seq_pos+=deltaacklen;
@@ -1544,6 +1520,7 @@ recalc_rwnd:
 		}
 
 		if(inprog_idx>0) { //do actual splice of output_inprogress[0]
+outlog_debug_meshtun("ACKed %d blocks", inprog_idx);
 			for(i=0; i<inprog_idx; i++) { //cancel timers and mesh session reference
 				if(output_inprogress[i].retry_after!=UINT64_MAX) restart_timer=true;
 				if(output_inprogress[i].meshses) output_inprogress[i].meshses->current_outmeshtun_segment=-1; //cancel for mesh session
@@ -1564,18 +1541,32 @@ recalc_rwnd:
 
 		assert(num_sack==0 || sack_seq[0]>new_ack_sequenced_out);
 
+		////////////////////////////
+		///////////////////////ADVANCING readpos of buffer_out
+		////////////////////////////
 		int64_t readpos_move=new_ack_sequenced_out-ack_sequenced_out;
 		if(readpos_move>0) { //buffer_out space can be freed
-			if(ack_sequenced_out==0) readpos_move--; //sequence 0 is for SYN bit, which is not in buffer
-
-			if(new_ack_sequenced_out==sequenced_out) { //all currently made output was ACKed
-				output_ack_pending=0;
-				if(output_closed && sequenced_out>1) readpos_move--; //last sequence is for FIN bit, which is not in buffer
+			if(ack_sequenced_out==0) {
+				readpos_move--; //sequence 0 is for SYN bit, which is not in buffer
+				if(state==ST_SENDING_SYN) set_state(ST_ESTABLISHED); //ACK of sequence number 0 received
 			}
-
 			ack_sequenced_out=new_ack_sequenced_out;
 
-			if(state==ST_SENDING_SYN) set_state(ST_ESTABLISHED); //ACK of 0 sequence received
+			if(ack_sequenced_out==sequenced_out) { //all currently made output was ACKed
+				output_ack_pending=0;
+				if(output_closed) { //output was closed
+					if(input_closed && sequenced_in>0 && !input_finalized && finalize_expires==UINT64_MAX) { //input is closed too (due to detach) and input was really opened, but no FIN received
+						//wait sometime for FIN to do graceful close for peer
+						finalize_expires=now_ms+IOT_MESHTUNSTREAM_INPUTFIN_TIMEOUT; //input_finalized will be set to true after this time
+						restart_timer=true;
+					}
+					if(sequenced_out>1) { //output was closed after outputting SYN, so FIN must be present too
+						if(readpos_move>0) {
+							readpos_move--; //last sequence is for FIN bit, which is not in buffer
+						} else assert(false);
+					}
+				}
+			}
 
 			if(readpos_move>0) { //move readpos of buffer_out. this frees some write space for netcon
 				assert(readpos_move<=UINT32_MAX);
@@ -1584,6 +1575,7 @@ recalc_rwnd:
 				on_state_update(UPD_WRITESPACEFREED);
 			}
 		} else assert(readpos_move==0);
+
 
 		//here we need to merge ranges, not touching ack and ack_sequenced_out
 		//first make ACK (with possible combining) of inprog blocks which does not require adding new blocks
@@ -1618,7 +1610,7 @@ recalc_rwnd:
 			//here current inprog block is unACKed
 
 			if(right_req<right) { //req's range is completely inside current inprog block
-				//this is partial ACK, it requires to add new inprog block, process in separate loop
+				//this is partial ACK, it requires to add new inprog block or two, process in separate loop
 				req_idx++;
 				continue;
 			}
@@ -1650,7 +1642,7 @@ recalc_rwnd:
 					assert(i==inprog_idx+1); //can happen on first iteration only?
 					break;
 				}
-				outlog_notice("GOT PARTIAL ACK");
+				outlog_debug_meshtun("GOT PARTIAL ACK");
 
 				//this block can be narrowed from left to mark partial ACK. ACKed block must be to the left!
 				assert(output_inprogress[i-1].is_ack);
@@ -1667,13 +1659,14 @@ recalc_rwnd:
 					output_inprogress[i].retry_after=UINT64_MAX;
 					restart_timer=true;
 				} NOT ACTUAL FOR NON CONTIGUOUS SEQUENCE*/
+				output_inprogress[i-1].seq_len+=deltalen; //enlarge ACKed range
 				//meshses remain
 				break;
 			}
-			req_idx++;
 
 			if(!found_ack) {
 				//this is partial ACK, it requires to add new inprog block, process in separate loop
+				req_idx++;
 				inprog_idx++;
 				continue;
 			}
@@ -1682,7 +1675,7 @@ recalc_rwnd:
 				assert(i>inprog_idx+1); //loop must have finished at least one iteration
 				assert(output_inprogress[inprog_idx+1].is_ack);
 
-				outlog_notice("GOT PARTIAL ACK");
+				outlog_debug_meshtun("GOT PARTIAL ACK");
 				//narrow current block from right
 				uint32_t deltalen=right-sack_seq[req_idx];
 				assert(output_inprogress[inprog_idx].seq_len>deltalen);
@@ -1703,6 +1696,8 @@ recalc_rwnd:
 					memmove(output_inprogress+inprog_idx+1, output_inprogress+i, (inprog_num-i)*sizeof(output_inprogress[0]));
 				inprog_num-=i-inprog_idx-1;
 			}
+			sack_len[req_idx]=0; //sack range was fully used
+			req_idx++;
 			//inprog_idx unchanged to recheck it agains new req_idx
 		}
 		//here all possible inprog blocks was removed

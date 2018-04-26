@@ -165,10 +165,9 @@ public:
 //keeps configuration for IOTGW protocol sessions
 class iot_netproto_config_iotgw : public iot_netproto_config {
 public:
-	iot_gwinstance *gwinst;
 	iot_objref_ptr<iot_peer> const peer;
 	iot_netproto_config_iotgw(iot_gwinstance *gwinst, iot_peer* peer, object_destroysub_t destroysub, bool is_dynamic, void* customarg=NULL) : 
-		iot_netproto_config(&iot_netprototype_metaclass_iotgw::object, destroysub, is_dynamic, customarg), gwinst(gwinst), peer(peer)
+		iot_netproto_config(&iot_netprototype_metaclass_iotgw::object, gwinst, destroysub, is_dynamic, customarg), peer(peer)
 	{
 		assert(gwinst!=NULL);
 	}
@@ -215,7 +214,7 @@ struct iot_netproto_session_iotgw : public iot_netproto_session {
 	static const uint8_t packet_signature[2];
 	static_assert(sizeof(packet_hdr_prolog::iotsign)==sizeof(packet_signature));
 
-	iot_netproto_session_iotgw *peer_next=NULL, *peer_prev=NULL; //used to keep links for peer->sesreg iot_gwproto_sesregistry object
+//	iot_netproto_session_iotgw *peer_next=NULL, *peer_prev=NULL; //used to keep links for peer->sesreg iot_gwproto_sesregistry object
 	iot_objref_ptr<iot_netproto_config_iotgw> const config;
 	iot_objref_ptr<iot_peer> peer_host;
 
@@ -425,7 +424,7 @@ onexit:
 	bool start_new_inpacket(packet_hdr *hdr);
 
 	virtual bool on_read_data_status(ssize_t nread, char* &databuf, size_t &databufsize) override {
-outlog_notice("IOT session got %d bytes", int(nread));
+outlog_debug_iotgw("IOT session got %d bytes", int(nread));
 		if(!nread) {  //reading end of connection closed
 			stop(false);
 			return false;
@@ -717,7 +716,7 @@ private:
 			if(rval>0) { //was some error
 				session->stop(false);
 			}
-			else outlog_notice("Host %" IOT_PRIhostid " introduced successfully", repack_hostid(req->host_id));
+			else outlog_debug_iotgw("Host %" IOT_PRIhostid " introduced successfully", repack_hostid(req->host_id));
 			return IOT_ERROR_OBJECT_INVALIDATED;
 		}
 		return 0;
@@ -735,7 +734,7 @@ private:
 		if(rval>0) { //was some error
 			session->stop(false);
 		}
-		else if(!rval) outlog_notice("Host %" IOT_PRIhostid " confirmed introduction", repack_hostid(reply->host_id));
+		else if(!rval) outlog_debug_iotgw("Host %" IOT_PRIhostid " confirmed introduction", repack_hostid(reply->host_id));
 		return 0;
 	}
 	virtual int p_req_inpacket_execute(iot_netproto_session_iotgw* session) override {

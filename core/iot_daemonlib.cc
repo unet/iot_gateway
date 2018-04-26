@@ -22,6 +22,15 @@ static const char *loglevel_str[]={
 	"!ERR"
 };
 
+static const char *debuglog_str[]={
+	"", //no debug subject
+	" MESHTUN",
+	" MESH",
+	" MODEL", //modelling
+	" IOTGW", //iotgw protocol session
+};
+
+
 //allows to copy all logging to stdout
 #define LOGGER_STDOUT 1
 
@@ -115,6 +124,8 @@ void close_log(void)
 
 static inline void do_voutlog(const char*file, int line, const char* func,int level, const char *fmt, va_list ap)
 {
+	int debugcat = (level-(level & LMASKVAL)) / (LMASKVAL+1);
+	level&=LMASKVAL;
 	if(logfd<0) { //just print msg to stdout (used in manifest_proc)
 		printf("[%s] ", loglevel_str[level]);
 		vprintf(fmt, ap);
@@ -145,9 +156,9 @@ static inline void do_voutlog(const char*file, int line, const char* func,int le
 
 	len=strftime(buf,buflen,"%d.%m.%Y %H:%M:%S",tm);
 #ifndef _WIN32
-	len+=snprintf(buf+len,buflen-len,".%09ld {%09ldns}: [%d %s] ",nsec,(ts.tv_nsec-prevlogts.tv_nsec+1000000000*(ts.tv_sec-prevlogts.tv_sec))-logclock_cost,int(getpid()), loglevel_str[level]);
+	len+=snprintf(buf+len,buflen-len,".%09ld {%09ldns}: [%d %s%s] ",nsec,(ts.tv_nsec-prevlogts.tv_nsec+1000000000*(ts.tv_sec-prevlogts.tv_sec))-logclock_cost,int(getpid()), loglevel_str[level], debuglog_str[debugcat]);
 #else
-	len+=snprintf(buf+len,buflen-len,".%09ld: [%d %s] ",nsec,int(getpid()), loglevel_str[level]);
+	len+=snprintf(buf+len,buflen-len,".%09ld: [%d %s%s] ",nsec,int(getpid()), loglevel_str[level], debuglog_str[debugcat]);
 #endif
 	len+=vsnprintf(buf+len,buflen-len,fmt, ap);
 	if(len>=buflen) { //output buf overfilled

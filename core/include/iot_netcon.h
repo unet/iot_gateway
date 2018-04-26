@@ -72,6 +72,8 @@ public:
 		protosession=NULL;
 		on_session_closed();
 	}
+	//can be called from any thread to initiate destroying of netconiface. graceful_stop shows if session must be stopped gracefully
+	virtual int destroy(bool always_async=false, bool graceful_stop=false) = 0;
 protected:
 //	void detach_session(void); //netconiface initiated session close (e.g. if connection is broken)
 private:
@@ -132,13 +134,16 @@ class iot_netproto_config : public iot_objectrefable {
 protected:
 	const iot_netprototype_metaclass* meta; //keep reference to metaclass here to optimize (exclude virtual function call) requests which are redirected to metaclass
 
-	iot_netproto_config(const iot_netprototype_metaclass* meta, object_destroysub_t destroysub, bool is_dynamic, void* customarg=NULL):
-				iot_objectrefable(destroysub, is_dynamic), meta(meta), customarg(customarg) { //only derived classes can create instances
+	iot_netproto_config(void) = delete;
+
+	iot_netproto_config(const iot_netprototype_metaclass* meta, iot_gwinstance *gwinst, object_destroysub_t destroysub, bool is_dynamic, void* customarg=NULL):
+				iot_objectrefable(destroysub, is_dynamic), meta(meta), gwinst(gwinst), customarg(customarg) { //only derived classes can create instances
 		assert(meta!=NULL);
 	}
 	virtual ~iot_netproto_config(void) {
 	}
 public:
+	iot_gwinstance *const gwinst;
 	void* const customarg; //custom pointer passed to constructor
 	const iot_netprototype_metaclass* get_metaclass(void) const {
 		return meta;
@@ -205,14 +210,10 @@ public:
 //	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const = 0;
 	virtual int start(void) = 0;
 	bool stop(bool graceful=true) { //request session to stop. coniface will be notified by calling session_closed() if not detached (returns true in such case). session_closed() can be called immediately!!!
-		//returns false if coniface is already detached and thus session_closed() won't be called
+		//returns false if coniface is already detached and thus session_closed() won't be called OR if call is made from non-session thread
+		assert(uv_thread_self()==thread->thread);
 		bool rval = coniface!=NULL;
-		if(uv_thread_self()==thread->thread) {
-			on_stop(graceful);
-		} else {
-			assert(false);
-			//TODO
-		}
+		on_stop(graceful);
 		return rval;
 	}
 
@@ -222,6 +223,10 @@ public:
 //		coniface=NULL;
 //		on_coniface_detached();
 //	}
+
+	iot_netconiface* get_coniface(void) const {
+		return coniface;
+	}
 
 	virtual void on_write_data_status(int) = 0;
 //	virtual void on_can_write_data(void) = 0;
@@ -361,7 +366,10 @@ private:
 
 //	iot_spinlock statelock; //used to protect com_msg and stop_pending in started state
 	volatile bool destroy_pending=false; //becomes true after stop(true) is called
-	volatile std::atomic_flag stop_pending=ATOMIC_FLAG_INIT; //becomes true after stop() is called
+	volatile bool graceful_sesstop=false; //shows if destroying with graceful session stop was requested
+	volatile std::atomic_flag stop_pending=ATOMIC_FLAG_INIT; //becomes true after restart(_, false) is called
+	volatile std::atomic_flag gracefulstop_pending=ATOMIC_FLAG_INIT; //becomes true after restart() is called
+	volatile std::atomic_flag commsg_pending=ATOMIC_FLAG_INIT; //becomes true if com_msg is busy
 	volatile std::atomic<state_t> state={STATE_UNINITED};
 
 protected:
@@ -412,8 +420,10 @@ public:
 	virtual char* sprint(char* buf, size_t bufsize, int* doff=NULL) const = 0;
 	int start_uv(iot_thread_item_t* use_thread=NULL, bool always_async=false, bool finish_init=false);
 	void on_startstop_msg(void);
-	int restart(bool always_async=false);
-	int destroy(bool always_async=false);
+	int restart(bool always_async=false, bool graceful_stop=false);
+
+	virtual int destroy(bool always_async=false, bool graceful_stop=false) override;
+
 	int on_stopped(void); //finishes STOP operation in control thread
 	int assign_registryiface(iot_netconregistryiface *iface) {
 		assert(registry==NULL && iface!=NULL);
@@ -431,10 +441,15 @@ public:
 //		return objid;
 //	}
 
-	bool has_sameparams(iot_netcon* ob) {
-		assert(false);
-		//TODO
-		return false;
+	int has_sameparams(iot_netcon* op) {
+		if(!op || get_metaclass()!=op->get_metaclass() || is_passive!=op->is_passive) return 0;
+		if(destroy_pending || op->destroy_pending) return 0;
+		if(protoconfig!=op->protoconfig) return 0;
+//		if(protoconfig->get_metaclass()!=op->protoconfig->get_metaclass()) return 0; //TODO compare protoconfigs using proto method if metaclass matches?
+		if(!do_compare_params(op)) return 0;
+		
+		if(metric!=op->metric) return 2;
+		return 1;
 	}
 protected:
 	bool trymark_initing(void) { //must be called from derived class before doing init to set proper state (and check for previous uninited state)
@@ -474,6 +489,7 @@ private:
 	virtual int do_stop(void) {
 		assert(false);
 	}
+	virtual bool do_compare_params(iot_netcon* op) = 0; //must return true if parameters of same typed netcons are the same. is_passive is already checked to be the same
 };
 
 //inline void iot_netconiface::detach_session(void) { //netconiface initiated session close (e.g. if connection is broken)

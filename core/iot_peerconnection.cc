@@ -11,27 +11,85 @@
 #include "iot_netproto_iotgw.h"
 #include "iot_netproto_mesh.h"
 
+int iot_peer::start_iot_session(void) {
+		if(host_id<gwinst->this_hostid) { //this host is passive end for IOT session, so must ensure that client connection is not hung
+			return 0;
+		}
+
+		assert(!iotsession);
+
+		iot_netcon_mesh* iotgw_clientcon;
+		if(!iotprotocfg) { //init IOT protocol config on first request
+			iotprotocfg=iot_objref_ptr<iot_netproto_config_iotgw>(true, new iot_netproto_config_iotgw(gwinst, this, object_destroysub_delete, true, this));
+			if(!iotprotocfg) goto nomem;
+//iotprotocfg->debug=true;
+		}
+
+		iotgw_clientcon=iot_netcontype_metaclass_mesh::allocate_netcon((iot_netproto_config_iotgw*)iotprotocfg);
+		if(!iotgw_clientcon) goto nomem;
+		int err;
+		err=iotgw_clientcon->init_client(gwinst->meshcontroller, host_id, 0, gwinst->peers_registry);
+		if(err) { //invalid args? no slots? TODO
+			iotgw_clientcon->meta->destroy_netcon(iotgw_clientcon);
+//			iotgw_clientcon=NULL;
+			assert(false);
+			return IOT_ERROR_CRITICAL_ERROR;
+		}
+		iotgw_clientcon->start_uv(NULL, true); //force async start to leave routing lock
+		return 0;
+nomem:
+		assert(false);
+		//TODO retry on timer?
+		return IOT_ERROR_NO_MEMORY;
+	}
+void iot_peer::stop_iot_session(void) { //asks IOT session to stop gracefully
+		seslistlock.lock();
+		if(iotnetcon) iotnetcon->destroy(true, true);
+		iotnetcon=NULL;
+		seslistlock.unlock();
+	}
+
+
 
 int iot_peer::on_new_iotsession(iot_netproto_session_iotgw *ses) { //called from any thread
 		assert(ses!=NULL);
 		assert(ses->peer_host==this);
 
+		if(gwinst->peers_registry->is_shutdown) return IOT_ERROR_ACTION_CANCELLED;
+
 		seslistlock.lock();
 
-		BILINKLIST_INSERTHEAD(ses, iotsessions_head, peer_next, peer_prev);
+		if(iotsession) {
+			assert(false);
+			outlog_debug("Duplicate IOTGW session to host_id=%" IOT_PRIhostid, host_id);
+			seslistlock.unlock();
+			return IOT_ERROR_CRITICAL_ERROR;
+		}
 
+		iotsession=ses;
+		iotnetcon=ses->get_coniface();
+		assert(iotnetcon!=NULL);
+		outlog_debug("New IOTGW session to host_id=%" IOT_PRIhostid " registered", host_id);
 		seslistlock.unlock();
 
-		outlog_debug("New IOTGW session to host_id=%" IOT_PRIhostid " registered", host_id);
 		return 0;
 	}
 
 void iot_peer::on_dead_iotsession(iot_netproto_session_iotgw *ses) { //called from any thread
-		assert(ses!=NULL && ses->peer_host==this && ses->peer_prev!=NULL);
+		assert(ses!=NULL && ses->peer_host==this);
 
 		seslistlock.lock();
 
-		BILINKLIST_REMOVE(ses, peer_next, peer_prev);
+		if(iotsession!=ses) {
+			if(iotsession) {
+				assert(false);
+				outlog_debug("Error IOTGW session to unregister for host_id=%" IOT_PRIhostid, host_id);
+			}
+			seslistlock.unlock();
+			return;
+		}
+		iotsession=NULL;
+		iotnetcon=NULL;
 
 		seslistlock.unlock();
 
@@ -196,6 +254,27 @@ int iot_peers_registry_t::reset_peer_connections(iot_peer* peer) {
 		return 0;
 	}
 
+void iot_peers_registry_t::on_meshroute_set(iot_peer* peer) {
+		outlog_notice("Got first route to host %" IOT_PRIhostid, peer->host_id);
+		uv_mutex_lock(&datamutex);
+		for(iot_netcon *cur, *next=peer->cons_head; (cur=next); ) {
+			next=next->registry_next;
+			if(cur->get_metaclass()==&iot_netcontype_metaclass_mesh::object) { //this is meshtun client connection
+				iot_netcon_mesh* con=static_cast<iot_netcon_mesh*>(cur);
+				con->on_meshtun_event(con->EVENT_GOTROUTE);
+			}
+		}
+		uv_mutex_unlock(&datamutex);
+
+
+	}
+
+void iot_peers_registry_t::on_meshroute_reset(iot_peer* peer) {
+		outlog_notice("Lost last route to host %" IOT_PRIhostid, peer->host_id);
+	}
+
+
+
 
 int iot_peers_registry_t::add_listen_connections(json_object *json, bool prefer_ownthread) { //add several server (listening) connections by given JSON array with parameters for iot_netcon-derived classes
 		assert(uv_thread_self()==main_thread);
@@ -243,10 +322,10 @@ void iot_peers_registry_t::graceful_shutdown(void) { //stop listening connection
 	assert(!is_shutdown);
 	is_shutdown=true;
 
-	if(iotgw_listencon) {
-		iotgw_listencon->destroy();
-		iotgw_listencon=NULL;
-	}
+//	if(iotgw_listencon) {
+//		iotgw_listencon->destroy();
+//		iotgw_listencon=NULL;
+//	}
 
 	uv_rwlock_rdlock(&peers_lock);
 

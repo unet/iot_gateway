@@ -3,12 +3,84 @@
 
 #include "iot_module.h"
 
+//bitmask for log levels
+#define LMASKVAL 7
+
+//addition debug sublevels
+#define LDEBUG_MESHTUN (1*(LMASKVAL+1))
+#define LDEBUG_MESH (2*(LMASKVAL+1))
+#define LDEBUG_MODELLING (3*(LMASKVAL+1))
+#define LDEBUG_IOTGW (4*(LMASKVAL+1))
+
 
 #define outlog_error(format... ) do_outlog(__FILE__, __LINE__, __func__, LERROR, format)
-#define outlog_notice(format... ) do {if(LMIN<=LNOTICE && min_loglevel <= LNOTICE) do_outlog(__FILE__, __LINE__, __func__, LNOTICE, format);} while(0)
-#define outlog_info(format... ) do {if(LMIN<=LINFO && min_loglevel <= LINFO) do_outlog(__FILE__, __LINE__, __func__, LINFO, format);} while(0)
+
+#if LMIN<=LNOTICE
+#define outlog_notice(format... ) do {if(min_loglevel <= LNOTICE) do_outlog(__FILE__, __LINE__, __func__, LNOTICE, format);} while(0)
+#else
+#define outlog_notice(format... )
+#endif
+
+#if LMIN<=LINFO
+#define outlog_info(format... ) do {if(min_loglevel <= LINFO) do_outlog(__FILE__, __LINE__, __func__, LINFO, format);} while(0)
+#else
+#define outlog_info(format... )
+#endif
+
+#if LMIN<=LDEBUG
 #define outlog_debug(format... ) do {if(LMIN<=LDEBUG && min_loglevel <= LDEBUG) do_outlog(__FILE__, __LINE__, __func__, LDEBUG, format);} while(0)
+#else
+#define outlog_debug(format... )
+#endif
+
 #define outlog(level, format... )do { if(LMIN<=level && min_loglevel <= level) do_outlog(__FILE__, __LINE__, __func__, level, format);} while(0)
+
+#ifndef NDEBUG
+
+	#ifdef IOTDEBUG_MESHTUN
+	#define outlog_debug_meshtun_vars(VARDECL, format... ) do {if(min_loglevel <= LNOTICE) {VARDECL; do_outlog(__FILE__, __LINE__, __func__, LDEBUG+LDEBUG_MESHTUN, format);}} while(0)
+	#define outlog_debug_meshtun(format... ) outlog_debug_meshtun_vars( , format)
+	#endif
+
+	#ifdef IOTDEBUG_MODELLING
+	#define outlog_debug_modelling_vars(VARDECL, format... ) do {if(min_loglevel <= LNOTICE) {VARDECL; do_outlog(__FILE__, __LINE__, __func__, LDEBUG+LDEBUG_MODELLING, format);}} while(0)
+	#define outlog_debug_modelling(format... ) outlog_debug_modelling_vars( , format)
+	#endif
+
+	#ifdef IOTDEBUG_MESH
+	#define outlog_debug_mesh_vars(VARDECL, format... ) do {if(min_loglevel <= LNOTICE) {VARDECL; do_outlog(__FILE__, __LINE__, __func__, LDEBUG+LDEBUG_MESH, format);}} while(0)
+	#define outlog_debug_mesh(format... ) outlog_debug_mesh_vars( , format)
+	#endif
+
+	#ifdef IOTDEBUG_IOTGW
+	#define outlog_debug_iotgw_vars(VARDECL, format... ) do {if(min_loglevel <= LNOTICE) {VARDECL; do_outlog(__FILE__, __LINE__, __func__, LDEBUG+LDEBUG_IOTGW, format);}} while(0)
+	#define outlog_debug_iotgw(format... ) outlog_debug_iotgw_vars( , format)
+	#endif
+
+
+#endif
+
+#ifndef outlog_debug_meshtun
+#define outlog_debug_meshtun_vars(VARDECL, format... )
+#define outlog_debug_meshtun(format... )
+#endif
+
+#ifndef outlog_debug_modelling
+#define outlog_debug_modelling_vars(VARDECL, format... )
+#define outlog_debug_modelling(format... )
+#endif
+
+
+#ifndef outlog_debug_mesh
+#define outlog_debug_mesh_vars(VARDECL, format... )
+#define outlog_debug_mesh(format... )
+#endif
+
+#ifndef outlog_debug_iotgw
+#define outlog_debug_iotgw_vars(VARDECL, format... )
+#define outlog_debug_iotgw(format... )
+#endif
+
 
 //use 'errbuf' where err description must be put
 #define outlog_errno(err, level, format... ) do {if(min_loglevel <= level) {char errbuf2[128]; char* errbuf=strerror_r(err,errbuf2,sizeof(errbuf2)); do_outlog(__FILE__, __LINE__, __func__, level, format);}} while(0)
