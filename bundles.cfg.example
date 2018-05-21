@@ -1,0 +1,6 @@
+unet/generic/inputlinux = m
+unet/types/di_toneplayer = m
+unet/generic/kbd = m
+unet/generic/toneplayer = m
+unet/z_wave/RaZberry = m
+zwave_me/accessory/zway = m

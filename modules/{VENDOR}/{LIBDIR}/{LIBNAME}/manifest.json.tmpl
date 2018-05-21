@@ -1,0 +1,28 @@
+{
+	"description": "{Description of library}",
+	"platforms": [{LIST OF PLATFORM NAMES}],  //'any' or set of items from list: linux, mswin, darwin, unix (any unix clone including linux and darwin), android?
+
+	"detector_modules": {
+		"{NAME}" : {
+			"title": {TITLE_TEMPLATE_OR_STRING},
+			"description": {DESCRIPTION_TEMPLATE_OR_STRING},
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"manual_devices": { //optional set of templates to enter device spec manually. detector's code can (and must) interpret it as hints to find devices
+				"stub_device": {
+					"title": "Stub devices"
+					//"shortDescr":
+					//"longDescr":
+					//"propList":
+					//"newDialog":
+					//"editDialog":
+				}
+			}
+		}
+	}
+}

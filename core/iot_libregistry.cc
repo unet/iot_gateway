@@ -276,14 +276,15 @@ int iot_libregistry_t::load_lib(iot_regitem_lib_t* lib/*, const char* module_nam
 	//loaded
 	//read lib version
 	uint32_t *verptr=(uint32_t*)dlsym(lib->hmodule, versbuf);
-	if(!verptr) {
+	if(verptr) {
+		lib->version=*verptr;
+	} else {
 		outlog_error("Error loading version symbol '%s' from lib '%s': %s", versbuf, lib->name, dlerror());
 		if(!lib->linked) dlclose(lib->hmodule);
 		lib->hmodule=NULL;
 		lib->error=true;
 		return IOT_ERROR_CRITICAL_ERROR;
 	}
-	lib->version=*verptr;
 
 	register_pending_metaclasses(); //register types from just linked lib
 	return 0;

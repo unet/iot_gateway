@@ -1,0 +1,116 @@
+{
+	"platforms" : ["any"],
+	"node_modules": {
+		"and2_pulsealt" : {
+			"title": "'AND' operator for Pulse messages with alternate outputs",
+			"description": "Checks if signals from both inputs came within specific time",
+			"params_tmpl": { //delay: milliseconds of delay for determining simultaneous events
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"links": {
+				"msg_inputs": {
+					"in1": {
+						"description": "First signal input line",
+					},
+					"in2": {
+						"description": "Second signal input line",
+					}
+				},
+				"msg_outputs": {
+					"out": {
+						"description": "Pulse about simultaneous activation of inputs",
+					},
+					"alt1": {
+						"description": "Pulse that first input line had no paired signal on second within delay",
+					},
+					"alt2": {
+						"description": "Pulse that second input line had no paired signal on first within delay",
+					}
+				}
+			}
+		},
+		"and2_boolordered" : {
+			"title": "'AND' operator for Bool inputs, one Bool and 2 Pulse outputs",
+			"description": "Outputs bool value showing if both inputs are true",
+			"params_tmpl": { //out_delay: after this ms of being both inputs true out becomes true (until any input becomes false), ordering_delay
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"links": {
+				"value_inputs": {
+					"in1": {
+						"description": "First bool input line",
+					},
+					"in2": {
+						"description": "Second bool input line",
+					}
+				},
+				"value_outputs": {
+					"out": {
+						"description": "Bool output becomes true after out_delay of both true inputs",
+					}
+				},
+				"msg_outputs": {
+					"ord1": {
+						"description": "Signal that input 1 was activated first withing ordering_delay ms",
+					},
+					"ord2": {
+						"description": "Signal that input 2 was activated first withing ordering_delay ms",
+					}
+				}
+			}
+		},
+		"or4_bool" : {
+			"title": "immediate 'OR' operator for Bool inputs and Bool output",
+			"description": "Outputs bool value showing if any inputs is true",
+			"links": {
+				"value_inputs": {
+					"in1": {
+						"description": "First bool input line"
+					},
+					"in2": {
+						"description": "Second bool input line"
+					},
+					"in3": {
+						"description": "Thirt bool input line"
+					},
+					"in4": {
+						"description": "Forth bool input line"
+					}
+				},
+				"value_outputs": {
+					"out": {
+						"description": "Bool output becomes true is any input is true"
+					}
+				}
+			}
+		},
+		"num_inrange" : {
+			"title": "Range checking for Numeric value",
+			"description": "Outputs bool value showing if input number is inrange",
+			"links": {
+				"value_inputs": {
+					"in": {
+						"description": "Numeric value input"
+					}
+				},
+				"value_outputs": {
+					"out": {
+						"description": "Bool output becomes true is input is in range"
+					},
+					"neg": {
+						"description": "Negation of out"
+					}
+				}
+			}
+		}
+
+	}
+}

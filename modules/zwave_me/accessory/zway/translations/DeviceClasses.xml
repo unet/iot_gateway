@@ -1,0 +1,1133 @@
+<?xml version="1.0"?>
+<DeviceClasses>
+	<Generic id="0x01">
+		<Mandatory></Mandatory>
+		<name>
+			<lang xml:lang="en">Portable Controller</lang>
+			<lang xml:lang="de">Mobiler Controller</lang>
+			<lang xml:lang="ru">Переносной контроллер</lang>
+			<lang xml:lang="sv">Portabel kontroller</lang>
+			<lang xml:lang="sk">Prenosný kontrolér</lang>
+			<lang xml:lang="cz">Přenosný kontrolér</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Portable Remote Controller</lang>
+				<lang xml:lang="de">Mobile Fernbedienung</lang>
+				<lang xml:lang="ru">Переносной пульт управления</lang>
+				<lang xml:lang="sv">Portabel fjärrkontroll</lang>
+				<lang xml:lang="sk">Prenosný vzdialený kontrolér</lang>
+				<lang xml:lang="cz">Přenosný vzdálený kontrolér</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory>Association</Mandatory>
+			<Mandatory>SceneControllerConf</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<name>
+				<lang xml:lang="en">Portable Scene Controller</lang>
+				<lang xml:lang="de">Mobiler Scenen-Controller</lang>
+				<lang xml:lang="ru">Переносной пульт управления сценами</lang>
+				<lang xml:lang="sv">Portabel Scen-kontroller</lang>
+				<lang xml:lang="sk">Prenosný kontrolér scén</lang>
+				<lang xml:lang="cz">Přenosný kontrolér scén</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory>MultiCmd</Mandatory>
+			<Mandatory>ControllerReplication</Mandatory>
+			<name>
+				<lang xml:lang="en">Portable Installer Tool</lang>
+				<lang xml:lang="de">Mobiler Installer-Controller</lang>
+				<lang xml:lang="ru">Перенасное устройство инсталятора</lang>
+				<lang xml:lang="sv">Portabel installations-kontroller</lang>
+				<lang xml:lang="sk">Prenosný inštalačný kontrolér</lang>
+				<lang xml:lang="cz">Přenosný instalační kontrolér</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x02">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">Static Controller</lang>
+			<lang xml:lang="de">Statischer Controller</lang>
+			<lang xml:lang="ru">Статический контролер</lang>
+			<lang xml:lang="sv">Statisk kontroller</lang>
+			<lang xml:lang="sk">Statický kontrolér</lang>
+			<lang xml:lang="cz">Statický kontrolér</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Static PC Controller</lang>
+				<lang xml:lang="de">Statischer PC Controller</lang>
+				<lang xml:lang="ru">Статический контролер ПК</lang>
+				<lang xml:lang="sv">Statisk PC-kontroller</lang>
+				<lang xml:lang="sk">Statický PC kontrolér</lang>
+				<lang xml:lang="cz">Statický PC kontrolér</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Association</Mandatory>
+			<Mandatory>SceneControllerConf</Mandatory>
+			<name>
+  				<lang xml:lang="en">Static Scene Controller</lang>
+				<lang xml:lang="de">Statischer Scenen-Controller</lang>
+				<lang xml:lang="ru">Статически контролер сцен</lang>
+				<lang xml:lang="sv">Statisk Scen-kontroller</lang>
+				<lang xml:lang="sk">Statický kontrolér scén</lang>
+				<lang xml:lang="cz">Statický kontrolér scén</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory>Version</Mandatory>
+			<Mandatory>MultiCmd</Mandatory>
+			<Mandatory>ControllerReplication</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<name>
+				<lang xml:lang="en">Static Installer Tool</lang>
+				<lang xml:lang="de">Statisches Installer-Controller</lang>
+				<lang xml:lang="ru">Статический контролер инсталятора</lang>
+				<lang xml:lang="sv">Statisk installations-kontroller</lang>
+				<lang xml:lang="sk">Statický inštalačný kontrolér</lang>
+				<lang xml:lang="cz">Statický instalační kontrolér</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x10">
+		<Mandatory>Basic</Mandatory>
+		<Mandatory>SwitchBinary</Mandatory>
+		<name>
+			<lang xml:lang="en">Binary Switch</lang>
+			<lang xml:lang="de">Ein/Aus Schalter</lang>
+			<lang xml:lang="ru">Двухпозиционный включатель</lang>
+			<lang xml:lang="sv">På/Av Brytare</lang>
+			<lang xml:lang="sk">ON/OFF spínač</lang>
+			<lang xml:lang="cz">ON/OFF přepínač</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>SwitchAll</Mandatory>
+			<name>
+				<lang xml:lang="en">Binary Power Switch</lang>
+				<lang xml:lang="de">Ein/Aus Stromschalter</lang>
+				<lang xml:lang="ru">Двухпозиционный включатель питания</lang>
+				<lang xml:lang="sv">På/Av Strömbrytare</lang>
+				<lang xml:lang="sk">ON/OFF spínač napájania</lang>
+				<lang xml:lang="cz">ON/OFF přepínač napájení</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory>SwitchAll</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>SceneActivation</Mandatory>
+			<Mandatory>SceneActuatorConf</Mandatory>
+			<name>
+				<lang xml:lang="en">Binary Scene Switch</lang>
+				<lang xml:lang="de">Ein/Aus Szenen-Schalter</lang>
+				<lang xml:lang="ru">Двухпозиционный переключатель сцен</lang>
+				<lang xml:lang="sv">På/Av Scen-kontroller</lang>
+				<lang xml:lang="sk">ON/OFF spínač scén</lang>
+				<lang xml:lang="cz">ON/OFF přepínač scén</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x11">
+		<Mandatory>Basic</Mandatory>
+		<Mandatory>SwitchMultilevel</Mandatory>
+		<name>
+			<lang xml:lang="en">Multilevel Switch</lang>
+			<lang xml:lang="de">Multipositionsschalter</lang>
+			<lang xml:lang="ru">Многопозиционный включатель</lang>
+			<lang xml:lang="sv">Flerpositionsbrytare</lang>
+			<lang xml:lang="sk">Viacúrovňový spínač</lang>
+			<lang xml:lang="cz">Víceúrovňový prepínač</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>SwitchAll</Mandatory>
+			<name>
+				<lang xml:lang="en">Routing Multilevel Switch</lang>
+				<lang xml:lang="de">Routing Multipositions-Schalter</lang>
+				<lang xml:lang="ru">Маршрутизирующий многопозиционный включатель</lang>
+				<lang xml:lang="sv">Routing flerpositionsbrytare</lang>
+				<lang xml:lang="sk">Viacúrovňový smerovací spínač</lang>
+				<lang xml:lang="cz">Víceúrovňový směrovací prepínač</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<name>
+				<lang xml:lang="en">Multiposition Motor Switch</lang>
+				<lang xml:lang="de">Multipositions-Motor-Schalter</lang>
+				<lang xml:lang="ru">Многопозиционный включатель двигателя</lang>
+				<lang xml:lang="sv">Flerpositions-motorbrytare</lang>
+				<lang xml:lang="sk">Viacúrovňový spínač motora</lang>
+				<lang xml:lang="cz">Víceúrovňový prepínač motora</lang>
+			</name>
+		</Specific>
+		<Specific id="4">
+			<Mandatory>SwitchAll</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>SceneActivation</Mandatory>
+			<Mandatory>SceneActuatorConf</Mandatory>
+			<name>
+				<lang xml:lang="en">Multilevel Scene Switch</lang>
+				<lang xml:lang="de">Multipositions-Scenen-Umschalter</lang>
+				<lang xml:lang="ru">Многопозиционный переключатель сцен</lang>
+				<lang xml:lang="sv">Flerpositions Scenbrytare</lang>
+				<lang xml:lang="sk">Viacúrovňový spínač scén</lang>
+				<lang xml:lang="cz">Víceúrovňový prepínač scén</lang>
+			</name>
+		</Specific>
+		<Specific id="5">
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>SwitchBinary</Mandatory>
+			<name>
+				<lang xml:lang="en">Motor Control Device (A)</lang>
+				<lang xml:lang="de">Motorsteuerung (A)</lang>
+				<lang xml:lang="ru">Устройство управления двигателем (A)</lang>
+				<lang xml:lang="sv">Motorstyrning (A)</lang>
+				<lang xml:lang="sk">Ovládanie motora (A)</lang>
+				<lang xml:lang="cz">Ovládání motoru (A)</lang>
+			</name>
+		</Specific>
+		<Specific id="6">
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>SwitchBinary</Mandatory>
+			<name>
+				<lang xml:lang="en">Motor Control Device (B)</lang>
+				<lang xml:lang="de">Motorsteuerung (B)</lang>
+				<lang xml:lang="ru">Устройство управления двигателем (B)</lang>
+				<lang xml:lang="sv">Motorstyrning (B)</lang>
+				<lang xml:lang="sk">Ovládanie motora (B)</lang>
+				<lang xml:lang="cz">Ovládání motoru (B)</lang>
+			</name>
+		</Specific>
+		<Specific id="7">
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>SwitchBinary</Mandatory>
+			<name>
+				<lang xml:lang="en">Motor Control Device (C)</lang>
+				<lang xml:lang="de">Motorsteuerung (C)</lang>
+				<lang xml:lang="ru">Устройство управления двигателем (C)</lang>
+				<lang xml:lang="sv">Motorstyrning (C)</lang>
+				<lang xml:lang="sk">Ovládanie motora (C)</lang>
+				<lang xml:lang="cz">Ovládání motoru (C)</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x20">
+		<Mandatory>Basic</Mandatory>
+		<Mandatory>SensorBinary</Mandatory>
+		<name>
+			<lang xml:lang="en">Binary Sensor</lang>
+			<lang xml:lang="de">Binär-Sensor</lang>
+			<lang xml:lang="ru">Бинарный датчик</lang>
+			<lang xml:lang="sv">Binär sensor</lang>
+			<lang xml:lang="sk">Binárny senzor</lang>
+			<lang xml:lang="cz">Binární senzor</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Routing Binary Sensor</lang>
+				<lang xml:lang="de">Routing Binär-Sensor</lang>
+				<lang xml:lang="ru">Маршрутизирующий бинарный датчик</lang>
+				<lang xml:lang="sv">Routing Binär sensor</lang>
+				<lang xml:lang="sk">Smerovací Binárny senzor</lang>
+				<lang xml:lang="cz">Směrovací Binární senzor</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x21">
+		<Mandatory>Basic</Mandatory>
+		<Mandatory>SensorMultilevel</Mandatory>
+		<name>
+			<lang xml:lang="en">Multilevel Sensor</lang>
+			<lang xml:lang="de">Sensor</lang>
+			<lang xml:lang="ru">Многоуровневый датчик</lang>
+			<lang xml:lang="sv">Sensor</lang>
+			<lang xml:lang="sk">Viacúrovňový senzor</lang>
+			<lang xml:lang="cz">Víceúrovňový senzor</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Routing Multilevel Sensor</lang>
+				<lang xml:lang="de">Routing-Sensor</lang>
+				<lang xml:lang="ru">Маршрутизирующий многоуровневый датчик</lang>
+				<lang xml:lang="sv">Routing sensor</lang>
+				<lang xml:lang="sk">Smerovací viacúrovňový senzor</lang>
+				<lang xml:lang="cz">Směrovací víceúrovňový senzor</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Chimney Fan</lang>
+				<lang xml:lang="de">Chimney Fan</lang>
+				<lang xml:lang="ru">Каминный вентилятор</lang>
+				<lang xml:lang="sv">Skortstensfläkt</lang>
+				<lang xml:lang="sk">Komínový ventilátor</lang>
+				<lang xml:lang="cz">Komínový ventilátor</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x14">
+		<Mandatory></Mandatory>
+		<name>
+			<lang xml:lang="en">ZIP Gateway</lang>
+			<lang xml:lang="de">Z-IP Gateway</lang>
+			<lang xml:lang="ru">Маршрутизатор Z-на-IP</lang>
+			<lang xml:lang="sv">Z-IP Gateway</lang>
+			<lang xml:lang="sk">ZIP Gateway</lang>
+			<lang xml:lang="cz">ZIP Gateway</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<name>
+				<lang xml:lang="en">ZIP Gateway</lang>
+				<lang xml:lang="de">Z-IP Gateway</lang>
+				<lang xml:lang="ru">Маршрутизатор Z-на-IP</lang>
+				<lang xml:lang="sv">Z-IP Gateway</lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<name>
+				<lang xml:lang="en">Advanced ZIP Gateway</lang>
+				<lang xml:lang="de">Erweitertes Z-IP Gateway</lang>
+				<lang xml:lang="ru">Продвинутый маршрутизатор Z-на-IP</lang>
+				<lang xml:lang="sv">Avancerad Z-IP Gateway</lang>
+				<lang xml:lang="sk">Pokročilý ZIP Gateway</lang>
+				<lang xml:lang="cz">Pokročilý ZIP Gateway</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x15">
+		<Mandatory></Mandatory>
+		<name>
+			<lang xml:lang="en">ZIP Node</lang>
+			<lang xml:lang="de">Z-IP Gerät</lang>
+			<lang xml:lang="ru">Устройство Z-на-IP </lang>
+			<lang xml:lang="sv">Z-IP nod</lang>
+			<lang xml:lang="sk">ZIP uzol</lang>
+			<lang xml:lang="cz">ZIP uzel</lang>
+		</name>
+		<Specific id="1">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<name>
+				<lang xml:lang="en">ZIP Node</lang>
+				<lang xml:lang="de">Z-IP Gerät</lang>
+				<lang xml:lang="ru">Устрйство Z-на-IP</lang>
+				<lang xml:lang="sv">Z-IP nod</lang>
+				<lang xml:lang="sk">ZIP uzol</lang>
+				<lang xml:lang="cz">ZIP uzel</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<name>
+				<lang xml:lang="en">Advanced ZIP Node</lang>
+				<lang xml:lang="de">Erweitertes Z-IP Gerät</lang>
+				<lang xml:lang="ru">Продвинутое устрйство Z-на-IP</lang>
+				<lang xml:lang="sv">Avancerad Z-IP nod</lang>
+				<lang xml:lang="sk">Pokročilý ZIP uzol</lang>
+				<lang xml:lang="cz">Pokročilý ZIP uzel</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x16">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">Ventilation</lang>
+			<lang xml:lang="de">Lüftung</lang>
+			<lang xml:lang="ru">Устройство вентиляции</lang>
+			<lang xml:lang="sv">Ventilation</lang>
+			<lang xml:lang="sk">Ventilácia</lang>
+			<lang xml:lang="cz">Ventilace</lang>
+		</name>
+		<Specific id="1">
+		<Mandatory></Mandatory>
+		<name>
+			<lang xml:lang="en">Residential Heat Recovery Ventilation</lang>
+			<lang xml:lang="de">Wohnraum-Wärmetauscher-Lüftung</lang>
+			<lang xml:lang="ru">Устройство ветиляции с рекуперацией</lang>
+			<lang xml:lang="sv">Ventilation med värmeåtervinning</lang>
+			<lang xml:lang="sk">Rezidenčná rekuperácia vzduchu</lang>
+			<lang xml:lang="cz">Rezidenčná rekuperácia vzduchu</lang>
+		</name>
+		</Specific>
+	</Generic> 
+	<Generic id="0xA1">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">Alarm Sensor</lang>
+			<lang xml:lang="de">Alarm Sensor</lang>
+			<lang xml:lang="ru">Датчик тревоги</lang>
+			<lang xml:lang="sv">Alarm-sensor</lang>
+			<lang xml:lang="sk">Senzor Alarmu</lang>
+			<lang xml:lang="cz">Senzor Alarmu</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Association</Mandatory>
+			<name>
+				<lang xml:lang="en">Basic Routing Alarm Sensor</lang>
+				<lang xml:lang="de">Basic-Routing-Alarm-Sensor</lang>
+				<lang xml:lang="ru">Базовый маршрутизирующий датчик тревоги</lang>
+				<lang xml:lang="sv">Basic Routing Alarm Sensor</lang>
+				<lang xml:lang="sk">Základný smerovací senzor Alarmu</lang>
+				<lang xml:lang="cz">Základní směrovací senzor Alarmu</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Association</Mandatory>
+			<Mandatory>Battery</Mandatory>
+			<name>
+				<lang xml:lang="en">Routing Alarm Sensor</lang>
+				<lang xml:lang="de">Routing-Alarm-Sensor</lang>
+				<lang xml:lang="ru">Маршрутизирующий датчик тревоги</lang>
+				<lang xml:lang="sv">Routing Alarm Sensor</lang>
+				<lang xml:lang="sk">Smerovací senzor Alarmu</lang>
+				<lang xml:lang="cz">Směrovací senzor Alarmu</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<name>
+				<lang xml:lang="en">Basic Zensor-Net Alarm Sensor</lang>
+				<lang xml:lang="de">Basic-Zensor-Net Alarm-Sensor</lang>
+				<lang xml:lang="ru">Базовый датчик тревоги Zensor-Net</lang>
+				<lang xml:lang="sv">Basic Zensor-Net Alarm Sensor</lang>
+				<lang xml:lang="sk">Základný Zensor-Net senzor Alarmu</lang>
+				<lang xml:lang="cz">Základní Zensor-Net senzor Alarmu</lang>
+			</name>
+		</Specific>
+		<Specific id="4">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>Battery</Mandatory>
+			<name>
+				<lang xml:lang="en">Zensor-Net Alarm Sensor</lang>
+				<lang xml:lang="de">Zensor-Net Alarm-Sensor</lang>
+				<lang xml:lang="ru">Датчик тревоги Zensor-Net</lang>
+				<lang xml:lang="sv">Zensor-Net Alarm Sensor</lang>
+				<lang xml:lang="sk">Zensor-Net senzor Alarmu</lang>
+				<lang xml:lang="cz">Zensor-Net senzor Alarmu</lang>
+			</name>
+		</Specific>
+		<Specific id="5">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>RemoteAssociationActivate</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Association</Mandatory>
+			<Mandatory>Battery</Mandatory>
+			<name>
+				<lang xml:lang="en">Advanced Zensor-Net Alarm Sensor</lang>
+				<lang xml:lang="de">Erweiterter Zensor-Net Alarm-Sensor</lang>
+				<lang xml:lang="ru">Продвинутый датчик тревоги Zensor-Net</lang>
+				<lang xml:lang="sv">Avancerad Zensor-Net Alarm Sensor</lang>
+				<lang xml:lang="sk">Pokročilý Zensor-Net senzor Alarmu</lang>
+				<lang xml:lang="cz">Pokročilý Zensor-Net senzor Alarmu</lang>
+			</name>
+		</Specific>
+		<Specific id="6">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Association</Mandatory>
+			<name>
+				<lang xml:lang="en">Basic Routing Smoke Sensor</lang>
+				<lang xml:lang="de">Basic-Routing-Rauchmelder</lang>
+				<lang xml:lang="ru">Базовый маршрутизирующий датчик дыма</lang>
+				<lang xml:lang="sv">Basic Routing Röksensor</lang>
+				<lang xml:lang="sk">Základný smerovací senzor Dymu</lang>
+				<lang xml:lang="cz">Základní směrovací senzor Dymu</lang>
+			</name>
+		</Specific>
+		<Specific id="7">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Association</Mandatory>
+			<Mandatory>Battery</Mandatory>
+			<name>
+				<lang xml:lang="en">Routing Smoke Sensor</lang>
+				<lang xml:lang="de">Routing-Rauchmelder</lang>
+				<lang xml:lang="ru">Маршрутизирующий датчик дыма</lang>
+				<lang xml:lang="sv">Routing Röksensor</lang>
+				<lang xml:lang="sk">Smerovací senzor Dymu</lang>
+				<lang xml:lang="cz">Směrovací senzor Dymu</lang>
+			</name>
+		</Specific>
+		<Specific id="8">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<name>
+				<lang xml:lang="en">Basic Zensor-Net Smoke Sensor</lang>
+				<lang xml:lang="de">Basic-Zensor-Net Rauchmelder</lang>
+				<lang xml:lang="ru">Базовый датчик дыма Zensor-Net</lang>
+				<lang xml:lang="sv">Basic Zensor-Net Röksensor</lang>
+				<lang xml:lang="sk">Základný Zensor-Net senzor Dymu</lang>
+				<lang xml:lang="cz">Základní Zensor-Net senzor Dymu</lang>
+			</name>
+		</Specific>
+		<Specific id="9">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>Battery</Mandatory>
+			<name>
+				<lang xml:lang="en">Zensor-Net Smoke Sensor</lang>
+				<lang xml:lang="de">Zensor-Net Rauchmelder</lang>
+				<lang xml:lang="ru">Датчик дыма Zensor-Net</lang>
+				<lang xml:lang="sv">Zensor-Net Röksensor</lang>
+				<lang xml:lang="sk">Zensor-Net senzor Dymu</lang>
+				<lang xml:lang="cz">Zensor-Net senzor Dymu</lang>
+			</name>
+		</Specific>
+		<Specific id="A">
+			<Mandatory>AlarmSensor</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Association</Mandatory>
+			<Mandatory>Battery</Mandatory>
+			<name>
+				<lang xml:lang="en">Advanced Zensor-Net Smoke Sensor</lang>
+				<lang xml:lang="de">Erweiterter Zensor-Net Rauchmelder</lang>
+				<lang xml:lang="ru">Продвинутый датчик дыма Zensor-Net</lang>
+				<lang xml:lang="sv">Advanced Zensor-Net Röksensor</lang>
+				<lang xml:lang="sk">Pokročilý Zensor-Net senzor Dymu</lang>
+				<lang xml:lang="cz">Pokročilý Zensor-Net senzor Dymu</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x08">
+		<Mandatory></Mandatory>
+		<name>
+			<lang xml:lang="en">Thermostat</lang>
+			<lang xml:lang="de">Thermostat</lang>
+			<lang xml:lang="ru">Термостат</lang>
+			<lang xml:lang="sv">Termostat</lang>
+			<lang xml:lang="sk">Termostat</lang>
+			<lang xml:lang="cz">Termostat</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Thermostat Heating</lang>
+				<lang xml:lang="de">Heizungsthermostat</lang>
+				<lang xml:lang="ru">Термостат нагрева</lang>
+				<lang xml:lang="sv">Värmetermostat</lang>
+				<lang xml:lang="sk">Termostat vykurovanie</lang>
+				<lang xml:lang="cz">Termostat vytápění</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ThermostatMode</Mandatory>
+			<Mandatory>ThermostatSetPoint</Mandatory>
+			<name>
+				<lang xml:lang="en">Thermostat General</lang>
+				<lang xml:lang="de">Thermostat</lang>
+				<lang xml:lang="ru">Термостат общего назначения</lang>
+				<lang xml:lang="sv">Termostat</lang>
+				<lang xml:lang="sk">Termostat všeobecne</lang>
+				<lang xml:lang="cz">Termostat obecně</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>MultiCmd</Mandatory>
+			<Mandatory>ClimateControlSchedule</Mandatory>
+			<name>
+				<lang xml:lang="en">Setback Schedule Thermostat</lang>
+				<lang xml:lang="de">Programmierbares Absenk-Thermostat</lang>
+				<lang xml:lang="ru">Термостат с программируемым расписанием</lang>
+				<lang xml:lang="sv">Programerbar termostat (Schema)</lang>
+				<lang xml:lang="sk">Prekážka pri programovaní Termostatu</lang>
+				<lang xml:lang="cz">Překážka při programování Termostatu</lang>
+			</name>
+		</Specific>
+		<Specific id="4">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>MultiCmd</Mandatory>
+			<name>
+				<lang xml:lang="en">Thermostat</lang>
+				<lang xml:lang="de">Setpoint-Thermostat</lang>
+				<lang xml:lang="ru">Термостат</lang>
+				<lang xml:lang="sv">Termostat</lang>
+				<lang xml:lang="sk">Termostat</lang>
+				<lang xml:lang="cz">Termostat</lang>
+			</name>
+		</Specific>
+		<Specific id="5">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ThermostatMode</Mandatory>
+			<Mandatory>ThermostatSetBack</Mandatory>
+			<name>
+				<lang xml:lang="en">Setback Thermostat</lang>
+				<lang xml:lang="de">Absenk-Thermostat</lang>
+				<lang xml:lang="ru">Термостат с программируемым расписанием (? TODO)</lang>
+				<lang xml:lang="sv">Termostat med flera lägen</lang>
+				<lang xml:lang="sk">Programovateľný termostat</lang>
+				<lang xml:lang="cz">Programovatelný termostat</lang>
+			</name>
+		</Specific>
+		<Specific id="6">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ThermostatMode</Mandatory>
+			<Mandatory>ThermostatSetPoint</Mandatory>
+			<name>
+				<lang xml:lang="en">General Thermostat V2</lang>
+				<lang xml:lang="de">Thermostat V2</lang>
+				<lang xml:lang="ru">Термостат общего назначения V2</lang>
+				<lang xml:lang="sv">Generell termostat V2</lang>
+				<lang xml:lang="sk">Všeobecný termostat V2</lang>
+				<lang xml:lang="cz">Obecný termostat V2</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x31">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">Meter</lang>
+			<lang xml:lang="de">Zaehler</lang>
+			<lang xml:lang="ru">Счётчик</lang>
+			<lang xml:lang="sv">Mätare</lang>
+			<lang xml:lang="sk">Merač</lang>
+			<lang xml:lang="cz">Měřič</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>Meter</Mandatory>
+			<name>
+				<lang xml:lang="en">Simple Meter</lang>
+				<lang xml:lang="de">Einfacher Zaehler</lang>
+				<lang xml:lang="ru">Простой счётчик</lang>
+				<lang xml:lang="sv">Enkel mätare</lang>
+				<lang xml:lang="sk">Jednoduchý merač</lang>
+				<lang xml:lang="cz">Jednoduchý měřič</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x12">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">Switch Remote</lang>
+			<lang xml:lang="de">Fernbedienter Schalter</lang>
+			<lang xml:lang="ru">Switch Remote TODO</lang>
+			<lang xml:lang="sv">Fjärrbrytare</lang>
+			<lang xml:lang="sk">Ďiaľkovo ovládané spínače</lang>
+			<lang xml:lang="cz">Dálkově ovládané přepínače</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Switch Remote Binary</lang>
+				<lang xml:lang="de">Fernbedienter Ein/Aus-Schalter</lang>
+				<lang xml:lang="ru">Switch Remote Binary TODO</lang>
+				<lang xml:lang="sv">På/av fjärrbrytare</lang>
+				<lang xml:lang="sk">Ďiaľkovo ovládané ON/OFF spínače</lang>
+				<lang xml:lang="cz">Dálkově ovládané ON/OFF přepínače</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Switch Remote Multilevel</lang>
+				<lang xml:lang="de">Fernbedienter Dimmer</lang>
+				<lang xml:lang="ru">Switch Remote Multilevel TODO</lang>
+				<lang xml:lang="sv">Fjärrstyrd Dimmer</lang>
+				<lang xml:lang="sk">Ďiaľkovo ovládané viacúrovňové spínače</lang>
+				<lang xml:lang="cz">Dálkově ovládané víceúrovňové přepínače</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Switch Remote Toggle Binary</lang>
+				<lang xml:lang="de">Fernbedienter Ein/Aus-Schalter</lang>
+				<lang xml:lang="ru">Switch Remote Toggle Binary TODO</lang>
+				<lang xml:lang="sv">Fjärrstyrd Brytare på/av</lang>
+				<lang xml:lang="sk">Ďiaľkovo ovládané dvojpolohové ON/OFF spínače</lang>
+				<lang xml:lang="cz">Dálkově ovládané dvoupolohové ON/OFF přepínače</lang>
+			</name>
+		</Specific>
+		<Specific id="4">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Switch Remote Toggle Multilevel</lang>
+				<lang xml:lang="de">Fernbedienter Dimmer</lang>
+				<lang xml:lang="ru">Switch Remote Toggle Multilevel TODO</lang>
+				<lang xml:lang="sv">Fjärrstyrd Dimmer</lang>
+				<lang xml:lang="sk">Ďiaľkovo ovládané dvojpolohové viacúrovňové spínače</lang>
+				<lang xml:lang="cz">Dálkově ovládané dvoupolohové viacúrovňové přepínače</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x0f">
+		<Mandatory></Mandatory>
+		<name>
+			<lang xml:lang="en">Repeater Slave</lang>
+			<lang xml:lang="de">Repeater</lang>
+			<lang xml:lang="ru">Повторитель</lang>
+			<lang xml:lang="sv">Repeater</lang>
+			<lang xml:lang="sk">Zosilňovač</lang>
+			<lang xml:lang="cz">Zesilovač</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Repeater Slave</lang>
+				<lang xml:lang="de">Repeater</lang>
+				<lang xml:lang="ru">Повторитель</lang>
+				<lang xml:lang="sv">Repeater</lang>
+				<lang xml:lang="sk">Zosilňovač</lang>
+				<lang xml:lang="cz">Zesilovač</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x30">
+		<Mandatory>Basic</Mandatory>
+		<Mandatory>MeterPulse</Mandatory>
+		<name>
+			<lang xml:lang="en">Meter Pulse</lang>
+			<lang xml:lang="de">Impulszaehler</lang>
+			<lang xml:lang="ru">Счётчик импульсов</lang>
+			<lang xml:lang="sv">Pulsmätare</lang>
+			<lang xml:lang="sk">Merač pulzov</lang>
+			<lang xml:lang="cz">Měřič pulzů</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Meter Pulse</lang>
+				<lang xml:lang="de">Zaehler</lang>
+				<lang xml:lang="ru">Счётчик импульсов</lang>
+				<lang xml:lang="sv">Pulsmätare</lang>
+				<lang xml:lang="sk">Merač pulzov</lang>
+				<lang xml:lang="cz">Měřič pulzů</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x40">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">Entry Control</lang>
+			<lang xml:lang="de">Zugangskontrolle</lang>
+			<lang xml:lang="ru">Управление входом</lang>
+			<lang xml:lang="sv">Ingångskontroll</lang>
+			<lang xml:lang="sk">Vstupná kontrola</lang>
+			<lang xml:lang="cz">Vstupní kontrola</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>DoorLock</Mandatory>
+			<name>
+				<lang xml:lang="en">Door Lock</lang>
+				<lang xml:lang="de">Tuerschloss</lang>
+				<lang xml:lang="ru">Дверной замок</lang>
+				<lang xml:lang="sv">Dörrlås</lang>
+				<lang xml:lang="sk">Zámok dverí</lang>
+				<lang xml:lang="cz">Zámek dveří</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>DoorLock</Mandatory>
+			<name>
+				<lang xml:lang="en">Advanced Door Lock</lang>
+				<lang xml:lang="de">Erweitertes Tuerschloss</lang>
+				<lang xml:lang="ru">Продвинутый дверной замок</lang>
+				<lang xml:lang="sv">Avancerat dörrlås</lang>
+				<lang xml:lang="sk">Pokročilý zámok dverí</lang>
+				<lang xml:lang="cz">Pokročilý zámek dveří</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>Security</Mandatory>
+			<Mandatory>DoorLock</Mandatory>
+			<name>
+				<lang xml:lang="en">Secure Keypad</lang>
+				<lang xml:lang="de">Sicherheitstastatur</lang>
+				<lang xml:lang="ru">Защищённая клавиатура</lang>
+				<lang xml:lang="sv">Säker knappsats</lang>
+				<lang xml:lang="sk">Zabezpečená klávesnica</lang>
+				<lang xml:lang="cz">Zabezpečená klávesnice</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x04">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">Display</lang>
+			<lang xml:lang="de">Display</lang>
+			<lang xml:lang="ru">Экран</lang>
+			<lang xml:lang="sv">Display</lang>
+			<lang xml:lang="sk">Displej</lang>
+			<lang xml:lang="cz">Displej</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>ScreenMD</Mandatory>
+			<Mandatory>ScreenAttributes</Mandatory>
+			<name>
+				<lang xml:lang="en">Simple Display</lang>
+				<lang xml:lang="de">Display</lang>
+				<lang xml:lang="ru">Простой экран</lang>
+				<lang xml:lang="sv">Display</lang>
+				<lang xml:lang="sk">Jednoduchý displej</lang>
+				<lang xml:lang="cz">Jednoduchý displej</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x50">
+		<Mandatory>ManufacturerSpecific</Mandatory>
+		<Mandatory>Version</Mandatory>
+		<Mandatory>Basic</Mandatory>
+		<Mandatory>Proprietary</Mandatory>
+		<name>
+			<lang xml:lang="en">Semi Interoperable</lang>
+			<lang xml:lang="de">eingeschraenkt interoperables Gerät</lang>
+			<lang xml:lang="ru">Частично совместимый</lang>
+			<lang xml:lang="sv">Semi kontrollerbar</lang>
+			<lang xml:lang="sk">Semi vnútrooperatívnosť</lang>
+			<lang xml:lang="cz">Semi vnútrooperatívnosť</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>EnergyProduction</Mandatory>
+			<name>
+				<lang xml:lang="en">Energy Production</lang>
+				<lang xml:lang="de">Energieerzeuger</lang>
+				<lang xml:lang="ru">Генератор (? TODO)</lang>
+				<lang xml:lang="sv">Energiproduktion</lang>
+				<lang xml:lang="sk">Produkcia energie</lang>
+				<lang xml:lang="cz">Produkce energie</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x03">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">GenericTypeAVControl</lang>
+			<lang xml:lang="de">Audio/Video-Steuerung</lang>
+			<lang xml:lang="ru">Базовое управление звуком и видео</lang>
+			<lang xml:lang="sv">Ljud-/bildstyrning</lang>
+			<lang xml:lang="sk">Audio/Video kontrola</lang>
+			<lang xml:lang="cz">Audio/Video kontrolae</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>SimpleAVControl</Mandatory>
+			<name>
+				<lang xml:lang="en">Satellite Receiver</lang>
+				<lang xml:lang="de">Satelittenempfaenger</lang>
+				<lang xml:lang="ru">Спутниковый ресивер</lang>
+				<lang xml:lang="sv">Satellitmottagare</lang>
+				<lang xml:lang="sk">Satelitný prijímač</lang>
+				<lang xml:lang="cz">Satelitní přijímač</lang>
+			</name>
+		</Specific>
+		<Specific id="2">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>SensorBinary</Mandatory>
+			<Mandatory>SimpleAVControl</Mandatory>
+			<name>
+				<lang xml:lang="en">Door Bell</lang>
+				<lang xml:lang="de">Tuergong</lang>
+				<lang xml:lang="ru">Дверной звонок</lang>
+				<lang xml:lang="sv">Dörrklocka</lang>
+				<lang xml:lang="sk">Domový zvonček</lang>
+				<lang xml:lang="cz">Domovní zvonček</lang>
+			</name>
+		</Specific>
+		<Specific id="3">
+			<Mandatory>ManufacturerSpecific</Mandatory>
+			<Mandatory>Version</Mandatory>
+			<Mandatory>SimpleAVControl</Mandatory>
+			<name>
+				<lang xml:lang="en">Satellite Receiver V2</lang>
+				<lang xml:lang="de">Satelittenempfaenger V2</lang>
+				<lang xml:lang="ru">Спутниковый ресивер V2</lang>
+				<lang xml:lang="sv">Satellitmottager V2</lang>
+				<lang xml:lang="sk">Satelitný prijímač V2</lang>
+				<lang xml:lang="cz">Satelitní přijímač V2</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x09">
+		<Mandatory>Basic</Mandatory>
+		<name>
+			<lang xml:lang="en">WindowCovering</lang>
+			<lang xml:lang="de">Rolladensteuerung</lang>
+			<lang xml:lang="ru">Управление жалюзи</lang>
+			<lang xml:lang="sv">Rullgardin</lang>
+			<lang xml:lang="sk">Ovládanie žalúzií</lang>
+			<lang xml:lang="cz">Ovládání žaluzií</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+		<Specific id="1">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en">Simple</lang>
+				<lang xml:lang="de">Standard</lang>
+ 				<lang xml:lang="ru">Простое</lang>
+				<lang xml:lang="sv">Enkel</lang>
+				<lang xml:lang="sk">Štandard</lang>
+				<lang xml:lang="cz">Standard</lang>
+			</name>
+		</Specific>
+	</Generic>
+	<Generic id="0x07">
+		<Mandatory></Mandatory>
+		<name>
+			<lang xml:lang="en">Notification Sensor</lang>
+			<lang xml:lang="de">Alarmsensor</lang>
+			<lang xml:lang="ru">Охранный датчик</lang>
+			<lang xml:lang="sv">Notification Sensor</lang>
+			<lang xml:lang="sk">Notification Sensor</lang>
+			<lang xml:lang="cz">Oznamovací sensor</lang>
+		</name>
+		<Specific id="0">
+			<Mandatory></Mandatory>
+			<name>
+				<lang xml:lang="en"></lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Specific>
+	</Generic>
+</DeviceClasses>

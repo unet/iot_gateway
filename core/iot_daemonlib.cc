@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -28,6 +29,7 @@ static const char *debuglog_str[]={
 	" MESH",
 	" MODEL", //modelling
 	" IOTGW", //iotgw protocol session
+	" DEVREG", //iotgw protocol session
 };
 
 
@@ -36,13 +38,13 @@ static const char *debuglog_str[]={
 
 
 static int logfd=-1;
-char bin_dir[256]; //parent dir for daemon binary
+char bin_dir[PATH_MAX]; //parent dir for daemon binary
 size_t bin_dir_len;
 char bin_basename[64];
 
-char run_dir[256];
-char conf_dir[256];
-char modules_dir[256];
+char run_dir[PATH_MAX];
+char conf_dir[PATH_MAX];
+char modules_dir[PATH_MAX];
 
 
 int min_loglevel=-1; //means 'unset'
@@ -95,14 +97,14 @@ bool init_log(const char* dir, const char* logfile)
 	clock_gettime(CLOCK_REALTIME, &ts2);
 	clock_gettime(CLOCK_REALTIME, &ts2);
 	
-	logclock_cost=(ts2.tv_nsec-ts.tv_nsec+1000000000*(ts2.tv_sec-ts.tv_sec))/8;
+	logclock_cost=(ts2.tv_nsec-ts.tv_nsec+1000000000ll*int64_t(ts2.tv_sec-ts.tv_sec))/8;
 	prevlogts=ts2;
 
 	if(min_loglevel==LDEBUG) {
 		long mindif=100000;
 		for(int i=8;i>=0;i--) {
 			outlog_debug("Measuring log delay (cost %ld)...%d",logclock_cost, i);
-			long d=prevlogts.tv_nsec-ts2.tv_nsec+1000000000*(prevlogts.tv_sec-ts2.tv_sec)-prevlogcost;
+			long d=prevlogts.tv_nsec-ts2.tv_nsec+1000000000ll*int64_t(prevlogts.tv_sec-ts2.tv_sec)-prevlogcost;
 			ts2=prevlogts;
 			if(d<mindif) {
 				mindif=d;
@@ -156,7 +158,7 @@ static inline void do_voutlog(const char*file, int line, const char* func,int le
 
 	len=strftime(buf,buflen,"%d.%m.%Y %H:%M:%S",tm);
 #ifndef _WIN32
-	len+=snprintf(buf+len,buflen-len,".%09ld {%09ldns}: [%d %s%s] ",nsec,(ts.tv_nsec-prevlogts.tv_nsec+1000000000*(ts.tv_sec-prevlogts.tv_sec))-logclock_cost,int(getpid()), loglevel_str[level], debuglog_str[debugcat]);
+	len+=snprintf(buf+len,buflen-len,".%09ld {%09lldns}: [%d %s%s] ",nsec,(ts.tv_nsec-prevlogts.tv_nsec+1000000000ll*int64_t(ts.tv_sec-prevlogts.tv_sec))-logclock_cost,int(getpid()), loglevel_str[level], debuglog_str[debugcat]);
 #else
 	len+=snprintf(buf+len,buflen-len,".%09ld: [%d %s%s] ",nsec,int(getpid()), loglevel_str[level], debuglog_str[debugcat]);
 #endif
@@ -177,7 +179,7 @@ static inline void do_voutlog(const char*file, int line, const char* func,int le
 	puts(buf);
 #else
 	clock_gettime(CLOCK_REALTIME, &prevlogts);
-	prevlogcost=prevlogts.tv_nsec-ts.tv_nsec+1000000000*(prevlogts.tv_sec-ts.tv_sec);
+	prevlogcost=prevlogts.tv_nsec-ts.tv_nsec+1000000000ll*int64_t(prevlogts.tv_sec-ts.tv_sec);
 #if LOGGER_STDOUT
 	buf[sizeof(buf)-1]='\0';
 	printf("%s",buf);
@@ -248,20 +250,28 @@ int create_pidfile(const char* dir, const char* pidfile)
 
 bool parse_args(int argc, char **arg)
 {
+	char relbin_dir[PATH_MAX];
+	size_t len;
 	char* slash=strrchr(arg[0], '/');
 	if(!slash) { //assume dir is '.'
-		bin_dir_len=1;
-		memcpy(bin_dir, ".", bin_dir_len);
+		memcpy(relbin_dir, ".", 2); //NUL-term added
+		snprintf(bin_basename, sizeof(bin_basename), "%s", arg[0]);
 	} else {
-		bin_dir_len=slash-arg[0];
-		if(bin_dir_len>=(int)sizeof(bin_dir)) {
-			fprintf(stderr,"Error: length of binary's parent path exceeds %d chars\n\n",int(sizeof(bin_dir))-1);
+		len=slash-arg[0];
+		if(len>=(int)sizeof(relbin_dir)) {
+			fprintf(stderr,"Error: length of binary's parent path exceeds %d chars\n\n",int(sizeof(relbin_dir))-1);
 			return false;
 		}
-		memcpy(bin_dir, arg[0], bin_dir_len);
+		memcpy(relbin_dir, arg[0], len);
+		relbin_dir[len]='\0';
+		snprintf(bin_basename, sizeof(bin_basename), "%s", slash+1);
 	}
-	bin_dir[bin_dir_len]='\0';
-	snprintf(bin_basename, sizeof(bin_basename), "%s", slash+1);
+	if(realpath(relbin_dir, bin_dir)!=bin_dir) {
+		char errbuf[256];
+		fprintf(stderr,"Error: cannot determine real path to binary: %s\n", strerror_r(errno, errbuf, sizeof(errbuf)));
+		return false;
+	}
+	bin_dir_len=strlen(bin_dir);
 
 	const char* s=CONF_DIR;
 	if(s[0]=='/') snprintf(conf_dir, sizeof(conf_dir), "%s", s);
@@ -276,7 +286,7 @@ bool parse_args(int argc, char **arg)
 	s=MODULES_DIR;
 	if(s[0]=='/') snprintf(modules_dir, sizeof(modules_dir), "%s", s);
 		else if(s[0]) snprintf(modules_dir, sizeof(modules_dir), "%s/%s", bin_dir, s);
-		else snprintf(modules_dir, sizeof(modules_dir), "%s", bin_dir);
+		else snprintf(modules_dir, sizeof(modules_dir), "%s/modules", bin_dir);
 
 
 	return true;

@@ -5,8 +5,8 @@ library-patchlevel := 0
 #revision is integer from 0 to 65535 and can be incremented everytime when version or patchlevel is changed
 library-revision := 1
 
-#'any' or set of items from list: linux, mswin, darwin, unix (any unix clone including linux and darwin), android?
-bundle-platform := all
+#'any' or set of items from list: linux, mswin, darwin, unix (any unix clone including linux and darwin), android?, any
+library-platform := any
 
 #srcs := inputlinux.cc types.cc
 

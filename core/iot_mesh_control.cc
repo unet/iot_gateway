@@ -1191,17 +1191,25 @@ void iot_meshnet_controller::graceful_shutdown(void) {
 		cur->destroy(true);
 	}
 
-	if(proto_state) 
+	if(proto_state) {
+		bool waslast=true;
 		for(uint32_t i=0;i<max_protoid;i++) {
 			if(!proto_state[i]) continue;
 			if(proto_state[i]->connmap.getamount()>0) {
 outlog_debug_meshtun("connmap is busy");
+				waslast=false;
 				needwait=true;
-			} else {
-				delete proto_state[i];
-				proto_state[i]=NULL;
+				break;
 			}
+			delete proto_state[i];
+			proto_state[i]=NULL;
 		}
+		if(waslast) {
+			free(proto_state);
+			proto_state=NULL;
+		}
+	}
+	if(needwait) timer.schedule(shutdown_timer_item, 2000); //give max 2 sec to all meshtuns
 
 	uv_rwlock_wrunlock(&protostate_lock);
 
@@ -1210,7 +1218,6 @@ outlog_debug_meshtun("connmap is busy");
 		return;
 	}
 
-	timer.schedule(shutdown_timer_item, 2000); //give max 2 sec to all meshtuns
 }
 
 
@@ -1462,7 +1469,7 @@ int iot_meshtun_stream_state::connect(const iot_netprototype_metaclass* protomet
 		num_in_dis=0;
 		num_output_inprog=0;
 		iot_gen_random((char*)random, IOT_MESHPROTO_TUNSTREAM_IDLEN);
-		creation_time=((iot_get_systime()+500000000)/1000000000)-1000000000; //round to integer seconds and offset by 1e9 seconds
+		creation_time=((iot_get_systime()+500000000ull)/1000000000ull)-1000000000ull; //round to integer seconds and offset by 1e9 seconds
 
 		cancel_timer();
 		finalize_expires=input_ack_expires=UINT64_MAX;
@@ -1520,7 +1527,7 @@ int iot_meshtun_stream_state::accept_connection(iot_meshtun_stream_listen_state:
 		num_in_dis=0;
 		num_output_inprog=0;
 		memcpy(random, item->random, IOT_MESHPROTO_TUNSTREAM_IDLEN);
-		creation_time=((iot_get_systime()+500000000)/1000000000)-1000000000; //round to integer seconds and offset by 1e9 seconds
+		creation_time=((iot_get_systime()+500000000ull)/1000000000ull)-1000000000ull; //round to integer seconds and offset by 1e9 seconds
 
 		if(inmeta) {
 			assert(!inmeta_data && inmeta_size_>0);
@@ -1990,7 +1997,7 @@ int iot_meshtun_stream_listen_state::accept(iot_meshtun_stream_state* rep) { //t
 		if(state!=ST_LISTENING || !con || !input_pending || !is_bound) goto onexit;
 		assert(uv_thread_self()==con->thread->thread);
 		uint32_t now;
-		now=((iot_get_systime()+500000000)/1000000000)-1000000000;
+		now=((iot_get_systime()+500000000ull)/1000000000ull)-1000000000ull;
 
 		uint32_t pending;
 		pending=listenq.pending_read();

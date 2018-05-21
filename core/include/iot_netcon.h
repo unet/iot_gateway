@@ -304,7 +304,7 @@ public:
 		}
 		iot_hostid_t proxy=0;
 		if(allow_meshproxy && json_object_object_get_ex(json, "proxy", &val)) {
-			IOT_JSONPARSE_UINT(json, iot_hostid_t, proxy);
+			IOT_JSONPARSE_UINT(val, iot_hostid_t, proxy);
 			if(proxy) {
 				if(!meta->can_meshproxy || !meta->type_id) {
 					outlog_error("Connection type '%s' cannot be proxied through another host");
@@ -324,7 +324,7 @@ public:
 		uint32_t metric=0;
 		if(!is_server) {
 			if(json_object_object_get_ex(json, "metric", &val)) {
-				IOT_JSONPARSE_UINT(json, uint32_t, metric);
+				IOT_JSONPARSE_UINT(val, uint32_t, metric);
 			}
 		}
 		if(proxy) return iot_netcontype_metaclass::meshproxy_from_json(meta, proxy, json, protoconfig, obj, is_server, registry, metric);

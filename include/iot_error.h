@@ -26,7 +26,7 @@
 	XX(NO_ACTION, -20, "no action performed")								\
 	XX(HARD_LIMIT_REACHED, -21, "hard limit reached")						\
 	XX(BAD_REQUEST, -22, "request is broken")								\
-	XX(BAD_DATA, -23, "request is broken")									\
+	XX(BAD_DATA, -23, "broken data")										\
 	XX(OBJECT_INVALIDATED, -24, "target object was freed (form of success)") \
 	XX(ADDRESS_INUSE, -25, "address is already busy or cannot be assigned")	\
 	XX(INVALID_STATE, -26, "object is in inappropriate state")				\

@@ -240,10 +240,10 @@ public:
 	//returns 0 if instance was successfully started in sync way
 	//returns error code otherwise:
 	//
-	int start(bool isasync); //thread of instance
+	int start(bool ismsgproc, bool forcemsg=false); //thread of instance
 	int on_start_status(int err, bool isasync); //main thread
 	//stops module instance.
-	int stop(bool isasync, bool forcemsg=false); //thread of instance
+	int stop(bool ismsgproc, bool forcemsg=false); //thread of instance
 	int on_stop_status(int err, bool isasync); //main thread
 
 	void recheck_job(bool);

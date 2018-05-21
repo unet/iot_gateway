@@ -22,6 +22,16 @@
 				//"newDialog":
 				//"editDialog":
 			}
+		},
+		"meter" : {
+			"title": "Meter",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
 		}
 	},
 	"datatypes": {
@@ -54,6 +64,40 @@
 				//"newDialog":
 				//"editDialog":
 			}
+		},
+		"numeric" : {
+			"title": "Numeric",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		},
+		"pulse" : {
+			"title": "Pulse",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		}
+	},
+	"notiongroups": {
+		"temperature" : {
+			"title": "Temperature",
+			"tmpl": {
+				//"shortDescr":
+			}
+		},
+		"luminance" : {
+			"title": "Luminance",
+			"tmpl": {
+				//"shortDescr":
+			}
 		}
 	},
 	"notiontypes": {
@@ -65,14 +109,58 @@
 		},
 		"degcelcius" : {
 			"title": "degcelcius",
+			"group": "temperature", //TODO add processing or short spec
 			"tmpl": {
 				//"shortDescr":
 			}
 		},
 		"degfahrenheit" : {
 			"title": "degfahrenheit",
+			"group": "CORE/temperature", //TODO add processing or full spec
 			"tmpl": {
 				//"shortDescr":
+			}
+		},
+		"percentlum" : {
+			"title": "Percentage of luminance",
+			"group": "CORE/luminance", //TODO add processing or full spec
+			"tmpl": {
+				//"shortDescr":
+			}
+		}
+	},
+	"contypes" : {
+		"serial" : {
+			"title": "Serial line (UART, COM-port) connection",
+			"tmpl": { //templates for processing localident data. if key starts with 'details', then template is applied to hw device details, otherwise template if for ident
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+				//"detailsPropList":
+			}
+		},
+		"zwave" : {
+			"title": "Z-Wave device",
+			"tmpl": { //templates for processing localident data. if key starts with 'details', then template is applied to hw device details, otherwise template if for ident
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+				//"detailsPropList":
+			}
+		},
+		"gpio" : {
+			"title": "GPIO-connected device",
+			"tmpl": { //templates for processing localident data. if key starts with 'details', then template is applied to hw device details, otherwise template if for ident
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+				//"detailsPropList":
 			}
 		}
 	}

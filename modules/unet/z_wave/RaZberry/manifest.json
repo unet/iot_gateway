@@ -1,0 +1,89 @@
+{
+	"description": "Support for RaZberry daughter card for RasberryPi-like computers providing Z-Wave static controller functionality",
+	"platforms": ["linux"],
+	"detector_modules": {
+		"det" : {
+			"title": ["txt","det_title"],
+			"description": ["txt","det_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"manual_devices": { //optional set of templates to enter device spec manually. detector's code can (and must) interpret it as hints to find devices
+				"def": {
+					"title": "Stub devices"
+					//"shortDescr":
+					//"longDescr":
+					//"propList":
+					//"newDialog":
+					//"editDialog":
+				}
+			}
+		}
+	},
+	"driver_modules": {
+		"ctrldrv" : {
+			"title": ["txt","ctrldrv_title"],
+			"description": ["txt","ctrldrv_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		},
+		"devdrv" : {
+			"title": ["txt","devdrv_title"],
+			"description": ["txt","devdrv_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		}
+	},
+	"node_modules": {
+		"meter" : {
+			"title": "Metering Event Source",
+			"description": "",
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"device_connections": {
+				"dev": {
+					"description":"Any device with MeterKeyboard interface"
+				}
+			},
+			"links": {
+				"value_outputs": {
+					"value": {
+						"description": "Current value of metering",
+					}
+				}
+			}
+		}
+	},
+	"ifacetypes": {
+		"controller" : {
+			"title": "Z-Wave controller",
+			"tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		}
+	}
+
+}

@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<BarrierSignals>
+	<Signal id="1">
+		<name>
+			<lang xml:lang="en">Audible notification</lang>
+			<lang xml:lang="de">Akustische Benachrichtigung</lang>
+			<lang xml:lang="ru">Звуковое оповещение</lang>
+			<lang xml:lang="sv">Ljudnotifiering</lang>
+			<lang xml:lang="sk">Zvukové upozornenie</lang>
+			<lang xml:lang="cz">Zvukové upozornění</lang>
+		</name>
+	</Signal>
+	<Signal id="2">
+		<name>
+			<lang xml:lang="en">Visual notification</lang>
+			<lang xml:lang="de">Visuelle Benachrichtigung</lang>
+			<lang xml:lang="ru">Визуальное оповещение</lang>
+			<lang xml:lang="sv">Visuell notifiering</lang>
+			<lang xml:lang="sk">Vizuálne upozornenie</lang>
+			<lang xml:lang="cz">Vizuální upozornění</lang>
+		</name>
+	</Signal>
+</BarrierSignals>

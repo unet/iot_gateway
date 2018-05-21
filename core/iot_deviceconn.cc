@@ -140,6 +140,7 @@ void iot_device_connection_t::init_local(iot_connsid_t id, iot_modinstance_item_
 							client_hwdevidents=cur->idents;
 							break;
 						}
+						cur=cur->next;
 					}
 				}
 				break;
@@ -368,7 +369,8 @@ int iot_device_connection_t::connect_local(iot_modinstance_item_t* driver_inst) 
 		if(client_numhwdevidents) { //there is hwdevice filter bound to client. it can be exact or a template.
 			//DEVICE IN hwdev IS LOCAL, so no addtional check for client_devifaceclassfilter->flag_localonly
 			int i;
-			for(i=0;i<client_numhwdevidents;i++) if(client_hwdevidents[i].matches(&hwdev->dev_ident)) break;
+			for(i=0;i<client_numhwdevidents;i++)
+				if(client_hwdevidents[i].matches(&hwdev->dev_ident)) break;
 			if(i>=client_numhwdevidents) return IOT_ERROR_NOT_SUPPORTED;
 		}
 

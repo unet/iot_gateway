@@ -1,0 +1,1339 @@
+<?xml version="1.0"?>
+<Meters>
+	<Meter id="0x01">
+		<name>
+			<lang xml:lang="en">Single Electric </lang>
+			<lang xml:lang="de">EinphasenStromzähler</lang>
+			<lang xml:lang="ru">Счётчик электричества</lang>
+			<lang xml:lang="sv">1-fas elmätare</lang>
+			<lang xml:lang="sk">Jednofázový elektromer</lang>
+			<lang xml:lang="cz">Jednofázový elektroměr</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Total Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtprimärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная первичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Total Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtprimär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная первичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový primární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Total Secondary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtsekundärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная вторичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total sekundär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový sekundární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Total Secondary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtsekundär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная вторичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total sekundär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový sekundární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Instantaneous Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Maximale Primärenergie (kWh)</lang>
+			<lang xml:lang="ru">Мгновенное первичная активное потребление (кВтЧ)</lang>
+			<lang xml:lang="sv">Maximal primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Okamžitý primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Instanteneous Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Maximale Primär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Maximal primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Okamžitý primární zdanlivý výkon (kVAH)</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Primary Active Maximum Demand (kW)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Wirkleistung (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära momentana energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="8">
+			<lang xml:lang="en">Primary Rective Maximum Demand  (kVA)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Scheinleistung (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära reaktiva momentana energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="9">
+			<lang xml:lang="en">Cummulative Primary Active Maxmimum Demand (kW)</lang>
+			<lang xml:lang="de">Summierter primärer Wirkleistungsbedarf (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär momentan energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="10">
+			<lang xml:lang="en">Cummulative Primary Reactive Maxmimum Demand (kVA)</lang>
+			<lang xml:lang="de">Summierter primärer Scheinleistungsbedarf (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär reaktiv momentan energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="11">
+			<lang xml:lang="en">Voltage at Phase 1 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 1 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 1 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 1 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 1 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 1 (V)</lang>
+		</dataset>
+		<dataset id="12">
+			<lang xml:lang="en">Voltage at Phase 2 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 2 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 2 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 2 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 2 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 2 (V)</lang>
+		</dataset>
+		<dataset id="13">
+			<lang xml:lang="en">Voltage at Phase 3 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 3 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 3 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 3 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 3 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 3 (V)</lang>
+		</dataset>
+		<dataset id="14">
+			<lang xml:lang="en">Ampere at Phase 1 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 1 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 1 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 1 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 1 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 1 (A)</lang>
+		</dataset>
+		<dataset id="15">
+			<lang xml:lang="en">Ampere at Phase 2 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 2 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 2 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 2 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 2 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 2 (A)</lang>
+		</dataset>
+		<dataset id="16">
+			<lang xml:lang="en">Ampere at Phase 3 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 3 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 3 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 3 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 3 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 3 (A)</lang>
+		</dataset>
+		<dataset id="17">
+			<lang xml:lang="en">Pulse Count</lang>
+			<lang xml:lang="de">Zählimpuls</lang>
+			<lang xml:lang="ru">Счётчик щелчков</lang>
+			<lang xml:lang="sv">Pulsantal</lang>
+			<lang xml:lang="sk">Počet pulzov</lang>
+			<lang xml:lang="cz">Počet pulzů</lang>
+		</dataset>
+		<dataset id="18">
+			<lang xml:lang="en">Current Transformation Ratio</lang>
+			<lang xml:lang="de">Verhältnis zwischen Primär und Sekundärstrom</lang>
+			<lang xml:lang="ru">Текущий коэффициент трансформации</lang>
+			<lang xml:lang="sv">Förhållande primärsida/sekundärsida</lang>
+			<lang xml:lang="sk">Aktuálny Transformarčný pomer</lang>
+			<lang xml:lang="cz">Aktuální Transformační poměr</lang>
+		</dataset>
+		<dataset id="19">
+			<lang xml:lang="en">Power factor</lang>
+			<lang xml:lang="de">Leistungfaktor</lang>
+			<lang xml:lang="ru">Коэффициент мощности</lang>
+			<lang xml:lang="sv">Fasförskjutning</lang>
+			<lang xml:lang="sk">Účinník</lang>
+			<lang xml:lang="cz">Účinník</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x02">
+		<name>
+			<lang xml:lang="en">Gas</lang>
+			<lang xml:lang="de">Gaszähler</lang>
+			<lang xml:lang="ru">Счётчик газа</lang>
+			<lang xml:lang="sv">Gas</lang>
+			<lang xml:lang="sk">Plynomer</lang>
+			<lang xml:lang="cz">Plynomer</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Accumulated Volume (m3)</lang>
+			<lang xml:lang="de">Gesamtvolumen 8 (m3)</lang>
+			<lang xml:lang="ru">Суммарный объём (м3)</lang>
+			<lang xml:lang="sv">Ackumulerad volym (m3)</lang>
+			<lang xml:lang="sk">Kumulovaný objem (m3)</lang>
+			<lang xml:lang="cz">Kumulovaný objem (m3)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Current Flow (k/h, m3/h)</lang>
+			<lang xml:lang="de">Durchfluss (k/h, m3/h)</lang>
+			<lang xml:lang="ru">Текущий поток (л/ч, м3/ч)</lang>
+			<lang xml:lang="sv">Nuvarande flöde (k/h, m3/h)</lang>
+			<lang xml:lang="sk">Aktuálny prietok plynu (k/h, m3/h)</lang>
+			<lang xml:lang="cz">Aktuální průtok plynu (k/h, m3/h)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Current Pressure (kPa)</lang>
+			<lang xml:lang="de">Aktueller Druck (kPa)</lang>
+			<lang xml:lang="ru">Текущее давление (кПа)</lang>
+			<lang xml:lang="sv">Nuvarande tryck (kPa)</lang>
+			<lang xml:lang="sk">Aktuálny tlak (kPa)</lang>
+			<lang xml:lang="cz">Aktuální tlak (kPa)</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Peak Flow (l/h, m3/h)</lang>
+			<lang xml:lang="de">Maximale Flussgeschwindigkeit (l/h, m3/h)</lang>
+			<lang xml:lang="ru">Пиковый поток (л/ч, м3/ч)</lang>
+			<lang xml:lang="sv">Maximalt flöde (l/h, m3/h)</lang>
+			<lang xml:lang="sk">Maximálny prietok (l/h, m3/h)</lang>
+			<lang xml:lang="cz">Maximální průtok (l/h, m3/h)</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Hour Counter (h)</lang>
+			<lang xml:lang="de">Stundenzähler (h)</lang>
+			<lang xml:lang="ru">Счётчик часов (ч)</lang>
+			<lang xml:lang="sv">Timräknare (h)</lang>
+			<lang xml:lang="sk">Čítač hodín (h)</lang>
+			<lang xml:lang="cz">Čítač hodin (h)</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Input A (m3/h, kW,...)</lang>
+			<lang xml:lang="de">Eingang A (m3/h, kW,...)</lang>
+			<lang xml:lang="ru">Вход А (м3/ч, кВт, ...)</lang>
+			<lang xml:lang="sv">Ingång A (m3/h, kW,...)</lang>
+			<lang xml:lang="sk">Vstup A (m3/h, kW,...)</lang>
+			<lang xml:lang="cz">Vstup A (m3/h, kW,...)</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Input B (m3/h, kW,...)</lang>
+			<lang xml:lang="de">Eingang B (m3/h, kW,...)</lang>
+			<lang xml:lang="ru">Вход Б (м3/ч, кВт, ...)</lang>
+			<lang xml:lang="sv">Ingång B (m3/h, kW,...)</lang>
+			<lang xml:lang="sk">Vstup B (m3/h, kW,...)</lang>
+			<lang xml:lang="cz">Vstup B (m3/h, kW,...)</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x03">
+		<name>
+			<lang xml:lang="en">Water</lang>
+			<lang xml:lang="de">Wasserzähler</lang>
+			<lang xml:lang="ru">Счётчик воды</lang>
+			<lang xml:lang="sv">Vatten</lang>
+			<lang xml:lang="sk">Vodomer</lang>
+			<lang xml:lang="cz">Vodoměr</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Accumulated Volume (m3)</lang>
+			<lang xml:lang="de">Gesamtvolumen (m3)</lang>
+			<lang xml:lang="ru">Суммарный объём (м3)</lang>
+			<lang xml:lang="sv">Ackumulerad volym (m3)</lang>
+			<lang xml:lang="sk">Kumulovaný objem (m3)</lang>
+			<lang xml:lang="cz">Kumulovaný objem (m3)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Current Flow (k/h, m3/h)</lang>
+			<lang xml:lang="de">Durchfluss (k/h, m3/h)</lang>
+			<lang xml:lang="ru">Текущий поток (л/ч, м3/ч)</lang>
+			<lang xml:lang="sv">Nuvarande flöde (k/h, m3/h)</lang>
+			<lang xml:lang="sk">Aktuálny prietok vody (k/h, m3/h)</lang>
+			<lang xml:lang="cz">Aktuální průtok vody (k/h, m3/h)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Current Pressure (kPa)</lang>
+			<lang xml:lang="de">Aktueller Druck (kPa)</lang>
+			<lang xml:lang="ru">Текущее давление (кПа)</lang>
+			<lang xml:lang="sv">Nuvarande tryck (kPa)</lang>
+			<lang xml:lang="sk">Aktuálny tlak (kPa)</lang>
+			<lang xml:lang="cz">Aktuální tlak (kPa)</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Peak Flow (l/h, m3/h)</lang>
+			<lang xml:lang="de">Maximale Flussgeschwindigkeit (l/h, m3/h)</lang>
+			<lang xml:lang="ru">Пиковый поток (л/ч, м3/ч)</lang>
+			<lang xml:lang="sv">Maximalt flöde (l/h, m3/h)</lang>
+			<lang xml:lang="sk">Maximálny prietok (l/h, m3/h)</lang>
+			<lang xml:lang="cz">Maximální průtok (l/h, m3/h)</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Hour Counter (h)</lang>
+			<lang xml:lang="de">Stundenzähler</lang>
+			<lang xml:lang="ru">Счётчик часов (ч)</lang>
+			<lang xml:lang="sv">Timräknare (h)</lang>
+			<lang xml:lang="sk">Čítač hodín (h)</lang>
+			<lang xml:lang="cz">Čítač hodin (h)</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Input A (m3/h, kW,...)</lang>
+			<lang xml:lang="de">Eingang A (m3/h, kW,...)</lang>
+			<lang xml:lang="ru">Вход А (м3/ч, кВт, ...)</lang>
+			<lang xml:lang="sv">Ingång A (m3/h, kW,...)</lang>
+			<lang xml:lang="sk">Vstup A (m3/h, kW,...)</lang>
+			<lang xml:lang="cz">Vstup A (m3/h, kW,...)</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Input B (m3/h, kW,...)</lang>
+			<lang xml:lang="de">Eingang B (m3/h, kW,...)</lang>
+			<lang xml:lang="ru">Вход Б (м3/ч, кВт, ...)</lang>
+			<lang xml:lang="sv">Ingång B (m3/h, kW,...)</lang>
+			<lang xml:lang="sk">Vstup B (m3/h, kW,...)</lang>
+			<lang xml:lang="cz">Vstup B (m3/h, kW,...)</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x04">
+		<name>
+			<lang xml:lang="en">Twin-E electric meter</lang>
+			<lang xml:lang="de">Doppel Elektrozähler</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">2-fas elmätare</lang>
+			<lang xml:lang="sk">Dvojfázový elektromer</lang>
+			<lang xml:lang="cz">Dvojfázový elektroměr</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Total Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtprimärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная первичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Total Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtprimär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная первичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový primární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Total Secondary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtsekundärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная вторичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total sekundär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový sekundární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Total Secondary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtsekundär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная вторичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total sekundär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový sekundární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Instantaneous Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Maximale Primärenergie (kWh)</lang>
+			<lang xml:lang="ru">Мгновенное первичная активное потребление (кВтЧ)</lang>
+			<lang xml:lang="sv">Maximal primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Okamžitý primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Instanteneous Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Maximale Primär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Maximal primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Okamžitý primární zdanlivý výkon (kVAH)</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Primary Active Maximum Demand (kW)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Wirkleistung (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära momentana energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="8">
+			<lang xml:lang="en">Primary Rective Maximum Demand  (kVA)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Scheinleistung (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära reaktiva momentana energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="9">
+			<lang xml:lang="en">Cummulative Primary Active Maxmimum Demand (kW)</lang>
+			<lang xml:lang="de">Summierter primärer Wirkleistungsbedarf (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär momentan energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="10">
+			<lang xml:lang="en">Cummulative Primary Reactive Maxmimum Demand (kVA)</lang>
+			<lang xml:lang="de">Summierter primärer Scheinleistungsbedarf (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär reaktiv momentan energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="11">
+			<lang xml:lang="en">Voltage at Phase 1 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 1 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 1 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 1 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 1 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 1 (V)</lang>
+		</dataset>
+		<dataset id="12">
+			<lang xml:lang="en">Voltage at Phase 2 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 2 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 2 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 2 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 2 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 2 (V)</lang>
+		</dataset>
+		<dataset id="13">
+			<lang xml:lang="en">Voltage at Phase 3 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 3 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 3 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 3 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 3 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 3 (V)</lang>
+		</dataset>
+		<dataset id="14">
+			<lang xml:lang="en">Ampere at Phase 1 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 1 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 1 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 1 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 1 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 1 (A)</lang>
+		</dataset>
+		<dataset id="15">
+			<lang xml:lang="en">Ampere at Phase 2 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 2 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 2 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 2 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 2 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 2 (A)</lang>
+		</dataset>
+		<dataset id="16">
+			<lang xml:lang="en">Ampere at Phase 3 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 3 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 3 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 3 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 3 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 3 (A)</lang>
+		</dataset>
+		<dataset id="17">
+			<lang xml:lang="en">Pulse Count</lang>
+			<lang xml:lang="de">Zählimpuls</lang>
+			<lang xml:lang="ru">Счётчик щелчков</lang>
+			<lang xml:lang="sv">Pulsantal</lang>
+			<lang xml:lang="sk">Počet pulzov</lang>
+			<lang xml:lang="cz">Počet pulzů</lang>
+		</dataset>
+		<dataset id="18">
+			<lang xml:lang="en">Current Transformation Ratio</lang>
+			<lang xml:lang="de">Verhältnis zwischen Primär und Sekundärstrom</lang>
+			<lang xml:lang="ru">Текущий коэффициент трансформации</lang>
+			<lang xml:lang="sv">Förhållande primärsida/sekundärsida</lang>
+			<lang xml:lang="sk">Aktuálny Transformarčný pomer</lang>
+			<lang xml:lang="cz">Aktuální Transformační poměr</lang>
+		</dataset>
+		<dataset id="19">
+			<lang xml:lang="en">Power factor</lang>
+			<lang xml:lang="de">Leistungfaktor</lang>
+			<lang xml:lang="ru">Коэффициент мощности</lang>
+			<lang xml:lang="sv">Fasförskjutning</lang>
+			<lang xml:lang="sk">Účinník</lang>
+			<lang xml:lang="cz">Účinník</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x05">
+		<name>
+			<lang xml:lang="en">3P Single Direct electric meter</lang>
+			<lang xml:lang="de">Dreiphasen Einzel Elektrozähler</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">3-fas elmätare</lang>
+			<lang xml:lang="sk">Jednotlivý trojfázový elektromer</lang>
+			<lang xml:lang="cz">Jednotlivý třífázový elektroměr</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Total Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtprimärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная первичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Total Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtprimär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная первичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový primární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Total Secondary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtsekundärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная вторичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total sekundär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový sekundární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Total Secondary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtsekundär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная вторичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total sekundär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový sekundární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Instantaneous Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Maximale Primärenergie (kWh)</lang>
+			<lang xml:lang="ru">Мгновенное первичная активное потребление (кВтЧ)</lang>
+			<lang xml:lang="sv">Maximal primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Okamžitý primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Instanteneous Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Maximale Primär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Maximal primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Okamžitý primární zdanlivý výkon (kVAH)</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Primary Active Maximum Demand (kW)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Wirkleistung (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära momentana energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="8">
+			<lang xml:lang="en">Primary Rective Maximum Demand  (kVA)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Scheinleistung (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära reaktiva momentana energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="9">
+			<lang xml:lang="en">Cummulative Primary Active Maxmimum Demand (kW)</lang>
+			<lang xml:lang="de">Summierter primärer Wirkleistungsbedarf (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär momentan energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="10">
+			<lang xml:lang="en">Cummulative Primary Reactive Maxmimum Demand (kVA)</lang>
+			<lang xml:lang="de">Summierter primärer Scheinleistungsbedarf (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär reaktiv momentan energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="11">
+			<lang xml:lang="en">Voltage at Phase 1 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 1 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 1 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 1 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 1 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 1 (V)</lang>
+		</dataset>
+		<dataset id="12">
+			<lang xml:lang="en">Voltage at Phase 2 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 2 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 2 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 2 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 2 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 2 (V)</lang>
+		</dataset>
+		<dataset id="13">
+			<lang xml:lang="en">Voltage at Phase 3 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 3 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 3 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 3 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 3 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 3 (V)</lang>
+		</dataset>
+		<dataset id="14">
+			<lang xml:lang="en">Ampere at Phase 1 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 1 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 1 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 1 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 1 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 1 (A)</lang>
+		</dataset>
+		<dataset id="15">
+			<lang xml:lang="en">Ampere at Phase 2 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 2 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 2 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 2 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 2 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 2 (A)</lang>
+		</dataset>
+		<dataset id="16">
+			<lang xml:lang="en">Ampere at Phase 3 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 3 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 3 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 3 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 3 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 3 (A)</lang>
+		</dataset>
+		<dataset id="17">
+			<lang xml:lang="en">Pulse Count</lang>
+			<lang xml:lang="de">Zählimpuls</lang>
+			<lang xml:lang="ru">Счётчик щелчков</lang>
+			<lang xml:lang="sv">Pulsantal</lang>
+			<lang xml:lang="sk">Počet pulzov</lang>
+			<lang xml:lang="cz">Počet pulzů</lang>
+		</dataset>
+		<dataset id="18">
+			<lang xml:lang="en">Current Transformation Ratio</lang>
+			<lang xml:lang="de">Verhältnis zwischen Primär und Sekundärstrom</lang>
+			<lang xml:lang="ru">Текущий коэффициент трансформации</lang>
+			<lang xml:lang="sv">Förhållande primärsida/sekundärsida</lang>
+			<lang xml:lang="sk">Aktuálny Transformarčný pomer</lang>
+			<lang xml:lang="cz">Aktuální Transformační poměr</lang>
+		</dataset>
+		<dataset id="19">
+			<lang xml:lang="en">Power factor</lang>
+			<lang xml:lang="de">Leistungfaktor</lang>
+			<lang xml:lang="ru">Коэффициент мощности</lang>
+			<lang xml:lang="sv">Fasförskjutning</lang>
+			<lang xml:lang="sk">Účinník</lang>
+			<lang xml:lang="cz">Účinník</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x06">
+		<name>
+			<lang xml:lang="en">3P Single ECT electric meter</lang>
+			<lang xml:lang="de">Dreiphasen ECT Elektrozähler</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">3-fas ECT elmätare</lang>
+			<lang xml:lang="sk">Trojfázový ECT elektromer</lang>
+			<lang xml:lang="cz">Třífázový ECT elektroměr</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Total Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtprimärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная первичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Total Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtprimär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная первичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový primární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Total Secondary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtsekundärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная вторичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total sekundär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový sekundární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Total Secondary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtsekundär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная вторичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total sekundär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový sekundární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Instantaneous Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Maximale Primärenergie (kWh)</lang>
+			<lang xml:lang="ru">Мгновенное первичная активное потребление (кВтЧ)</lang>
+			<lang xml:lang="sv">Maximal primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Okamžitý primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Instanteneous Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Maximale Primär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Maximal primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Okamžitý primární zdanlivý výkon (kVAH)</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Primary Active Maximum Demand (kW)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Wirkleistung (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära momentana energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="8">
+			<lang xml:lang="en">Primary Rective Maximum Demand  (kVA)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Scheinleistung (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära reaktiva momentana energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="9">
+			<lang xml:lang="en">Cummulative Primary Active Maxmimum Demand (kW)</lang>
+			<lang xml:lang="de">Summierter primärer Wirkleistungsbedarf (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär momentan energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="10">
+			<lang xml:lang="en">Cummulative Primary Reactive Maxmimum Demand (kVA)</lang>
+			<lang xml:lang="de">Summierter primärer Scheinleistungsbedarf (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär reaktiv momentan energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="11">
+			<lang xml:lang="en">Voltage at Phase 1 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 1 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 1 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 1 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 1 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 1 (V)</lang>
+		</dataset>
+		<dataset id="12">
+			<lang xml:lang="en">Voltage at Phase 2 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 2 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 2 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 2 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 2 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 2 (V)</lang>
+
+		</dataset>
+		<dataset id="13">
+			<lang xml:lang="en">Voltage at Phase 3 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 3 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 3 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 3 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 3 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 3 (V)</lang>
+		</dataset>
+		<dataset id="14">
+			<lang xml:lang="en">Ampere at Phase 1 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 1 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 1 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 1 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 1 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 1 (A)</lang>
+		</dataset>
+		<dataset id="15">
+			<lang xml:lang="en">Ampere at Phase 2 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 2 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 2 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 2 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 2 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 2 (A)</lang>
+		</dataset>
+		<dataset id="16">
+			<lang xml:lang="en">Ampere at Phase 3 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 3 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 3 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 3 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 3 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 3 (A)</lang>
+		</dataset>
+		<dataset id="17">
+			<lang xml:lang="en">Pulse Count</lang>
+			<lang xml:lang="de">Zählimpuls</lang>
+			<lang xml:lang="ru">Счётчик щелчков</lang>
+			<lang xml:lang="sv">Pulsantal</lang>
+			<lang xml:lang="sk">Počet pulzov</lang>
+			<lang xml:lang="cz">Počet pulzů</lang>
+		</dataset>
+		<dataset id="18">
+			<lang xml:lang="en">Current Transformation Ratio</lang>
+			<lang xml:lang="de">Verhältnis zwischen Primär und Sekundärstrom</lang>
+			<lang xml:lang="ru">Текущий коэффициент трансформации</lang>
+			<lang xml:lang="sv">Förhållande primärsida/sekundärsida</lang>
+			<lang xml:lang="sk">Aktuálny Transformarčný pomer</lang>
+			<lang xml:lang="cz">Aktuální Transformační poměr</lang>
+		</dataset>
+		<dataset id="19">
+			<lang xml:lang="en">Power factor</lang>
+			<lang xml:lang="de">Leistungfaktor</lang>
+			<lang xml:lang="ru">Коэффициент мощности</lang>
+			<lang xml:lang="sv">Fasförskjutning</lang>
+			<lang xml:lang="sk">Účinník</lang>
+			<lang xml:lang="cz">Účinník</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x07">
+		<name>
+			<lang xml:lang="en">1P  Direct electric meter</lang>
+			<lang xml:lang="de">Einphasen direkter Elektrozähler</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">1-fas direktelmätare</lang>
+			<lang xml:lang="sk">Jednofázový priamy elektromer</lang>
+			<lang xml:lang="cz">Jednofázový přímý elektroměr</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Total Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtprimärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная первичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Total Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtprimär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная первичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový primární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Total Secondary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Gesamtsekundärenergie (kWh)</lang>
+			<lang xml:lang="ru">Полная вторичная активаная энергия (кВтЧ)</lang>
+			<lang xml:lang="sv">Total sekundär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Celkový sekundární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Total Secondary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Gesamtsekundär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru">Полная вторичная реактиваная энергия (кВАЧ)</lang>
+			<lang xml:lang="sv">Total sekundär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Celkový sekundárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Celkový sekundární zdánlivý výkon (kVAh)</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Instantaneous Primary Active Energy (kWh)</lang>
+			<lang xml:lang="de">Maximale Primärenergie (kWh)</lang>
+			<lang xml:lang="ru">Мгновенное первичная активное потребление (кВтЧ)</lang>
+			<lang xml:lang="sv">Maximal primär energiförbrukning (kWh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny činný výkon (kWh)</lang>
+			<lang xml:lang="cz">Okamžitý primární činný výkon (kWh)</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Instanteneous Primary Reactive Energy (kVAh)</lang>
+			<lang xml:lang="de">Maximale Primär-Scheinenergie (kVAh)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Maximal primär reaktiv energiförbrukning (kVAh)</lang>
+			<lang xml:lang="sk">Okamžitý primárny zdanlivý výkon (kVAh)</lang>
+			<lang xml:lang="cz">Okamžitý primární zdanlivý výkon (kVAH)</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Primary Active Maximum Demand (kW)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Wirkleistung (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära momentana energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="8">
+			<lang xml:lang="en">Primary Rective Maximum Demand  (kVA)</lang>
+			<lang xml:lang="de">Maximaler Primärenergiebedarf-Scheinleistung (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Högsta primära reaktiva momentana energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="9">
+			<lang xml:lang="en">Cummulative Primary Active Maxmimum Demand (kW)</lang>
+			<lang xml:lang="de">Summierter primärer Wirkleistungsbedarf (kW)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär momentan energianvändning (kW)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný činný výkon (kW)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný činný výkon (kW)</lang>
+		</dataset>
+		<dataset id="10">
+			<lang xml:lang="en">Cummulative Primary Reactive Maxmimum Demand (kVA)</lang>
+			<lang xml:lang="de">Summierter primärer Scheinleistungsbedarf (kVA)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Summerad primär reaktiv momentan energianvändning (kVA)</lang>
+			<lang xml:lang="sk">Maximálna požiadavka na primárny kumulovaný zdanlivý výkon (kVA)</lang>
+			<lang xml:lang="cz">Maximální požadavek na primární kumulovaný zdanlivý výkon (kVA)</lang>
+		</dataset>
+		<dataset id="11">
+			<lang xml:lang="en">Voltage at Phase 1 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 1 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 1 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 1 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 1 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 1 (V)</lang>
+		</dataset>
+		<dataset id="12">
+			<lang xml:lang="en">Voltage at Phase 2 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 2 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 2 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 2 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 2 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 2 (V)</lang>
+
+		</dataset>
+		<dataset id="13">
+			<lang xml:lang="en">Voltage at Phase 3 (V)</lang>
+			<lang xml:lang="de">Spannung auf Phase 3 (V)</lang>
+			<lang xml:lang="ru">Напряжение на Фазе 3 (В)</lang>
+			<lang xml:lang="sv">Spänning på fas 3 (V)</lang>
+			<lang xml:lang="sk">Napätie na fáze 3 (V)</lang>
+			<lang xml:lang="cz">Napětí na fázi 3 (V)</lang>
+		</dataset>
+		<dataset id="14">
+			<lang xml:lang="en">Ampere at Phase 1 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 1 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 1 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 1 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 1 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 1 (A)</lang>
+		</dataset>
+		<dataset id="15">
+			<lang xml:lang="en">Ampere at Phase 2 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 2 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 2 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 2 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 2 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 2 (A)</lang>
+		</dataset>
+		<dataset id="16">
+			<lang xml:lang="en">Ampere at Phase 3 (A)</lang>
+			<lang xml:lang="de">Strom auf Phase 3 (A)</lang>
+			<lang xml:lang="ru">Ток на Фазе 3 (А)</lang>
+			<lang xml:lang="sv">Ampere på fas 3 (A)</lang>
+			<lang xml:lang="sk">Prúd na fáze 3 (A)</lang>
+			<lang xml:lang="cz">Proud na fázi 3 (A)</lang>
+		</dataset>
+		<dataset id="17">
+			<lang xml:lang="en">Pulse Count</lang>
+			<lang xml:lang="de">Zählimpuls</lang>
+			<lang xml:lang="ru">Счётчик щелчков</lang>
+			<lang xml:lang="sv">Pulsantal</lang>
+			<lang xml:lang="sk">Počet pulzov</lang>
+			<lang xml:lang="cz">Počet pulzů</lang>
+		</dataset>
+		<dataset id="18">
+			<lang xml:lang="en">Current Transformation Ratio</lang>
+			<lang xml:lang="de">Verhältnis zwischen Primär und Sekundärstrom</lang>
+			<lang xml:lang="ru">Текущий коэффициент трансформации</lang>
+			<lang xml:lang="sv">Förhållande primärsida/sekundärsida</lang>
+			<lang xml:lang="sk">Aktuálny Transformarčný pomer</lang>
+			<lang xml:lang="cz">Aktuální Transformační poměr</lang>
+		</dataset>
+		<dataset id="19">
+			<lang xml:lang="en">Power factor</lang>
+			<lang xml:lang="de">Leistungfaktor</lang>
+			<lang xml:lang="ru">Коэффициент мощности</lang>
+			<lang xml:lang="sv">Fasförskjutning</lang>
+			<lang xml:lang="sk">Účinník</lang>
+			<lang xml:lang="cz">Účinník</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x08">
+		<name>
+			<lang xml:lang="en">Heating Meter</lang>
+			<lang xml:lang="de">Heizkostenzähler</lang>
+			<lang xml:lang="ru">Измеритель нагрева</lang>
+			<lang xml:lang="sv">Värmemätare</lang>
+			<lang xml:lang="sk">Meter vykurovania</lang>
+			<lang xml:lang="cz">Meter topení</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Heat Energy (m3)</lang>
+			<lang xml:lang="de">Gesamtvolumen (m3)</lang>
+			<lang xml:lang="ru">Энергия нагрева (m3)</lang>
+			<lang xml:lang="sv">Total volym (m3)</lang>
+			<lang xml:lang="sk">Tepelná energia (m3)</lang>
+			<lang xml:lang="cz">Tepelná energie (m3)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Cooling Energy (k/h, m3/h)</lang>
+			<lang xml:lang="de">Durchfluss (k/h, m3/h)</lang>
+			<lang xml:lang="ru">Энергия охлаждения (k/h, m3/h)</lang>
+			<lang xml:lang="sv">Flöde (k/h, m3/h)</lang>
+			<lang xml:lang="sk">Chladiaca energia (k/h, m3/h)</lang>
+			<lang xml:lang="cz">Chladící energie (k/h, m3/h)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Volume 1</lang>
+			<lang xml:lang="de">Volumen 1</lang>
+			<lang xml:lang="ru">Объём 1</lang>
+			<lang xml:lang="sv">Volym 1</lang>
+			<lang xml:lang="sk">Objem 1</lang>
+			<lang xml:lang="cz">Objem 1</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Volume 2</lang>
+			<lang xml:lang="de">Volumen 2</lang>
+			<lang xml:lang="ru">Объём 2</lang>
+			<lang xml:lang="sv">Volym 2</lang>
+			<lang xml:lang="sk">Objem 2</lang>
+			<lang xml:lang="cz">Objem 2</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Temperature 1 (Forward)</lang>
+			<lang xml:lang="de">Temperatur 1 (Vorlauf)</lang>
+			<lang xml:lang="ru">Температура 1 (Прямая)</lang>
+			<lang xml:lang="sv">Temperatur 1 (Framledning)</lang>
+			<lang xml:lang="sk">Teplota 1</lang>
+			<lang xml:lang="cz">Teplota 1</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Temperature 2 (Return)</lang>
+			<lang xml:lang="de">Temperatur 2 (Rücklauf)</lang>
+			<lang xml:lang="ru">Температура 2 (Обратная)</lang>
+			<lang xml:lang="en">Temperatur 2 (Returledning)</lang>
+			<lang xml:lang="sk">Teplota 2</lang>
+			<lang xml:lang="cz">Teplota 2</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Temperature 3</lang>
+			<lang xml:lang="de">Temperatur 3</lang>
+			<lang xml:lang="ru">Температура 3</lang>
+			<lang xml:lang="sv">Temperatur 3</lang>
+			<lang xml:lang="sk">Teplota 3</lang>
+			<lang xml:lang="cz">Teplota 3</lang>
+		</dataset>
+		<dataset id="8">
+			<lang xml:lang="en">Actual Flow (Volume 1)</lang>
+			<lang xml:lang="de">Momentanflussmänge (Volume 1)</lang>
+			<lang xml:lang="ru">Текущий поток (Объём 1)</lang>
+			<lang xml:lang="sv">Aktuellt flöde (Volym 1)</lang>
+			<lang xml:lang="sk">Aktuálny prietok (Objem 1)</lang>
+			<lang xml:lang="cz">Aktuální průtok (Objem 1)</lang>
+		</dataset>
+		<dataset id="9">
+			<lang xml:lang="en">Actual Flow (Volume 2)</lang>
+			<lang xml:lang="de">Momentanflussmänge (Volume 2)</lang>
+			<lang xml:lang="ru">Текущий поток (Объём 2)</lang>
+			<lang xml:lang="sv">Aktuellt flöde (Volym 2)</lang>
+			<lang xml:lang="sk">Aktuálny prietok (Objem 2)</lang>
+			<lang xml:lang="cz">Aktuální průtok (Objem 2)</lang>
+		</dataset>
+		<dataset id="10">
+			<lang xml:lang="en">Actual Power</lang>
+			<lang xml:lang="de">Momentanleistung</lang>
+			<lang xml:lang="ru">Текущая мощность</lang>
+			<lang xml:lang="sv">Momentanförbrukning</lang>
+			<lang xml:lang="sk">Aktuálny výkon</lang>
+			<lang xml:lang="cz">Aktuální výkon</lang>
+		</dataset>
+		<dataset id="11">
+			<lang xml:lang="en">Peak Flow</lang>
+			<lang xml:lang="de">Spitzendurchfluss</lang>
+			<lang xml:lang="ru">Пиковый поток</lang>
+			<lang xml:lang="sv">Maximalt flöde</lang>
+			<lang xml:lang="sk">Maximálny prietok</lang>
+			<lang xml:lang="cz">Maximální průtok</lang>
+		</dataset>
+		<dataset id="12">
+			<lang xml:lang="en">Peak Power</lang>
+			<lang xml:lang="de">Spitzenleistung</lang>
+			<lang xml:lang="ru">Пиковая мощность</lang>
+			<lang xml:lang="sv">Maximal energianvändning</lang>
+			<lang xml:lang="sk">Maximálny výkon</lang>
+			<lang xml:lang="cz">Maximální výkon</lang>
+		</dataset>
+		<dataset id="13">
+			<lang xml:lang="en">Input A</lang>
+			<lang xml:lang="de">Eingang A</lang>
+			<lang xml:lang="ru">Вход А</lang>
+			<lang xml:lang="sv">Ingång A</lang>
+			<lang xml:lang="sk">Vstup A</lang>
+			<lang xml:lang="cz">Vstup A</lang>
+		</dataset>
+		<dataset id="14">
+			<lang xml:lang="en">Input B</lang>
+			<lang xml:lang="de">Eingang B</lang>
+			<lang xml:lang="ru">Вход Б</lang>
+			<lang xml:lang="sv">Ingång B</lang>
+			<lang xml:lang="sk">Vstup B</lang>
+			<lang xml:lang="cz">Vstup B</lang>
+		</dataset>
+		<dataset id="15">
+			<lang xml:lang="en">Hour Counter</lang>
+			<lang xml:lang="de">Stundenzähler</lang>
+			<lang xml:lang="ru">Счётчик часов</lang>
+			<lang xml:lang="sv">Timräknare</lang>
+			<lang xml:lang="sk">Čítač hodín</lang>
+			<lang xml:lang="cz">Čítač hodin</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x09">
+		<name>
+			<lang xml:lang="en">Cooling Meter</lang>
+			<lang xml:lang="de">Kühlmengenzähler</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Kyla summering</lang>
+			<lang xml:lang="sk">Merač chladenia</lang>
+			<lang xml:lang="cz">Měřič chlazení</lang>
+			
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Heat Energy (m3)</lang>
+			<lang xml:lang="de">Gesamtvolumen (m3)</lang>
+			<lang xml:lang="ru">Энергия нагрева (m3)</lang>
+			<lang xml:lang="sv">Total volym (m3)</lang>
+			<lang xml:lang="sk">Tepelná energia (m3)</lang>
+			<lang xml:lang="cz">Tepelná energie (m3)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Cooling Energy (k/h, m3/h)</lang>
+			<lang xml:lang="de">Durchfluss (k/h, m3/h)</lang>
+			<lang xml:lang="ru">Энергия охлаждения (k/h, m3/h)</lang>
+			<lang xml:lang="sv">Flöde (k/h, m3/h)</lang>
+			<lang xml:lang="sk">Chladiaca energia (k/h, m3/h)</lang>
+			<lang xml:lang="cz">Chladící energie (k/h, m3/h)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Volume 1</lang>
+			<lang xml:lang="de">Volumen 1</lang>
+			<lang xml:lang="ru">Объём 1</lang>
+			<lang xml:lang="sv">Volym 1</lang>
+			<lang xml:lang="sk">Objem 1</lang>
+			<lang xml:lang="cz">Objem 1</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Volume 2</lang>
+			<lang xml:lang="de">Volumen 2</lang>
+			<lang xml:lang="ru">Объём 2</lang>
+			<lang xml:lang="sv">Volym 2</lang>
+			<lang xml:lang="sk">Objem 2</lang>
+			<lang xml:lang="cz">Objem 2</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Temperature 1 (Forward)</lang>
+			<lang xml:lang="de">Temperatur 1 (Vorlauf)</lang>
+			<lang xml:lang="ru">Температура 1 (Прямая)</lang>
+			<lang xml:lang="sv">Temperatur 1 (Framledning)</lang>
+			<lang xml:lang="sk">Teplota 1</lang>
+			<lang xml:lang="cz">Teplota 1</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Temperature 2 (Return)</lang>
+			<lang xml:lang="de">Temperatur 2 (Rücklauf)</lang>
+			<lang xml:lang="ru">Температура 2 (Обратная)</lang>
+			<lang xml:lang="en">Temperatur 2 (Returledning)</lang>
+			<lang xml:lang="sk">Teplota 2</lang>
+			<lang xml:lang="cz">Teplota 2</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Temperature 3</lang>
+			<lang xml:lang="de">Temperatur 3</lang>
+			<lang xml:lang="ru">Температура 3</lang>
+			<lang xml:lang="sv">Temperatur 3</lang>
+			<lang xml:lang="sk">Teplota 3</lang>
+			<lang xml:lang="cz">Teplota 3</lang>
+		</dataset>
+		<dataset id="8">
+			<lang xml:lang="en">Actual Flow (Volume 1)</lang>
+			<lang xml:lang="de">Momentanflussmänge (Volume 1)</lang>
+			<lang xml:lang="ru">Текущий поток (Объём 1)</lang>
+			<lang xml:lang="sv">Aktuellt flöde (Volym 1)</lang>
+			<lang xml:lang="sk">Aktuálny prietok (Objem 1)</lang>
+			<lang xml:lang="cz">Aktuální průtok (Objem 1)</lang>
+		</dataset>
+		<dataset id="9">
+			<lang xml:lang="en">Actual Flow (Volume 2)</lang>
+			<lang xml:lang="de">Momentanflussmänge (Volume 2)</lang>
+			<lang xml:lang="ru">Текущий поток (Объём 2)</lang>
+			<lang xml:lang="sv">Aktuellt flöde (Volym 2)</lang>
+			<lang xml:lang="sk">Aktuálny prietok (Objem 2)</lang>
+			<lang xml:lang="cz">Aktuální průtok (Objem 2)</lang>
+		</dataset>
+		<dataset id="10">
+			<lang xml:lang="en">Actual Power</lang>
+			<lang xml:lang="de">Momentanleistung</lang>
+			<lang xml:lang="ru">Текущая мощность</lang>
+			<lang xml:lang="sv">Momentanförbrukning</lang>
+			<lang xml:lang="sk">Aktuálny výkon</lang>
+			<lang xml:lang="cz">Aktuální výkon</lang>
+		</dataset>
+		<dataset id="11">
+			<lang xml:lang="en">Peak Flow</lang>
+			<lang xml:lang="de">Spitzendurchfluss</lang>
+			<lang xml:lang="ru">Пиковый поток</lang>
+			<lang xml:lang="sv">Maximalt flöde</lang>
+			<lang xml:lang="sk">Maximálny prietok</lang>
+			<lang xml:lang="cz">Maximální průtok</lang>
+		</dataset>
+		<dataset id="12">
+			<lang xml:lang="en">Peak Power</lang>
+			<lang xml:lang="de">Spitzenleistung</lang>
+			<lang xml:lang="ru">Пиковая мощность</lang>
+			<lang xml:lang="sv">Maximal energianvändning</lang>
+			<lang xml:lang="sk">Maximálny výkon</lang>
+			<lang xml:lang="cz">Maximální výkon</lang>
+		</dataset>
+		<dataset id="13">
+			<lang xml:lang="en">Input A</lang>
+			<lang xml:lang="de">Eingang A</lang>
+			<lang xml:lang="ru">Вход А</lang>
+			<lang xml:lang="sv">Ingång A</lang>
+			<lang xml:lang="sk">Vstup A</lang>
+			<lang xml:lang="cz">Vstup A</lang>
+		</dataset>
+		<dataset id="14">
+			<lang xml:lang="en">Input B</lang>
+			<lang xml:lang="de">Eingang B</lang>
+			<lang xml:lang="ru">Вход Б</lang>
+			<lang xml:lang="sv">Ingång B</lang>
+			<lang xml:lang="sk">Vstup B</lang>
+			<lang xml:lang="cz">Vstup B</lang>
+		</dataset>
+		<dataset id="15">
+			<lang xml:lang="en">Hour Counter</lang>
+			<lang xml:lang="de">Stundenzähler</lang>
+			<lang xml:lang="ru">Счётчик часов</lang>
+			<lang xml:lang="sv">Timräknare</lang>
+			<lang xml:lang="sk">Čítač hodín</lang>
+			<lang xml:lang="cz">Čítač hodin</lang>
+		</dataset>
+	</Meter>
+	<Meter id="0x0a">
+		<name>
+			<lang xml:lang="en">Combined Heating and Cooling Meter</lang>
+			<lang xml:lang="de">Kombinierter Wärme- und Kältemengenzähler</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Kombinerad Värme- och kylamätare</lang>
+			<lang xml:lang="sk">Kombinovaný meter vykurovania a chladenia</lang>
+			<lang xml:lang="cz">Kombinovaný metr vytápění a chlazení</lang>
+		</name>
+		<dataset id="1">
+			<lang xml:lang="en">Heat Energy (m3)</lang>
+			<lang xml:lang="de">Gesamtvolumen (m3)</lang>
+			<lang xml:lang="ru">Энергия нагрева (m3)</lang>
+			<lang xml:lang="sv">Total volym (m3)</lang>
+			<lang xml:lang="sk">Tepelná energia (m3)</lang>
+			<lang xml:lang="cz">Tepelná energie (m3)</lang>
+		</dataset>
+		<dataset id="2">
+			<lang xml:lang="en">Cooling Energy (k/h, m3/h)</lang>
+			<lang xml:lang="de">Durchfluss (k/h, m3/h)</lang>
+			<lang xml:lang="ru">Энергия охлаждения (k/h, m3/h)</lang>
+			<lang xml:lang="sv">Flöde (k/h, m3/h)</lang>
+			<lang xml:lang="sk">Chladiaca energia (k/h, m3/h)</lang>
+			<lang xml:lang="cz">Chladící energie (k/h, m3/h)</lang>
+		</dataset>
+		<dataset id="3">
+			<lang xml:lang="en">Volume 1</lang>
+			<lang xml:lang="de">Volumen 1</lang>
+			<lang xml:lang="ru">Объём 1</lang>
+			<lang xml:lang="sv">Volym 1</lang>
+			<lang xml:lang="sk">Objem 1</lang>
+			<lang xml:lang="cz">Objem 1</lang>
+		</dataset>
+		<dataset id="4">
+			<lang xml:lang="en">Volume 2</lang>
+			<lang xml:lang="de">Volumen 2</lang>
+			<lang xml:lang="ru">Объём 2</lang>
+			<lang xml:lang="sv">Volym 2</lang>
+			<lang xml:lang="sk">Objem 2</lang>
+			<lang xml:lang="cz">Objem 2</lang>
+		</dataset>
+		<dataset id="5">
+			<lang xml:lang="en">Temperature 1 (Forward)</lang>
+			<lang xml:lang="de">Temperatur 1 (Vorlauf)</lang>
+			<lang xml:lang="ru">Температура 1 (Прямая)</lang>
+			<lang xml:lang="sv">Temperatur 1 (Framledning)</lang>
+			<lang xml:lang="sk">Teplota 1</lang>
+			<lang xml:lang="cz">Teplota 1</lang>
+		</dataset>
+		<dataset id="6">
+			<lang xml:lang="en">Temperature 2 (Return)</lang>
+			<lang xml:lang="de">Temperatur 2 (Rücklauf)</lang>
+			<lang xml:lang="ru">Температура 2 (Обратная)</lang>
+			<lang xml:lang="en">Temperatur 2 (Returledning)</lang>
+			<lang xml:lang="sk">Teplota 2</lang>
+			<lang xml:lang="cz">Teplota 2</lang>
+		</dataset>
+		<dataset id="7">
+			<lang xml:lang="en">Temperature 3</lang>
+			<lang xml:lang="de">Temperatur 3</lang>
+			<lang xml:lang="ru">Температура 3</lang>
+			<lang xml:lang="sv">Temperatur 3</lang>
+			<lang xml:lang="sk">Teplota 3</lang>
+			<lang xml:lang="cz">Teplota 3</lang>
+		</dataset>
+		<dataset id="8">
+			<lang xml:lang="en">Actual Flow (Volume 1)</lang>
+			<lang xml:lang="de">Momentanflussmänge (Volume 1)</lang>
+			<lang xml:lang="ru">Текущий поток (Объём 1)</lang>
+			<lang xml:lang="sv">Aktuellt flöde (Volym 1)</lang>
+			<lang xml:lang="sk">Aktuálny prietok (Objem 1)</lang>
+			<lang xml:lang="cz">Aktuální průtok (Objem 1)</lang>
+		</dataset>
+		<dataset id="9">
+			<lang xml:lang="en">Actual Flow (Volume 2)</lang>
+			<lang xml:lang="de">Momentanflussmänge (Volume 2)</lang>
+			<lang xml:lang="ru">Текущий поток (Объём 2)</lang>
+			<lang xml:lang="sv">Aktuellt flöde (Volym 2)</lang>
+			<lang xml:lang="sk">Aktuálny prietok (Objem 2)</lang>
+			<lang xml:lang="cz">Aktuální průtok (Objem 2)</lang>
+		</dataset>
+		<dataset id="10">
+			<lang xml:lang="en">Actual Power</lang>
+			<lang xml:lang="de">Momentanleistung</lang>
+			<lang xml:lang="ru">Текущая мощность</lang>
+			<lang xml:lang="sv">Momentanförbrukning</lang>
+			<lang xml:lang="sk">Aktuálny výkon</lang>
+			<lang xml:lang="cz">Aktuální výkon</lang>
+		</dataset>
+		<dataset id="11">
+			<lang xml:lang="en">Peak Flow</lang>
+			<lang xml:lang="de">Spitzendurchfluss</lang>
+			<lang xml:lang="ru">Пиковый поток</lang>
+			<lang xml:lang="sv">Maximalt flöde</lang>
+			<lang xml:lang="sk">Maximálny prietok</lang>
+			<lang xml:lang="cz">Maximální průtok</lang>
+		</dataset>
+		<dataset id="12">
+			<lang xml:lang="en">Peak Power</lang>
+			<lang xml:lang="de">Spitzenleistung</lang>
+			<lang xml:lang="ru">Пиковая мощность</lang>
+			<lang xml:lang="sv">Maximal energianvändning</lang>
+			<lang xml:lang="sk">Maximálny výkon</lang>
+			<lang xml:lang="cz">Maximální výkon</lang>
+		</dataset>
+		<dataset id="13">
+			<lang xml:lang="en">Input A</lang>
+			<lang xml:lang="de">Eingang A</lang>
+			<lang xml:lang="ru">Вход А</lang>
+			<lang xml:lang="sv">Ingång A</lang>
+			<lang xml:lang="sk">Vstup A</lang>
+			<lang xml:lang="cz">Vstup A</lang>
+		</dataset>
+		<dataset id="14">
+			<lang xml:lang="en">Input B</lang>
+			<lang xml:lang="de">Eingang B</lang>
+			<lang xml:lang="ru">Вход Б</lang>
+			<lang xml:lang="sv">Ingång B</lang>
+			<lang xml:lang="sk">Vstup B</lang>
+			<lang xml:lang="cz">Vstup B</lang>
+		</dataset>
+		<dataset id="15">
+			<lang xml:lang="en">Hour Counter</lang>
+			<lang xml:lang="de">Stundenzähler</lang>
+			<lang xml:lang="ru">Счётчик часов</lang>
+			<lang xml:lang="sv">Timräknare</lang>
+			<lang xml:lang="sk">Čítač hodín</lang>
+			<lang xml:lang="cz">Čítač hodin</lang>
+		</dataset>
+	</Meter>
+</Meters>
+ 

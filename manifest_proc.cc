@@ -35,6 +35,7 @@ struct ids_registry {
 	int fd=-1;
 	json_object *topobj=NULL;
 	json_object *ifacetypes=NULL;
+	json_object *notiongroups=NULL;
 	json_object *notiontypes=NULL;
 	json_object *contypes=NULL;
 	json_object *datatypes=NULL;
@@ -81,6 +82,9 @@ struct ids_registry {
 	iot_type_id_t find_ifacetype(const char* name) {
 		return get_uint(ifacetypes, name);
 	}
+	iot_type_id_t find_notiongroup(const char* name) {
+		return get_uint(notiongroups, name);
+	}
 	iot_type_id_t find_notiontype(const char* name) {
 		return get_uint(notiontypes, name);
 	}
@@ -109,6 +113,7 @@ struct ids_registry {
 		if(fd<0) {
 			if(!is_dev && errno==ENOENT ) {
 				ifacetypes=json_object_new_object();
+				notiongroups=json_object_new_object();
 				notiontypes=json_object_new_object();
 				contypes=json_object_new_object();
 				datatypes=json_object_new_object();
@@ -166,6 +171,16 @@ struct ids_registry {
 //			printf("No datatypes found in '%s'\n", namebuf);
 			datatypes=json_object_new_object();
 			json_object_object_add(topobj, "datatypes", datatypes);
+		}
+		if(json_object_object_get_ex(topobj, "notiongroups", &notiongroups)) {
+			if(!json_object_is_type(notiongroups,  json_type_object)) {
+				outlog_error("Invalid data in IDs registry '%s': top level 'notiongroups' item must be a JSON-object", namebuf);
+				return 1;
+			}
+		} else {
+//			printf("No notiongroups found in '%s'\n", namebuf);
+			notiongroups=json_object_new_object();
+			json_object_object_add(topobj, "notiongroups", notiongroups);
 		}
 		if(json_object_object_get_ex(topobj, "notiontypes", &notiontypes)) {
 			if(!json_object_is_type(notiontypes,  json_type_object)) {
@@ -355,6 +370,10 @@ int proc_module(iot_module_type_t type, const char* modname, void* modcfg, iot_r
 					for(unsigned i=0;i<modcfg_->num_valueinputs;i++) {
 						const iot_node_valuelinkcfg_t *cfg=&modcfg_->valueinput[i];
 						assert(cfg->label!=NULL);
+						if(strlen(cfg->label)>IOT_CONFIG_LINKLABEL_MAXLEN) {
+							outlog_error("Value input '%s' of node module '%s' in library '%s' has too long label, %d chars is max", cfg->label, modname, lib->name, int(IOT_CONFIG_LINKLABEL_MAXLEN));
+							return 1;
+						}
 						json_object* cfgob=NULL;
 						if(!json_object_object_get_ex(linkssubdata, cfg->label, &cfgob) || !json_object_is_type(cfgob,  json_type_object)) {
 							outlog_error("No value input '%s' of node module '%s' in library '%s' described in manifest", cfg->label, modname, lib->name);
@@ -392,6 +411,10 @@ int proc_module(iot_module_type_t type, const char* modname, void* modcfg, iot_r
 					for(unsigned i=0;i<modcfg_->num_valueoutputs;i++) {
 						const iot_node_valuelinkcfg_t *cfg=&modcfg_->valueoutput[i];
 						assert(cfg->label!=NULL);
+						if(strlen(cfg->label)>IOT_CONFIG_LINKLABEL_MAXLEN) {
+							outlog_error("Value ouput '%s' of node module '%s' in library '%s' has too long label, %d chars is max", cfg->label, modname, lib->name, int(IOT_CONFIG_LINKLABEL_MAXLEN));
+							return 1;
+						}
 						json_object* cfgob=NULL;
 						if(!json_object_object_get_ex(linkssubdata, cfg->label, &cfgob) || !json_object_is_type(cfgob,  json_type_object)) {
 							outlog_error("No value output '%s' of node module '%s' in library '%s' described in manifest", cfg->label, modname, lib->name);
@@ -428,6 +451,10 @@ int proc_module(iot_module_type_t type, const char* modname, void* modcfg, iot_r
 					for(unsigned i=0;i<modcfg_->num_msginputs;i++) {
 						const iot_node_msglinkcfg_t *cfg=&modcfg_->msginput[i];
 						assert(cfg->label!=NULL);
+						if(strlen(cfg->label)>IOT_CONFIG_LINKLABEL_MAXLEN) {
+							outlog_error("Msg input '%s' of node module '%s' in library '%s' has too long label, %d chars is max", cfg->label, modname, lib->name, int(IOT_CONFIG_LINKLABEL_MAXLEN));
+							return 1;
+						}
 						if(cfg->num_dataclasses==0) {
 							outlog_error("No data types listed in module code for msg input '%s' of node module '%s' in library '%s'", cfg->label, modname, lib->name);
 							return 1;
@@ -466,6 +493,10 @@ int proc_module(iot_module_type_t type, const char* modname, void* modcfg, iot_r
 					for(unsigned i=0;i<modcfg_->num_msgoutputs;i++) {
 						const iot_node_msglinkcfg_t *cfg=&modcfg_->msgoutput[i];
 						assert(cfg->label!=NULL);
+						if(strlen(cfg->label)>IOT_CONFIG_LINKLABEL_MAXLEN) {
+							outlog_error("Msg output '%s' of node module '%s' in library '%s' has too long label, %d chars is max", cfg->label, modname, lib->name, int(IOT_CONFIG_LINKLABEL_MAXLEN));
+							return 1;
+						}
 //ALLOW 0, TO MEAN 'any'	if(cfg->num_msgtype_ids==0) {
 //							outlog_error("No data types listed in module code for msg output '%s' of node module '%s' in library '%s'", cfg->label, modname, lib->name);
 //							return 1;
@@ -696,6 +727,53 @@ int proc_datatype(const iot_datatype_metaclass* meta, json_object* data, json_ob
 	return 0;
 }
 
+int proc_notiongroup(const iot_notiongroup* meta, json_object* data, json_object* regpart, const char* manifest_path) {
+	iot_type_id_t id=meta->get_id();
+	if(!id) { //must find or generate ID
+		id=reg_ids.find_notiongroup(meta->type_name);
+		if(!id) {
+			id=dev_ids.find_notiongroup(meta->type_name);
+			if(!id) {
+				id=dev_ids.gen_new_dev_id(dev_ids.notiongroups);
+				if(id) { //free ID found, remember it
+					json_object_object_add(dev_ids.notiongroups, meta->type_name, json_object_new_int64(id));
+					dev_ids.is_mod=true;
+					outlog_debug("New id %u for notion group %s was generated", id, meta->type_name);
+				}
+			}
+
+		}
+		if(id) {
+			outlog_debug("Found id %u for notion group %s", id, meta->type_name);
+		} else {
+			outlog_error("No ID for notion group %s", meta->type_name);
+			return 1;
+		}
+	} else { //id is built into declaration, so must be present in reg_ids
+		if(reg_ids.find_notiongroup(meta->type_name)!=id) {
+			outlog_error("notion group '%s' has incorporated ID=%u which is not registered", meta->type_name, id);
+			return 1;
+		}
+		if(!iscore && id<2000) {
+			outlog_error("notion group '%s' has incorporated ID=%u which can be used in CORE only (>=2000)", meta->type_name, id);
+			return 1;
+		}
+	}
+	json_object_object_add(data, "id", json_object_new_int64(id));
+	char verbuf[32];
+	iot_version_str(meta->version, verbuf, sizeof(verbuf));
+	json_object_object_add(data, "version", json_object_new_string(verbuf));
+
+	char idbuf[16];
+	snprintf(idbuf, sizeof(idbuf), "%u", id);
+	json_object* arr=json_object_new_array();
+	json_object_object_add(regpart, idbuf, arr);
+	json_object_array_add(arr, json_object_new_string(meta->type_name));
+	json_object_array_add(arr, libraryref);
+	json_object_array_add(arr, json_object_new_string(verbuf));
+	return 0;
+}
+
 int proc_notiontype(const iot_valuenotion* meta, json_object* data, json_object* regpart, const char* manifest_path) {
 	iot_type_id_t id=meta->get_id();
 	if(!id) { //must find or generate ID
@@ -744,8 +822,8 @@ int proc_notiontype(const iot_valuenotion* meta, json_object* data, json_object*
 }
 
 
-#define NUM_SECTS 8
-const char* registry_sections[NUM_SECTS]={"libs","ifacetypes","contypes","datatypes","node_modules","driver_modules","detector_modules","notiontypes"};
+#define NUM_SECTS 9
+const char* registry_sections[NUM_SECTS]={"libs","ifacetypes","contypes","datatypes","node_modules","driver_modules","detector_modules","notiongroups","notiontypes"};
 
 
 //Merges data from provided partpath into provided sections in reg_sect array (must have NUM_SECTS elems).
@@ -837,6 +915,7 @@ int main(int argn, char **arg) {
 	iot_regitem_lib_t* bundle;
 	json_object* regpart=json_object_new_object();
 	json_object* regpart_ifacetypes=NULL;
+	json_object* regpart_notiongroups=NULL;
 	json_object* regpart_notiontypes=NULL;
 	json_object* regpart_datatypes=NULL;
 	json_object* regpart_contypes=NULL;
@@ -1031,6 +1110,26 @@ int main(int argn, char **arg) {
 				}
 				if(proc_datatype(meta, datatypedata, regpart_datatypes, manifest_path)) return 1;
 			}
+		} else if(strcmp(subkey, "notiongroups")==0) {
+			if(!json_object_is_type(subval, json_type_object)) {
+				outlog_error("'%s' sub-field of manifest '%s' must be JSON object", subkey, manifest_path);
+				return 1;
+			}
+			json_object_object_foreach(subval, notiongroupname, notiongroupdata) {
+				const iot_notiongroup* meta=libregistry->find_notiongroup(notiongroupname);
+				if(!meta) {
+					outlog_error("Notion Group '%s' mentioned in manifest '%s' not found", notiongroupname, manifest_path);
+					return 1;
+				}
+				if(strcmp(meta->parentlib, arg[1])!=0) {
+					outlog_error("Notion Group '%s' mentioned in manifest '%s' is not in '%s' library but in '%s'", notiongroupname, manifest_path, arg[1], meta->parentlib);
+					return 1;
+				}
+				if(!regpart_notiongroups) {
+					regpart_notiongroups=json_object_new_object();
+				}
+				if(proc_notiongroup(meta, notiongroupdata, regpart_notiongroups, manifest_path)) return 1;
+			}
 		} else if(strcmp(subkey, "notiontypes")==0) {
 			if(!json_object_is_type(subval, json_type_object)) {
 				outlog_error("'%s' sub-field of manifest '%s' must be JSON object", subkey, manifest_path);
@@ -1071,6 +1170,7 @@ int main(int argn, char **arg) {
 	if(libdeps) json_object_object_add(json, "dependency_libs", json_object_get(libdeps));
 
 	if(regpart_ifacetypes) json_object_object_add(regpart, "ifacetypes", regpart_ifacetypes);
+	if(regpart_notiongroups) json_object_object_add(regpart, "notiongroups", regpart_notiongroups);
 	if(regpart_notiontypes) json_object_object_add(regpart, "notiontypes", regpart_notiontypes);
 	if(regpart_contypes) json_object_object_add(regpart, "contypes", regpart_contypes);
 	if(regpart_datatypes) json_object_object_add(regpart, "datatypes", regpart_datatypes);

@@ -39,7 +39,7 @@ struct iot_regitem_lib_t {
 	int namelen;
 	void *hmodule=NULL; //handle of dynamically loaded file or of main executable when linked is true
 
-	uint32_t version; //is checked when bundle is loaded (hmodule assigned). value UINT32_MAX means that check is skipped (actual version stored adter load)
+	uint32_t version; //is checked when bundle is loaded (hmodule assigned). value UINT32_MAX means that check is skipped (actual version stored after load)
 	bool linked; //bundle is statically linked
 	bool error=false; //was error loading, so do not try again
 	bool signature_set=false;
@@ -87,6 +87,18 @@ struct iot_regitem_module_t {
 	iot_any_module_item_t *item=NULL; //assigned during module loading
 	int namelen;
 	uint32_t module_id;
+	union {
+		struct {
+			json_object* manual; //NULL or array with manual devices
+			json_object* params; //settings for instance
+			time_t manual_modtime;
+			time_t params_modtime;
+		} detector;
+		struct {
+			json_object* params; //settings for instance
+			time_t params_modtime;
+		} driver;
+	} params; //additional type-dependent data
 	char module_name[IOT_MODULENAME_MAXLEN+1]; //pure module name   //////(if bundle defined) or full name with bundle path in it (if bundle is NULL)
 	bool autoload; //module's config must be auto loaded (after loading appropriate bundle into memory)
 	iot_module_type_t type;
@@ -99,6 +111,18 @@ struct iot_regitem_module_t {
 		iot_regitem_module_t* &listhead=get_listhead(type);
 		next=listhead;
 		listhead=this;
+		switch(type) {
+			case IOT_MODTYPE_DETECTOR:
+				params.detector={};
+				break;
+			case IOT_MODTYPE_DRIVER:
+				params.driver={};
+				break;
+			case IOT_MODTYPE_NODE:
+				break;
+			default:
+				assert(false);
+		}
 	}
 	static iot_regitem_module_t* find_item(iot_module_type_t type, const char* name, iot_regitem_lib_t* lib) {
 		int len=(int)strlen(name);
@@ -122,12 +146,14 @@ struct iot_regitem_module_t {
 class iot_libregistry_t {
 	iot_hwdevcontype_metaclass *devcontypes_head=NULL; //list of registered hwdevcontypes as list of addresses of metaclass instances
 	iot_devifacetype_metaclass *devifacetypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
-	iot_datatype_metaclass *datatypes_head=NULL; //list of registered hwdevcontypes as list of addresses of metaclass instances
-	iot_valuenotion *notiontypes_head=NULL; //list of registered devifacetypes as list of addresses of metaclass instances
+	iot_datatype_metaclass *datatypes_head=NULL; //list of registered data types as list of addresses of metaclass instances
+	iot_notiongroup *notiongroups_head=NULL; //list of registered notion groups as list of addresses of metaclass instances
+	iot_valuenotion *notiontypes_head=NULL; //list of registered notion types as list of addresses of metaclass instances
 
 	json_object* contypes_table=NULL;
 	json_object* ifacetypes_table=NULL;
 	json_object* datatypes_table=NULL;
+	json_object* notiongroups_table=NULL;
 	json_object* notiontypes_table=NULL;
 	bool core_signature_valid=false; //TODO
 
@@ -216,6 +242,15 @@ public:
 				return IOT_ERROR_BAD_DATA;
 			} else {
 				json_object_get(notiontypes_table);
+			}
+		}
+		if(json_object_object_get_ex(reg, "notiongroups", &notiongroups_table)) {
+			if(!json_object_is_type(notiongroups_table,  json_type_object)) {
+				outlog_error("Invalid data in lib registry! Top level 'notiongroups' item must be a JSON-object");
+				notiongroups_table=NULL;
+				return IOT_ERROR_BAD_DATA;
+			} else {
+				json_object_get(notiongroups_table);
 			}
 		}
 		register_pending_metaclasses();
@@ -354,14 +389,28 @@ public:
 	}
 	iot_hwdevcontype_metaclass* find_devcontype(iot_type_id_t contp, bool tryload) { //must run in main thread if tryload is true
 		if(!contp) return NULL;
-		iot_hwdevcontype_metaclass* item=devcontypes_head;
+		iot_hwdevcontype_metaclass* item;
+again:
+		item=devcontypes_head;
 		while(item) {
 			if(item->get_id()==contp) return item;
 			item=item->next;
 		}
 		if(tryload) {// && IOT_DEVCONTYPE_CUSTOM_MODULEID(contp)>0) 
-			//TODO search in registry for bundle name
-//			if(!load_module(IOT_DEVCONTYPE_CUSTOM_MODULEID(contp), NULL)) return find_devcontype(contp, false);
+			json_object* val;
+			json_object_object_foreach(contypes_table, idval, data) {
+				iot_type_id_t type_id=0;
+				IOT_STRPARSE_UINT(idval, iot_type_id_t, type_id);
+				if(type_id!=contp) continue;
+				if(!json_object_is_type(data, json_type_array)) break;
+				val=json_object_array_get_idx(data, 1); //get library name
+				if(!val || !json_object_is_type(val, json_type_string)) break;
+				iot_regitem_lib_t* lib=iot_regitem_lib_t::find_item(json_object_get_string(val));
+				if(!lib) break; //lib not found in registry
+				if(load_lib(lib)) break; //error loading lib
+				tryload=false;
+				goto again;
+			}
 		}
 		return NULL;
 	}
@@ -407,6 +456,20 @@ public:
 		return NULL;
 	}
 
+	iot_notiongroup* find_notiongroup(const char* name) {
+		iot_notiongroup* item=notiongroups_head;
+		while(item) {
+			if(strcmp(item->type_name, name)==0) return item;
+			item=item->next;
+		}
+		//for name search need to check pending list too
+		item=notiongroup_pendingreg_head();
+		while(item) {
+			if(strcmp(item->type_name, name)==0) return item;
+			item=item->next;
+		}
+		return NULL;
+	}
 	iot_valuenotion* find_notiontype(const char* name) {
 		iot_valuenotion* item=notiontypes_head;
 		while(item) {
@@ -422,9 +485,6 @@ public:
 		return NULL;
 	}
 
-
-
-
 	static iot_devifacetype_metaclass*& devifacetype_pendingreg_head(void) {
 		static iot_devifacetype_metaclass *head=NULL; //use function-scope static to guarantee initialization before first use
 		return head;
@@ -435,6 +495,10 @@ public:
 	}
 	static iot_datatype_metaclass*& datatype_pendingreg_head(void) {
 		static iot_datatype_metaclass *head=NULL; //use function-scope static to guarantee initialization before first use
+		return head;
+	}
+	static iot_notiongroup*& notiongroup_pendingreg_head(void) {
+		static iot_notiongroup *head=NULL; //use function-scope static to guarantee initialization before first use
 		return head;
 	}
 	static iot_valuenotion*& notiontype_pendingreg_head(void) {

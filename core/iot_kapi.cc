@@ -8,6 +8,10 @@
 #include "iot_core.h"
 #include "iot_devclass_keyboard.h"
 #include "iot_devclass_activatable.h"
+#include "iot_devclass_meter.h"
+#include "iot_hwdevcontype_serial.h"
+#include "iot_hwdevcontype_zwave.h"
+#include "iot_hwdevcontype_gpio.h"
 //#include "iot_devclass_toneplayer.h"
 
 #include "iot_deviceregistry.h"
@@ -86,10 +90,21 @@ int iot_devifaces_list::add(const iot_deviface_params *cls) {
 //action is one of {IOT_ACTION_ADD, IOT_ACTION_REMOVE}
 //contype must be among those listed in .devcontypes field of detector module interface
 //returns:
-int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data) {
+//	IOT_ERROR_NOT_SUPPORTED - driver instance tries to manage device registry not having 'is_detector' flag in module config
+//	IOT_ERROR_INVALID_STATE - acting instance is not started
+//	IOT_ERROR_INVALID_ARGS - provided ident is template or action unknown
+//	IOT_ERROR_NOT_FOUND - interface to ident's data not found (invalid or module cannot be loaded)
+//	IOT_ERROR_TEMPORARY_ERROR - some temporary error (no memory etc). retry can succeed
+//
+int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t action, const iot_hwdev_localident* ident, iot_hwdev_details* custom_data) {
 	//TODO check that ident->contype is listed in .devcontypes field of detector module interface
+	if(!miid) return IOT_ERROR_INVALID_STATE;
 	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
-	if(!modinstlk) return IOT_ERROR_INVALID_ARGS;
+	if(!modinstlk) return IOT_ERROR_INVALID_STATE;
+
+	if(modinstlk.modinst->type!=IOT_MODTYPE_DETECTOR) {
+		if(modinstlk.modinst->type!=IOT_MODTYPE_DRIVER || !((iot_driver_module_item_t*)modinstlk.modinst->module)->config->is_detector) return IOT_ERROR_NOT_SUPPORTED; //this driver has no detector's functionality
+	}
 
 	hwdev_registry_t* reg;
 
@@ -103,15 +118,86 @@ int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t actio
 		reg=modinstlk.modinst->gwinst->hwdev_registry;
 	}
 
-	//TODO make inter-thread message, not direct call !!!
-	if(uv_thread_self()==main_thread) {
-		return reg->list_action(miid, action, ident, custom_data);
-	} else {
-		assert(false);
-		//TODO
-	}
-	return 0;
+	return reg->list_action(miid, action, ident, custom_data);
 }
+
+void iot_module_instance_base::kapi_process_uv_close(uv_handle_t *handle) {
+		iot_module_instance_base* inst=(iot_module_instance_base*)handle->data;
+		assert(inst!=NULL && inst->thread==uv_thread_self());
+		inst->unref(); //inside this call instance object can be deallocated!
+	}
+
+
+int iot_module_instance_base::kapi_lib_rundir(char *buffer, size_t buffer_size, bool create) {
+	if(!buffer || buffer_size<2) return IOT_ERROR_INVALID_ARGS;
+	if(!miid) return IOT_ERROR_INVALID_STATE;
+	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk.modinst->instance!=this) {
+		assert(false);
+		return IOT_ERROR_CRITICAL_BUG;
+	}
+	int rval=snprintf(buffer, buffer_size, "%s/%s", run_dir, modinstlk.modinst->module->dbitem->bundle->name);
+	if(rval<0) return IOT_ERROR_INVALID_ARGS;
+	if(size_t(rval)>=buffer_size) { //output was truncated, creation not possible
+		return int(rval)-1;
+	}
+	if(!create) return rval+1;
+	struct stat st;
+	if(stat(buffer, &st)==0) {
+		if(!S_ISDIR(st.st_mode)) {
+			errno=ENOTDIR;
+			return IOT_ERROR_CRITICAL_ERROR;
+		}
+		return rval+1; //dir exists
+	}
+	//here dir does not exists
+	char *p=buffer+strlen(run_dir)+1; //set pointer just after 'run_dir/' part in buffer
+	for(int i=0; i<2; i++) {
+		p=strchr(p, '/'); //find end of 'run_dir/vendor' (i==0) or 'run_dir/vendor/dir' (i==1)
+		if(!p) return IOT_ERROR_CRITICAL_BUG; //something is wrong with assumption about bundle->name structure
+		*p='\0';
+		if(mkdir(buffer, 0755)<0 && errno!=EEXIST) {
+			int err=errno;
+			outlog_error("Cannot create directory '%s': %s", p, uv_strerror(uv_translate_sys_error(err)));
+			*p='/';
+			return IOT_ERROR_CRITICAL_ERROR;
+		}
+		*p='/';
+		p++;
+	}
+	//create the last level
+	if(mkdir(buffer, 0755)<0 && errno!=EEXIST) {
+		int err=errno;
+		outlog_error("Cannot create directory '%s': %s", buffer, uv_strerror(uv_translate_sys_error(err)));
+		return IOT_ERROR_CRITICAL_ERROR;
+	}
+	return rval+1;
+}
+
+int iot_module_instance_base::kapi_lib_datadir(char *buffer, size_t buffer_size, const char* libname) {
+	if(!buffer || buffer_size<2) return IOT_ERROR_INVALID_ARGS;
+	if(!miid) return IOT_ERROR_INVALID_STATE;
+	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk.modinst->instance!=this) {
+		assert(false);
+		return IOT_ERROR_CRITICAL_BUG;
+	}
+	int rval;
+	if(!libname) { //get datadir of current instance library
+		rval=snprintf(buffer, buffer_size, "%s/%s", modules_dir, modinstlk.modinst->module->dbitem->bundle->name);
+	} else {
+		iot_regitem_lib_t* libitem=iot_regitem_lib_t::find_item(libname);
+		if(!libitem) return IOT_ERROR_NOT_FOUND;
+		rval=snprintf(buffer, buffer_size, "%s/%s", modules_dir, libitem->name);
+	}
+	if(rval<0) return IOT_ERROR_INVALID_ARGS;
+	if(size_t(rval)>=buffer_size) { //output was truncated, creation not possible
+		return int(rval)-1;
+	}
+	return rval+1;
+}
+
+
 
 //accepted error codes:
 //	0 - for case of delayed stop (state of modinst must be IOT_MODINSTSTATE_STOPPING)
@@ -231,7 +317,7 @@ int iot_hwdevcontype_metaclass::from_json(json_object* json, char* buf, size_t b
 	json_object* val=NULL;
 	iot_type_id_t contype=default_contype;
 	if(json_object_object_get_ex(json, "contype_id", &val)) { //zero or absent value leaves IOT_DEVCONTYPE_ANY
-		IOT_JSONPARSE_UINT(json, iot_type_id_t, contype);
+		IOT_JSONPARSE_UINT(val, iot_type_id_t, contype);
 	}
 	if(!contype) return IOT_ERROR_BAD_DATA;
 
@@ -335,11 +421,11 @@ int iot_devifacetype_metaclass::from_json(json_object* json, char* buf, size_t b
 	json_object* val=NULL;
 	iot_type_id_t ifacetype=default_ifacetype;
 	if(json_object_object_get_ex(json, "ifacetype_id", &val)) {
-		IOT_JSONPARSE_UINT(json, iot_type_id_t, ifacetype);
+		IOT_JSONPARSE_UINT(val, iot_type_id_t, ifacetype);
 	}
 	if(!ifacetype) return IOT_ERROR_BAD_DATA;
 
-	const iot_devifacetype_metaclass* metaclass=iot_devifacetype_metaclass::findby_id(ifacetype);
+	const iot_devifacetype_metaclass* metaclass=iot_devifacetype_metaclass::findby_id(ifacetype, true);
 	if(!metaclass) return IOT_ERROR_NOT_FOUND;
 
 	val=NULL;
@@ -379,12 +465,19 @@ int iot_devifacetype_metaclass::serialize(const iot_deviface_params* obj, char* 
 	return p_serialize(obj, buf+sizeof(serialize_base_t), bufsize-sizeof(serialize_base_t));
 }
 
+iot_hwdevcontype_metaclass_serial iot_hwdevcontype_metaclass_serial::object;
+iot_hwdevcontype_metaclass_zwave iot_hwdevcontype_metaclass_zwave::object;
+iot_hwdevcontype_metaclass_gpio iot_hwdevcontype_metaclass_gpio::object;
 
 iot_devifacetype_metaclass_keyboard iot_devifacetype_metaclass_keyboard::object;
 iot_devifacetype_metaclass_activatable iot_devifacetype_metaclass_activatable::object;
+iot_devifacetype_metaclass_meter iot_devifacetype_metaclass_meter::object;
+
 iot_datatype_metaclass_boolean iot_datatype_metaclass_boolean::object;
 iot_datatype_metaclass_nodeerrorstate iot_datatype_metaclass_nodeerrorstate::object;
 iot_datatype_metaclass_bitmap iot_datatype_metaclass_bitmap::object;
+iot_datatype_metaclass_numeric iot_datatype_metaclass_numeric::object;
+iot_datatype_metaclass_pulse iot_datatype_metaclass_pulse::object;
 //iot_devifacetype_toneplayer iot_devifacetype_toneplayer::object;
 
 uint32_t iot_deviface_params_keyboard::get_d2c_maxmsgsize(void) const {
@@ -404,6 +497,18 @@ uint32_t iot_deviface_params_activatable::get_d2c_maxmsgsize(void) const {
 	assert(!istmpl);
 	return iot_deviface__activatable_BASE::get_maxmsgsize();
 }
+
+uint32_t iot_deviface_params_meter::get_c2d_maxmsgsize(void) const {
+	assert(!istmpl);
+return 0;
+//	return iot_deviface__meter_BASE::get_maxmsgsize();
+}
+uint32_t iot_deviface_params_meter::get_d2c_maxmsgsize(void) const {
+	assert(!istmpl);
+return 0;
+//	return iot_deviface__meter_BASE::get_maxmsgsize();
+}
+
 
 /*
 uint32_t iot_devifacetype_toneplayer::get_c2d_maxmsgsize(const char* cls_data) const {
@@ -440,8 +545,44 @@ iot_datatype_metaclass::iot_datatype_metaclass(iot_type_id_t id, const char* typ
 //	parentlib=parentlib_;
 }
 
-iot_valuenotion::iot_valuenotion(iot_type_id_t id, const char* type, uint32_t ver_, const char* parentlib_) : 
-				version(ver_), type_name(type), parentlib(parentlib_) {
+iot_notiongroup_temperature::iot_notiongroup_temperature(void) : iot_notiongroup_numeric(0, "temperature", &iot_valuenotion_degcelcius::object, IOT_VERSION_COMPOSE(1,0,0)) {}
+const iot_notiongroup_temperature iot_notiongroup_temperature::object;
+
+
+
+iot_notiongroup::iot_notiongroup(iot_type_id_t id, const char* type, const iot_valuenotion *basic_notion, uint32_t ver_, const char* parentlib_) : 
+				basic_notion(basic_notion), version(ver_), type_name(type), parentlib(parentlib_) {
+	assert(type!=NULL && parentlib_!=NULL);
+
+	iot_notiongroup* &head=iot_libregistry_t::notiongroup_pendingreg_head(), *cur;
+	cur=head;
+	while(cur) {
+		if(cur==this) {
+			outlog_error("Double instanciation of Notion Group %s!", type);
+			assert(false);
+			return;
+		}
+		cur=cur->next;
+	}
+	next=head;
+	head=this;
+
+	prev=NULL;
+	notiongroup_id=id;
+}
+
+int iot_notiongroup::convert_datavalue(const iot_datavalue* srcval, const iot_valuenotion* srcnotion, const iot_valuenotion* resultnotion, char* resultbuf, size_t resultbufsize, const iot_datavalue*& resultval) const {
+		//TODO validity checks
+		if(!srcval || !srcnotion || !resultnotion || srcnotion->get_group()!=resultnotion->get_group() || srcnotion->get_group()!=this) return IOT_ERROR_INVALID_ARGS;
+		if(resultnotion==srcnotion) {
+			return IOT_ERROR_NO_ACTION;
+		}
+		return p_convert_datavalue(srcval, srcnotion, resultnotion, resultbuf, resultbufsize, resultval);
+	}
+
+
+iot_valuenotion::iot_valuenotion(iot_type_id_t id, const char* type, const iot_notiongroup *notion_group, uint32_t ver_, const char* parentlib_) : 
+				notion_group(notion_group), version(ver_), type_name(type), parentlib(parentlib_) {
 	assert(type!=NULL && parentlib_!=NULL);
 
 	iot_valuenotion* &head=iot_libregistry_t::notiontype_pendingreg_head(), *cur;
@@ -459,11 +600,8 @@ iot_valuenotion::iot_valuenotion(iot_type_id_t id, const char* type, uint32_t ve
 
 	prev=NULL;
 	notion_id=id;
-//	vendor_name=vendor;
-//	type_name=type;
-//	ver=ver_;
-//	parentlib=parentlib_;
 }
+
 
 
 //use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created
@@ -472,14 +610,20 @@ iot_valuenotion::iot_valuenotion(iot_type_id_t id, const char* type, uint32_t ve
 //const iot_valuetype_boolean iot_valuetype_boolean::const_true(true);
 //const iot_valuetype_boolean iot_valuetype_boolean::const_false(false);
 
+iot_notiongroup_luminance::iot_notiongroup_luminance(void) : iot_notiongroup_numeric(0, "luminance", &iot_valuenotion_percentlum::object, IOT_VERSION_COMPOSE(1,0,0)) {}
+const iot_notiongroup_luminance iot_notiongroup_luminance::object;
+
+
 const iot_valuenotion_keycode iot_valuenotion_keycode::object;
 const iot_valuenotion_degcelcius iot_valuenotion_degcelcius::object;
 const iot_valuenotion_degfahrenheit iot_valuenotion_degfahrenheit::object;
+const iot_valuenotion_percentlum iot_valuenotion_percentlum::object;
 
 
 
 const/*expr*/ iot_datavalue_boolean iot_datavalue_boolean::const_true(true);
 const/*expr*/ iot_datavalue_boolean iot_datavalue_boolean::const_false(false);
+const/*expr*/ iot_datavalue_pulse iot_datavalue_pulse::object;
 
 //use constexpr to guarantee object is initialized at the time when constructors for global objects like configregistry are created
 const/*expr*/ iot_datavalue_nodeerrorstate iot_datavalue_nodeerrorstate::const_noinst(iot_datavalue_nodeerrorstate::IOT_NODEERRORSTATE_NOINSTANCE);
@@ -533,6 +677,14 @@ template int iot_fixprec_timer<true>::init(uint32_t prec_, uint64_t maxdelay_);
 template <bool shared> bool iot_fixprec_timer<shared>::thread_valid(void) {
 	return uv_thread_self()==thread->thread;
 }
+
+
+const iot_valuenotion* const iot_zwave_cc_multilevel_sensor_data_t::scale2notion[][4]={ {} /*type 0*/,
+	{&iot_valuenotion_degcelcius::object, &iot_valuenotion_degfahrenheit::object, 0, 0}, /*type 1 - air temperature*/
+	{},																					 /*type 2*/
+	{&iot_valuenotion_percentlum::object, 0, 0, 0}, /*type 3 - ambient luminance*/
+};
+const size_t iot_zwave_cc_multilevel_sensor_data_t::scale2notion_size=sizeof(iot_zwave_cc_multilevel_sensor_data_t::scale2notion)/sizeof(iot_valuenotion*)/4;
 
 
 /*

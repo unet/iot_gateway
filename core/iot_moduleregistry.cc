@@ -45,7 +45,7 @@ void iot_modules_registry_t::create_detector_modinstance(iot_detector_module_ite
 	auto iface=module->config;
 	int err=0;
 
-	json_object *json_cfg=NULL, *manual_devices=NULL; //TODO get from ownconfig
+	json_object *json_cfg=NULL, *manual_devices=module->dbitem->params.detector.manual; //TODO get from ownconfig
 
 	if(iface->check_system) { //use this func for precheck if available
 		err=iface->check_system();
@@ -65,7 +65,7 @@ void iot_modules_registry_t::create_detector_modinstance(iot_detector_module_ite
 
 	//from here all errors go to onerr
 
-	thread=main_thread_item; //thread_registry->assign_thread(iface->cpu_loading);   for now always run detectors in main thread to have sync access to device registry
+	thread=NULL;//main_thread_item; //thread_registry->assign_thread(iface->cpu_loading);   for now always run detectors in main thread to have sync access to device registry
 //	assert(thread!=NULL);
 
 
@@ -122,7 +122,7 @@ onerr:
 //	IOT_ERROR_TEMPORARY_ERROR - error. module can be retried for this device later
 //	IOT_ERROR_MODULE_BLOCKED - error. module was blocked on temporary or constant basis
 //	IOT_ERROR_CRITICAL_ERROR - instanciation is invalid
-int iot_driver_module_item_t::try_driver_create(iot_hwdevregistry_item_t* hwdev) { //main thread
+int iot_driver_module_item_t::try_driver_create(iot_hwdevregistry_item_t* hwdev) { //main thread  //CALLED INSIDE DEVICE REGISTRY LOCK!!!!
 	assert(uv_thread_self()==main_thread);
 
 	auto drv_iface=config;
@@ -295,7 +295,7 @@ void iot_modules_registry_t::start(void) {
 		}
 		mod=mod->next;
 	}
-	//for now do not autoload for node modulesm this seems unnecessary
+	//for now do not autoload for node modules, this seems unnecessary
 
 }
 
@@ -786,7 +786,7 @@ void iot_modules_registry_t::free_modinstance(iot_modinstance_item_t* modinst) {
 //	IOT_ERROR_TEMPORARY_ERROR - temporary core code error. module can be retried for this device later
 //	IOT_ERROR_MODULE_BLOCKED - error. module was blocked on temporary or constant basis
 //	IOT_ERROR_CRITICAL_ERROR - instanciation is invalid
-int iot_modules_registry_t::create_driver_modinstance(iot_driver_module_item_t* module, iot_hwdevregistry_item_t* devitem) {
+int iot_modules_registry_t::create_driver_modinstance(iot_driver_module_item_t* module, iot_hwdevregistry_item_t* devitem) { //CALLED INSIDE DEVICE REGISTRY LOCK!!!!
 	assert(uv_thread_self()==main_thread);
 	assert(devitem!=NULL);
 
@@ -802,7 +802,7 @@ int iot_modules_registry_t::create_driver_modinstance(iot_driver_module_item_t* 
 
 	iot_devifaces_list deviface_list;
 
-	err=iface->init_instance(&inst, &devitem->dev_ident, devitem->dev_data, &deviface_list);
+	err=iface->init_instance(&inst, &devitem->dev_ident, devitem->dev_data, &deviface_list, NULL);
 	if(err) {
 		if(err==IOT_ERROR_NOT_SUPPORTED) goto onerr;
 		outlog_error("Driver instance init for module '%s::%s' with ID %u returned error: %s",module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
@@ -856,7 +856,7 @@ int iot_modules_registry_t::create_driver_modinstance(iot_driver_module_item_t* 
 	modinst->data.driver.hwdev=devitem;
 	devitem->devdrv_modinstlk.lock(modinst);
 
-	return modinst->start(false);
+	return modinst->start(false, true); //MUST USE ASYNC START BECASE CALLED INSIDE DEVICE REGISTRY LOCK!!!!
 
 onerr:
 	if(modinst) free_modinstance(modinst);
@@ -1148,7 +1148,7 @@ int iot_modules_registry_t::try_connect_consumer_to_driver(iot_modinstance_item_
 }
 
 //after detecting new hw device tries to find appropriate driver
-void iot_modules_registry_t::try_find_driver_for_hwdev(iot_hwdevregistry_item_t* devitem) {
+void iot_modules_registry_t::try_find_driver_for_hwdev(iot_hwdevregistry_item_t* devitem) { //CALLED INSIDE DEVICE REGISTRY LOCK!!!!
 	assert(uv_thread_self()==main_thread);
 	assert(!devitem->devdrv_modinstlk);
 	char namebuf[256];
@@ -1214,15 +1214,13 @@ void iot_modules_registry_t::try_find_driver_for_hwdev(iot_hwdevregistry_item_t*
 //	IOT_ERROR_TEMPORARY_ERROR - start operation failed by internal gateway fault
 //	IOT_ERROR_MODULE_BLOCKED - module in blocked or disabled state
 //	IOT_ERROR_CRITICAL_ERROR - instanciation is invalid
-int iot_modinstance_item_t::start(bool isasync) { //called in working thread of instance or main thread. tries to start module instance and returns status
-	//isasync should be true only when processing IOT_MSG_START_MODINSTANCE command
-
+int iot_modinstance_item_t::start(bool ismsgproc, bool forcemsg) { //called in working thread of instance or main thread. tries to start module instance and returns status
+	//ismsgproc should be true only when processing IOT_MSG_START_MODINSTANCE command
 	int err;
 	uint64_t now;
-	if(!isasync) { //initial call from main thread
-		assert(uv_thread_self()==main_thread);
 
-		if(uv_thread_self()!=thread->thread) { //not working thread of instance, so must be main thread. async start
+	if(!ismsgproc) { //initial call from main thread
+		if(uv_thread_self()!=thread->thread || forcemsg) { //not working thread of instance, so must be async start
 			iot_threadmsg_t* msg=msgp.start;
 			if(!msg) {
 				assert(false);
@@ -1269,7 +1267,7 @@ int iot_modinstance_item_t::start(bool isasync) { //called in working thread of 
 	err=0;
 
 onerr:
-	if(isasync) {
+	if(ismsgproc) {
 		iot_threadmsg_t* msg=msgp.start;
 		assert(msg!=NULL);
 		err=iot_prepare_msg(msg, IOT_MSG_MODINSTANCE_STARTSTATUS, this, 0, NULL, 0, IOT_THREADMSG_DATAMEM_STATIC, true);
@@ -1363,17 +1361,17 @@ int iot_modinstance_item_t::on_start_status(int err, bool isasync) { //processes
 void iot_modinstance_item_t::recheck_job(bool no_jobs) {
 	//no_jobs prevents jobs from running, just reschedules timers
 	//called in instance thread
-	assert(uv_thread_self()==thread->thread);
+	assert(uv_thread_self()==main_thread);
 	if(in_recheck_job) return;
 	in_recheck_job=true;
-	uint64_t now=uv_now(thread->loop);
+	uint64_t now=uv_now(main_loop);
 	uint64_t delay=0xFFFFFFFFFFFFFFFFul;
 
 	//find most early event
 	//check state-related timeouts
 	if(state==IOT_MODINSTSTATE_STOPPING) {
 		if(state_timeout<=now) {
-			if(!no_jobs) stop(true);
+			if(!no_jobs) stop(false);
 			else delay=0;
 		} else {
 			if(state_timeout-now<delay) delay=state_timeout-now;
@@ -1384,7 +1382,7 @@ void iot_modinstance_item_t::recheck_job(bool no_jobs) {
 	if(delay<0xFFFFFFFFFFFFFFFFul) {
 		if(!no_jobs || !instrecheck_timer.is_on() || instrecheck_timer.get_timeout()>now+2000) //for no_jobs mode to not reschedule timer if its activation is close or in past
 																					//to avoid repeated moving of job execution time in case of often no_jobs calls
-			thread->schedule_atimer(instrecheck_timer, delay); //zero delay always means at least 1 sec now!!!
+			main_thread_item->schedule_atimer(instrecheck_timer, delay); //zero delay always means at least 1 sec now!!!
 	}
 }
 
@@ -1431,6 +1429,7 @@ int iot_modinstance_item_t::stop(bool ismsgproc, bool forcemsg) { //called in wo
 		state=IOT_MODINSTSTATE_STOPPING;
 		goto onsucc;
 	}
+	instance->miid.clear();
 	if(err) {
 		state=IOT_MODINSTSTATE_HUNG;
 		outlog_error("Error stopping %s instance of module '%s::%s' with ID %u: %s. This is a bug. Module hung.", iot_modtype_name[type], module->dbitem->bundle->name, module->dbitem->module_name, module->dbitem->module_id, kapi_strerror(err));
@@ -1487,6 +1486,9 @@ int iot_modinstance_item_t::on_stop_status(int err, bool isasync) { //processes 
 			break;
 		case IOT_MODTYPE_DRIVER: {
 			assert(data.driver.hwdev!=NULL);
+			if(((iot_driver_module_item_t*)module)->config->is_detector)
+				gwinst->hwdev_registry->remove_hwdev_bydetector(miid);
+
 			if(err==IOT_ERROR_TEMPORARY_ERROR || err==IOT_ERROR_CRITICAL_ERROR) {
 				uint32_t now32=uint32_t((uv_now(main_loop)+500)/1000);
 				data.driver.hwdev->block_module(module->dbitem->module_id, err==IOT_ERROR_CRITICAL_ERROR ? 0xFFFFFFFFu : now32+2*60*100, now32);

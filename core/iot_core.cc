@@ -17,6 +17,9 @@
 //	printf("busy HWDev removed: contype=%d, unique=%lu\n", devitem->devdata.dev_ident.contype, devitem->devdata.dev_ident.hwid);
 //}
 
+iot_ownconfig_t ownconfig={};
+
+
 iot_thread_registry_t* thread_registry=NULL;
 static iot_thread_registry_t _thread_registry; //instantiate singleton class
 iot_thread_item_t* main_thread_item=NULL;
@@ -64,8 +67,9 @@ void iot_init_systime(void) { //must be called on process start
 	clock_gettime(CLOCK_MONOTONIC, &monots2);
 	mono_clockid=CLOCK_MONOTONIC;
 
-	uint64_t clock_cost=(monots2.tv_nsec-monots.tv_nsec+1000000000*(monots2.tv_sec-monots.tv_sec))/8; //estimate cost of clock_gettime call
-	mono_clock_offset=uint64_t(1000000000*rtts.tv_sec+rtts.tv_nsec)-uint64_t(1000000000*monots.tv_sec+monots.tv_nsec)-clock_cost;
+	int64_t clock_cost=(monots2.tv_nsec-monots.tv_nsec+1000000000ll*int64_t(monots2.tv_sec-monots.tv_sec))/8; //estimate cost of clock_gettime call
+	if(clock_cost<0) clock_cost=0;
+	mono_clock_offset=(1000000000ll*int64_t(rtts.tv_sec)+rtts.tv_nsec)-(1000000000ll*int64_t(monots.tv_sec)+monots.tv_nsec)-clock_cost;
 }
 
 

@@ -11,6 +11,9 @@
 #include "iot_threadregistry.h"
 
 
+thread_local iot_memallocator* tls_allocator=NULL;
+iot_memallocator main_allocator;
+
 iot_membuf_chain* iot_memallocator::allocate_chain(uint32_t size) { //size is length of useful data to store in chained buffer
 		assert(uv_thread_self()==*thread); //only one thread can allocate
 		if(!size) return NULL;
@@ -167,8 +170,9 @@ bool iot_memallocator::incref(void* ptr) { //increase object's reference count i
 	}
 
 void *iot_allocate_memblock(uint32_t size, bool allow_direct) {
-	iot_memallocator* allocator=thread_registry->find_allocator(uv_thread_self());
+	iot_memallocator* allocator=tls_allocator;
 	assert(allocator!=NULL);
+	assert(allocator==thread_registry->find_allocator(uv_thread_self()));
 	if(!allocator) return NULL;
 	return allocator->allocate(size, allow_direct);
 }
@@ -515,5 +519,4 @@ const uint32_t iot_memallocator::objoptblock[15]={ //optimal block of allocation
 		256*1024 //index 14 , underlying data for objects must be iot_membuf_chain
 	};
 
-iot_memallocator main_allocator;
 

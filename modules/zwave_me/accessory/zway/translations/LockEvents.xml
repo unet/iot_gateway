@@ -1,0 +1,313 @@
+<?xml version="1.0"?>
+<LockEvents>
+	<LockEvent id="1">
+		<name>
+			<lang xml:lang="en">Lock Command: Keypad access code verified lock command</lang>
+			<lang xml:lang="de">Schließbefehl: Keypad Zugriffscode überprüft Schließbefehl</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Låskommando: Kod via knappsats verifierade låskommando</lang>
+			<lang xml:lang="sk">Uzamykací príkaz: Klávesnicový prístup overený, príkaz zamknutia </lang>
+			<lang xml:lang="cz">Uzamykací příkaz: Klávesnicový přístup ověřený, příkaz zamknutí</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="2">
+		<name>
+			<lang xml:lang="en">Unlock Command: Keypad access code verified unlock command</lang>
+			<lang xml:lang="de">Entriegelungsbefehl: Keypad Zugriffscode überprüft Entriegelungsbefehl</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Upplåsningskommando: Kod via knappsats verifierade upplåsningskommando</lang>
+			<lang xml:lang="sk">Odomykací príkaz: Klávesnicový prístup overený, príkaz odomknutia</lang>
+			<lang xml:lang="cz">Odemykací příkaz: Klávesnicový přístup ověřený, příkaz odemknutí</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="3">
+		<name>
+			<lang xml:lang="en">Keypad lock button pressed</lang>
+			<lang xml:lang="de">Schließtaste auf Keypad betätigt</lang>
+			<lang xml:lang="ru">Нажата кнопка закрытия</lang>
+			<lang xml:lang="sv">Låsknapp på knappsats intryckt</lang>
+			<lang xml:lang="sk">Tlačidlo uzamknutia stlačené</lang>
+			<lang xml:lang="cz">Tlačítko uzamčení stisknuté</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="4">
+		<name>
+			<lang xml:lang="en">Unlock command: Keypad unlock button pressed</lang>
+			<lang xml:lang="de">Entriegelungsbefehl: Entriegelungstaste auf Keypad betätigt</lang>
+			<lang xml:lang="ru">Нажата кнопка открытия</lang>
+			<lang xml:lang="sv">Uppslåsningskommando: Upplåsningsknapp på knappsats intryckt</lang>
+			<lang xml:lang="sk">Odomykací príkaz: Tlačidlo odomknutia stlačené</lang>
+			<lang xml:lang="cz">Odemykací příkaz: Tlačítko odemknutí stisknuté</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="5">
+		<name>
+			<lang xml:lang="en">Locked by keypad access code out of schedule</lang>
+			<lang xml:lang="de">Außerhalb der Geschäftszeiten über Keypad Zugangscode verschließen</lang>
+			<lang xml:lang="ru">Закрыт по коду вне расписания</lang>
+			<lang xml:lang="sv">Låst via knappsats, kod utanför schema (??)</lang>
+			<lang xml:lang="sk">Zamknutie cez klávesový prístupový kód mimo plánu</lang>
+			<lang xml:lang="cz">Zamknutí přes klávesový přístupový kód mimo plánu</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="6">
+		<name>
+			<lang xml:lang="en">Unlock by keypad access code out of schedule</lang>
+			<lang xml:lang="de">Außerhalb der Geschäftszeiten über Keypad Zugangscode entriegeln</lang>
+			<lang xml:lang="ru">Открыт по коду вне расписания</lang>
+			<lang xml:lang="sv">Upplåst via knappsats, kod utanför schema (??)</lang>
+			<lang xml:lang="sk">Odomknutie cez klávesový prístupový kód mimo plánu</lang>
+			<lang xml:lang="cz">Odemknutí přes klávesový přístupový kód mimo plánu</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="7">
+		<name>
+			<lang xml:lang="en">Keypad illegal access code entered</lang>
+			<lang xml:lang="de">Illegaler Zugangscode ins Keypad eingegeben</lang>
+			<lang xml:lang="ru">Введён неверный код</lang>
+			<lang xml:lang="sv">Felaktig kod intryckt på knappsats</lang>
+			<lang xml:lang="sk">Neplatný prístupový kód</lang>
+			<lang xml:lang="cz">Neplatný přístupový kód</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="8">
+		<name>
+			<lang xml:lang="en">Key or latch operation locked</lang>
+			<lang xml:lang="de">Durch Zugangscode oder manuell verriegelt</lang>
+			<lang xml:lang="ru">Открыт ключом или защёлкой</lang>
+			<lang xml:lang="sv">Nyckel eller vred: låst</lang>
+			<lang xml:lang="sk">Uzamknutie prístupovým kódom alebo ručne</lang>
+			<lang xml:lang="cz">Uzamčení přístupovým kódem nebo ručně</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="9">
+		<name>
+			<lang xml:lang="en">Key or latch operation unlocked</lang>
+			<lang xml:lang="de">Durch Zugangscode oder manuell entriegelt</lang>
+			<lang xml:lang="ru">Закрыт ключом или защёлкой</lang>
+			<lang xml:lang="sv">Nyckel eller vred: upplåst</lang>
+			<lang xml:lang="sk">Odomknutie prístupovým kódom alebo ručne</lang>
+			<lang xml:lang="cz">Odomčení přístupovým kódem nebo ručně</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="10">
+		<name>
+			<lang xml:lang="en">Auto lock operation</lang>
+			<lang xml:lang="de">Automatische Verriegelung</lang>
+			<lang xml:lang="ru">Автоматическое закрытие</lang>
+			<lang xml:lang="sv">NAutomatiskt låst</lang>
+			<lang xml:lang="sk">Automatické zamknutie</lang>
+			<lang xml:lang="cz">Automatické zamknutí</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="11">
+		<name>
+			<lang xml:lang="en">Auto unlock operation</lang>
+			<lang xml:lang="de">Automatische Entriegelung</lang>
+			<lang xml:lang="ru">Автоматическое открытие</lang>
+			<lang xml:lang="sv">Automatiskt upplåst</lang>
+			<lang xml:lang="sk">Automatické odomknutie</lang>
+			<lang xml:lang="cz">Automatické odomknutí</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="12">
+		<name>
+			<lang xml:lang="en">Lock Command: Z-Wave access code verified</lang>
+			<lang xml:lang="de">Schließbefehl: Z-Wave Zugangscode überprüft</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Låskommando: Z-Wave-accesskod verifierad</lang>
+			<lang xml:lang="sk">Uzamykací príkaz: Z-Wave prístupový kód overený</lang>
+			<lang xml:lang="cz">Uzamykací příkaz: Z-Wave přístupový kód platný</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="13">
+		<name>
+			<lang xml:lang="en">Unlock Command: Z-Wave access code verified</lang>
+			<lang xml:lang="de">Entriegelungsbefehl: Z-Wave Zugangscode überprüft</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Upplåsningskommando: Z-Wave-accesskod verifierad</lang>
+			<lang xml:lang="sk">Odomykací príkaz: Z-Wave prístupový kód overený</lang>
+			<lang xml:lang="cz">Odemykací příkaz: Z-Wave přístupový kód platný</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="14">
+		<name>
+			<lang xml:lang="en">Lock by Z-Wave</lang>
+			<lang xml:lang="de">Mit Z-Wave verschließen</lang>
+			<lang xml:lang="ru">Закрыт по Z-Wave</lang>
+			<lang xml:lang="sv">Låst via Z-Wave</lang>
+			<lang xml:lang="sk">Zamknutý cez Z-Wave</lang>
+			<lang xml:lang="cz">Zamčený přes Z-Wave</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="15">
+		<name>
+			<lang xml:lang="en">Unlock by Z-Wave</lang>
+			<lang xml:lang="de">Mit Z-Wave entriegeln</lang>
+			<lang xml:lang="ru">Открыт по Z-Wave</lang>
+			<lang xml:lang="sv">Upplåst via Z-Wave</lang>
+			<lang xml:lang="sk">Odomknutý cez Z-Wave</lang>
+			<lang xml:lang="cz">Odemčený přes Z-Wave</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="16">
+		<name>
+			<lang xml:lang="en">Lock Command: Z-Wave access code out of schedule</lang>
+			<lang xml:lang="de">Schließbefehl: Z-Wave Zugangscode außerhalb der Geschäftszeiten</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Låskommando: Z-Wave-accesod utanför schema</lang>
+			<lang xml:lang="sk">Uzamykací príkaz: Z-Wave prístupový kód, mimo rozvrh</lang>
+			<lang xml:lang="cz">Uzamykací příkaz: Z-Wave přístupový kód, mimo rozvrh</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="17">
+		<name>
+			<lang xml:lang="en">Unlock Command: Z-Wave access code out of schedule</lang>
+			<lang xml:lang="de">Entriegelungsbefehl: Z-Wave Zugangscode außerhalb der Geschäftszeiten</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Upplåsningskommando: Z-Wave-accesod utanför schema</lang>
+			<lang xml:lang="sk">Odomykací príkaz: Z-Wave prístupový kód, mimo rozvrh</lang>
+			<lang xml:lang="cz">Odomykací příkaz: Z-Wave přístupový kód, mimo rozvrh</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="18">
+		<name>
+			<lang xml:lang="en">Z-Wave illegal access code entered</lang>
+			<lang xml:lang="de">Illegaler Zugangscode übe Z-Wave eingegeben</lang>
+			<lang xml:lang="ru">Введён неверный Z-Wave код</lang>
+			<lang xml:lang="sv">Ej giltig accesskod angiven över Z-Wave</lang>
+			<lang xml:lang="sk">Z-Wave zadaný zlý prístupový kód</lang>
+			<lang xml:lang="cz">Z-Wave zadaný špatný přístupový kód</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="19">
+		<name>
+			<lang xml:lang="en">Key or latch operation locked</lang>
+			<lang xml:lang="de">Durch Zugangscode oder manuell verriegelt</lang>
+			<lang xml:lang="ru">Закрыт ключом или защёлкой</lang>
+			<lang xml:lang="sv">Nyckel-/vred-manövereing låst</lang>
+			<lang xml:lang="sk">Uzamknutie prístupovým kódom alebo ručne</lang>
+			<lang xml:lang="cz">Uzamčení přístupovým kódem nebo ručně</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="20">
+		<name>
+			<lang xml:lang="en">Key or latch operation unlocked</lang>
+			<lang xml:lang="de">Durch Zugangscode oder manuell entriegelt</lang>
+			<lang xml:lang="ru">Открыт ключом или защёлкой</lang>
+			<lang xml:lang="sv">Nyckel-/vred-manövereing upplåst</lang>
+			<lang xml:lang="sk">Odomknutie prístupovým kódom alebo ručne</lang>
+			<lang xml:lang="cz">Odomčení přístupovým kódem nebo ručně</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="21">
+		<name>
+			<lang xml:lang="en">Lock secured</lang>
+			<lang xml:lang="de">Schloss gesichert</lang>
+			<lang xml:lang="ru">Замок закрыт</lang>
+			<lang xml:lang="sv">Lås säkrat</lang>
+			<lang xml:lang="sk">Zamknutie zabezpečené</lang>
+			<lang xml:lang="cz">Zamknutí zabezpečené</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="22">
+		<name>
+			<lang xml:lang="en">Lock unsecured</lang>
+			<lang xml:lang="de">Schloss ungesichert</lang>
+			<lang xml:lang="ru">Замок откыт</lang>
+			<lang xml:lang="sv">Lås osäkrat</lang>
+			<lang xml:lang="sk">Zamknutie nezabezpečené</lang>
+			<lang xml:lang="cz">Zamknutí nezabezpečené</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="23">
+		<name>
+			<lang xml:lang="en">User code added</lang>
+			<lang xml:lang="de">Nutzercode hinzugefügt</lang>
+			<lang xml:lang="ru">Добавлен пользовательский код</lang>
+			<lang xml:lang="sv">Användarkod tillagd</lang>
+			<lang xml:lang="sk">Užívateľský kód pridaný</lang>
+			<lang xml:lang="cz">Uživatelský kód přidán</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="24">
+		<name>
+			<lang xml:lang="en">User code deleted</lang>
+			<lang xml:lang="de">Nutzercode gelöscht</lang>
+			<lang xml:lang="ru">Пользовательский код удалён</lang>
+			<lang xml:lang="sv">Användarkod borttagen</lang>
+			<lang xml:lang="sk">Užívateľský kód odstránený</lang>
+			<lang xml:lang="cz">Uživatelský kód odstraněn</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="25">
+		<name>
+			<lang xml:lang="en">All user codes deleted</lang>
+			<lang xml:lang="de">Alle Nutzercodes gelöscht</lang>
+			<lang xml:lang="ru">Все пользовательские коды удалены</lang>
+			<lang xml:lang="sv">Alla användarkoder borttagna</lang>
+			<lang xml:lang="sk">Všetky užívateľské kódy odstránené</lang>
+			<lang xml:lang="cz">Všechny uživatelské kódy odstraněny</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="26">
+		<name>
+			<lang xml:lang="en">Master code changed</lang>
+			<lang xml:lang="de">Mastercode geändert</lang>
+			<lang xml:lang="ru">Изменён главный код</lang>
+			<lang xml:lang="sv">Masterkod ändrad</lang>
+			<lang xml:lang="sk">Master kód zmenený</lang>
+			<lang xml:lang="cz">Master kód změněn</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="27">
+		<name>
+			<lang xml:lang="en">User code changed</lang>
+			<lang xml:lang="de">Usercode geändert</lang>
+			<lang xml:lang="ru">Изменён пользовательский код</lang>
+			<lang xml:lang="sv">Användarkod ändrad</lang>
+			<lang xml:lang="sk">Užívateľský kód zmenený</lang>
+			<lang xml:lang="cz">Uživatelský kód změněn</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="28">
+		<name>
+			<lang xml:lang="en">Lock reset</lang>
+			<lang xml:lang="de">Schloss zurücksetzen</lang>
+			<lang xml:lang="ru">Сброс замка</lang>
+			<lang xml:lang="sv">Lås återställt</lang>
+			<lang xml:lang="sk">Reset zámku</lang>
+			<lang xml:lang="cz">Reset zámku</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="29">
+		<name>
+			<lang xml:lang="en">Configuration changed</lang>
+			<lang xml:lang="de">Konfiguration geändert</lang>
+			<lang xml:lang="ru">Изменены настройки</lang>
+			<lang xml:lang="sv">Inställningar ändrade</lang>
+			<lang xml:lang="sk">Konfigurácia zmenená</lang>
+			<lang xml:lang="cz">Konfigurace změněna</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="30">
+		<name>
+			<lang xml:lang="en">Low battery</lang>
+			<lang xml:lang="de">Niedriges Batterielevel</lang>
+			<lang xml:lang="ru">Низкий заряд батареек</lang>
+			<lang xml:lang="sv">Låg batterinivå</lang>
+			<lang xml:lang="sk">Slabá batéria</lang>
+			<lang xml:lang="cz">Slabá baterie</lang>
+		</name>
+	</LockEvent>
+	<LockEvent id="31">
+		<name>
+			<lang xml:lang="en">New Battery installed</lang>
+			<lang xml:lang="de">Neue Batterie installiert</lang>
+			<lang xml:lang="ru">Вставлены новые батарейки</lang>
+			<lang xml:lang="sv">Nytt batteri installerat</lang>
+			<lang xml:lang="sk">Nová batéria nainštalovaná</lang>
+			<lang xml:lang="cz">Nová baterie nainstalována</lang>
+		</name>
+	</LockEvent>
+</LockEvents>

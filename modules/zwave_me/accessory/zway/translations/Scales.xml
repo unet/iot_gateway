@@ -1,0 +1,1627 @@
+<?xml version="1.0"?>
+<Scales>
+<Meter id="1">
+		<name>
+			<lang xml:lang="en">Electric</lang>
+			<lang xml:lang="de">Strom</lang>
+			<lang xml:lang="ru">Счётчик электричества</lang>
+			<lang xml:lang="sv">Ström</lang>
+			<lang xml:lang="sk">Spotreba elektriny</lang>
+			<lang xml:lang="cz">Spotřeba elektřiny</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">kWh</lang>
+			<lang xml:lang="de">kWh</lang>
+			<lang xml:lang="ru">кВтЧ</lang>
+			<lang xml:lang="sv">kWh</lang>
+			<lang xml:lang="sk">kWh</lang>
+			<lang xml:lang="cz">kWh</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">kVAh</lang>
+			<lang xml:lang="de">kVAh</lang>
+			<lang xml:lang="ru">кВАЧ</lang>
+			<lang xml:lang="sv">kVAh</lang>
+			<lang xml:lang="sk">kVAh</lang>
+			<lang xml:lang="cz">kVAh</lang>
+		</scale>
+		<scale id="2">
+			<lang xml:lang="en">W</lang>
+			<lang xml:lang="de">W</lang>
+			<lang xml:lang="ru">Вт</lang>
+			<lang xml:lang="sv">W</lang>
+			<lang xml:lang="sk">W</lang>
+			<lang xml:lang="cz">W</lang>
+		</scale>
+		<scale id="3">
+			<lang xml:lang="en">Pulse Count</lang>
+			<lang xml:lang="de">Zählerimpuls</lang>
+			<lang xml:lang="ru">Счётчик импульсов</lang>
+			<lang xml:lang="sv">Pulsvärde</lang>
+			<lang xml:lang="sk">Čítač pulzov</lang>
+			<lang xml:lang="cz">Čítač pulzů</lang>
+		</scale>
+		<scale id="4">
+			<lang xml:lang="en">V</lang>
+			<lang xml:lang="de">V</lang>
+			<lang xml:lang="ru">В</lang>
+			<lang xml:lang="sv">V</lang>
+			<lang xml:lang="sk">V</lang>
+			<lang xml:lang="cz">V</lang>
+		</scale>
+		<scale id="5">
+			<lang xml:lang="en">A</lang>
+			<lang xml:lang="de">A</lang>
+			<lang xml:lang="ru">А</lang>
+			<lang xml:lang="sv">A</lang>
+			<lang xml:lang="sk">A</lang>
+			<lang xml:lang="cz">A</lang>
+		</scale>
+		<scale id="6">
+			<lang xml:lang="en">cosφ</lang>
+			<lang xml:lang="de">cosφ</lang>
+			<lang xml:lang="ru">cosφ</lang>
+			<lang xml:lang="sv">cosφ</lang>
+			<lang xml:lang="sk">Účinník</lang>
+			<lang xml:lang="cz">Účinník</lang>
+		</scale>
+		<scale id="8">
+			<lang xml:lang="en">kVar</lang>
+			<lang xml:lang="de">kVar</lang>
+			<lang xml:lang="ru">kVar</lang>
+			<lang xml:lang="sv">kVar</lang>
+			<lang xml:lang="sk">kVar</lang>
+			<lang xml:lang="cz">kVar</lang>
+		</scale>
+		<scale id="9">
+			<lang xml:lang="en">kVarh</lang>
+			<lang xml:lang="de">kVarh</lang>
+			<lang xml:lang="ru">kVarh</lang>
+			<lang xml:lang="sv">kVarh</lang>
+			<lang xml:lang="sk">kVarh</lang>
+			<lang xml:lang="cz">kVarh</lang>
+		</scale>
+</Meter>
+<Meter id="2">
+		<name>
+			<lang xml:lang="en">Gas</lang>
+			<lang xml:lang="de">Gas</lang>
+			<lang xml:lang="ru">Счётчик газа</lang>
+			<lang xml:lang="sv">Gas</lang>
+			<lang xml:lang="sk">Plyn</lang>
+			<lang xml:lang="cz">Plyn</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Qubic meter</lang>
+			<lang xml:lang="de">Kubikmeter</lang>
+			<lang xml:lang="ru">Кубический метр</lang>
+			<lang xml:lang="sv">kubikmeter</lang>
+			<lang xml:lang="sk">Meter kubický</lang>
+			<lang xml:lang="cz">Metr krychlový</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Cubic feet</lang>
+			<lang xml:lang="de">Kubikfuss</lang>
+			<lang xml:lang="ru">Кубический фут</lang>
+			<lang xml:lang="sv">Kubikfot</lang>
+			<lang xml:lang="sk">Stopa kubická</lang>
+			<lang xml:lang="cz">Stopa kubická</lang>
+		</scale>
+		<scale id="2">
+			<lang xml:lang="en">reserved</lang>
+			<lang xml:lang="de">reserviert</lang>
+			<lang xml:lang="ru">зарезервированно</lang>
+			<lang xml:lang="sv">reserverad</lang>
+			<lang xml:lang="sk">rezervovaný</lang>
+			<lang xml:lang="cz">rezervovaný</lang>
+		</scale>
+		<scale id="3">
+			<lang xml:lang="en">Pulse Count</lang>
+			<lang xml:lang="de">Zählerimpuls</lang>
+			<lang xml:lang="ru">Счётчик импульсов</lang>
+			<lang xml:lang="sv">pulsvärde</lang>
+			<lang xml:lang="sk">Čítač pulzov</lang>
+			<lang xml:lang="cz">Čítač pulzů</lang>
+		</scale>
+</Meter>
+<Meter id="3">
+		<name>
+			<lang xml:lang="en">Water</lang>
+			<lang xml:lang="de">Wasser</lang>
+			<lang xml:lang="ru">Счётчик воды</lang>
+			<lang xml:lang="sv">Vatten</lang>
+			<lang xml:lang="sk">Voda</lang>
+			<lang xml:lang="cz">Voda</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Cubic meter</lang>
+			<lang xml:lang="de">Kubikmeter</lang>
+			<lang xml:lang="ru">Кубический метр</lang>
+			<lang xml:lang="sv">kubikmeter</lang>
+			<lang xml:lang="sk">Meter kubický</lang>
+			<lang xml:lang="cz">Metr krychlový</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Cubic feet</lang>
+			<lang xml:lang="de">Kubikfuss</lang>
+			<lang xml:lang="ru">Кубический фут</lang>
+			<lang xml:lang="sv">Kubikfot</lang>
+			<lang xml:lang="sk">Stopa kubická</lang>
+			<lang xml:lang="cz">Stopa kubická</lang>
+		</scale>
+		<scale id="2">
+			<lang xml:lang="en">US Gallon</lang>
+			<lang xml:lang="de">US Gallone</lang>
+			<lang xml:lang="ru">Американский галлон</lang>
+			<lang xml:lang="sv">US Gallon</lang>
+			<lang xml:lang="sk">US galón</lang>
+			<lang xml:lang="cz">US galon</lang>
+		</scale>
+		<scale id="3">
+			<lang xml:lang="en">Pulse Count</lang>
+			<lang xml:lang="de">Zählerimpuls</lang>
+			<lang xml:lang="ru">Счётчик импульсов</lang>
+			<lang xml:lang="sv">pulsvärde</lang>
+			<lang xml:lang="sk">Čítač pulzov</lang>
+			<lang xml:lang="cz">Čítač pulzů</lang>
+		</scale>
+</Meter>
+<SensorMultilevel id="1">
+		<name>
+			<lang xml:lang="en">Temperature</lang>
+			<lang xml:lang="de">Temperatur</lang>
+			<lang xml:lang="ru">Температура</lang>
+			<lang xml:lang="sv">Temperatur</lang>
+			<lang xml:lang="sk">Teplota</lang>
+			<lang xml:lang="cz">Teplota</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">°C</lang>
+			<lang xml:lang="de">°C</lang>
+			<lang xml:lang="ru">°C</lang>
+			<lang xml:lang="sv">°C</lang>
+			<lang xml:lang="sk">°C</lang>
+			<lang xml:lang="cz">°C</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">°F</lang>
+			<lang xml:lang="de">°F</lang>
+			<lang xml:lang="ru">°F</lang>
+			<lang xml:lang="sv">°F</lang>
+			<lang xml:lang="sk">°F</lang>
+			<lang xml:lang="cz">°F</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="2">
+		<name>
+			<lang xml:lang="en">Generic</lang>
+			<lang xml:lang="de">Generisch</lang>
+			<lang xml:lang="ru">Общий</lang>
+			<lang xml:lang="sv">Generisk</lang>
+			<lang xml:lang="sk">Obecný</lang>
+			<lang xml:lang="cz">Obecný</lang>
+		</name>
+		<scale id="1">
+			<lang xml:lang="en"></lang>
+			<lang xml:lang="de"></lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</scale>
+		<scale id="0">
+			<lang xml:lang="en">%</lang>
+			<lang xml:lang="de">%</lang>
+			<lang xml:lang="ru">%</lang>
+			<lang xml:lang="sv">%</lang>
+			<lang xml:lang="sk">%</lang>
+			<lang xml:lang="cz">%</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="3">
+		<name>
+			<lang xml:lang="en">Luminiscence</lang>
+			<lang xml:lang="de">Helligkeit</lang>
+			<lang xml:lang="ru">Освещённость</lang>
+			<lang xml:lang="sv">Ljus</lang>
+			<lang xml:lang="sk">Luminiscencie</lang>
+			<lang xml:lang="cz">Luminiscence</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">%</lang>
+			<lang xml:lang="de">%</lang>
+			<lang xml:lang="ru">%</lang>
+			<lang xml:lang="sv">%</lang>
+			<lang xml:lang="sk">%</lang>
+			<lang xml:lang="cz">%</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Lux</lang>
+			<lang xml:lang="de">Lux</lang>
+			<lang xml:lang="ru">Люкс</lang>
+			<lang xml:lang="sv">Lux</lang>
+			<lang xml:lang="sk">Lux</lang>
+			<lang xml:lang="cz">Lux</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="4">
+		<name>
+			<lang xml:lang="en">Power</lang>
+			<lang xml:lang="de">Leistung</lang>
+			<lang xml:lang="ru">Мощность</lang>
+			<lang xml:lang="sv">Energi</lang>
+			<lang xml:lang="sk">Výkon</lang>
+			<lang xml:lang="cz">Výkon</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">W</lang>
+			<lang xml:lang="de">W</lang>
+			<lang xml:lang="ru">Вт</lang>
+			<lang xml:lang="sv">W</lang>
+			<lang xml:lang="sk">W</lang>
+			<lang xml:lang="cz">W</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Btu/h</lang>
+			<lang xml:lang="de">Btu/h</lang>
+			<lang xml:lang="ru">BTU/ч</lang>
+			<lang xml:lang="sv">Btu/h</lang>
+			<lang xml:lang="sk">Btu/h</lang>
+			<lang xml:lang="cz">Btu/h</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="5">
+		<name>
+			<lang xml:lang="en">Humidity</lang>
+			<lang xml:lang="de">Feuchtigkeit</lang>
+			<lang xml:lang="ru">Влажность</lang>
+			<lang xml:lang="sv">Luftfuktighet</lang>
+			<lang xml:lang="sk">Vlhkosť</lang>
+			<lang xml:lang="cz">Vlhkost</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">%</lang>
+			<lang xml:lang="de">%</lang>
+			<lang xml:lang="ru">%</lang>
+			<lang xml:lang="sv">%</lang>
+			<lang xml:lang="sk">%</lang>
+			<lang xml:lang="cz">%</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Absolute humidity</lang>
+			<lang xml:lang="de">Absolute Luftfeuchtigkeit</lang>
+			<lang xml:lang="ru">Абсолютная влажность</lang>
+			<lang xml:lang="sv">Absolut luftfuktighet</lang>
+			<lang xml:lang="sk">Absolútna vlhkosť</lang>
+			<lang xml:lang="cz">Absolutní vlhkost</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="6">
+		<name>
+			<lang xml:lang="en">Velocity</lang>
+			<lang xml:lang="de">Wind</lang>
+			<lang xml:lang="ru">Ветер</lang>
+			<lang xml:lang="sv">Vind</lang>
+			<lang xml:lang="sk">Veternosť</lang>
+			<lang xml:lang="cz">Větrnost</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">m/s</lang>
+			<lang xml:lang="de">m/s</lang>
+			<lang xml:lang="ru">м/с</lang>
+			<lang xml:lang="sv">m/s</lang>
+			<lang xml:lang="sk">m/s</lang>
+			<lang xml:lang="cz">m/s</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">mph</lang>
+			<lang xml:lang="de">miles/h</lang>
+			<lang xml:lang="ru">миль/ч</lang>
+			<lang xml:lang="sv">miles/h</lang>
+			<lang xml:lang="sk">míle/h</lang>
+			<lang xml:lang="cz">míle/h</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="7">
+		<name>
+			<lang xml:lang="en">Direction</lang>
+			<lang xml:lang="de">Richtung</lang>
+			<lang xml:lang="ru">Направление</lang>
+			<lang xml:lang="sv">Riktning</lang>
+			<lang xml:lang="sk">Smer</lang>
+			<lang xml:lang="cz">Směr</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">degree</lang>
+			<lang xml:lang="de">Grad</lang>
+			<lang xml:lang="ru">градус</lang>
+			<lang xml:lang="sv">Grad</lang>
+			<lang xml:lang="sk">uhol</lang>
+			<lang xml:lang="cz">úhel</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="8">
+		<name>
+			<lang xml:lang="en">Athmospheric Pressure</lang>
+			<lang xml:lang="de">Luftdruck</lang>
+			<lang xml:lang="ru">Атмосферное давление</lang>
+			<lang xml:lang="sv">Lufttryck</lang>
+			<lang xml:lang="sk">Atmosferický tlak</lang>
+			<lang xml:lang="cz">Atmosférický tlak</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">kPa</lang>
+			<lang xml:lang="de">kPa</lang>
+			<lang xml:lang="ru">кПа</lang>
+			<lang xml:lang="sv">kPa</lang>
+			<lang xml:lang="sk">kPa</lang>
+			<lang xml:lang="cz">kPa</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">inch Mercury</lang>
+			<lang xml:lang="de">mm Quecksilber</lang>
+			<lang xml:lang="ru">мм ртутного столба</lang>
+			<lang xml:lang="sv">mmHg</lang>
+			<lang xml:lang="sk">mm Hg</lang>
+			<lang xml:lang="cz">mm Hg</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="9">
+		<name>
+			<lang xml:lang="en">Barometric Pressure</lang>
+			<lang xml:lang="de">Barometr. Luftdruck</lang>
+			<lang xml:lang="ru">Барометрическое давление</lang>
+			<lang xml:lang="sv">Barometriskt lufttryck</lang>
+			<lang xml:lang="sk">Barometrický tlak</lang>
+			<lang xml:lang="cz">Barometrický tlak</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">kPa</lang>
+			<lang xml:lang="de">kPa</lang>
+			<lang xml:lang="ru">кПа</lang>
+			<lang xml:lang="sv">kPa</lang>
+			<lang xml:lang="sk">kPa</lang>
+			<lang xml:lang="cz">kPa</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">inch Mercury</lang>
+			<lang xml:lang="de">mm Quecksilber</lang>
+			<lang xml:lang="ru">мм ртутного столба</lang>
+			<lang xml:lang="sv">mmHg</lang>
+			<lang xml:lang="sk">mm Hg</lang>
+			<lang xml:lang="cz">mm Hg</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="10">
+		<name>
+			<lang xml:lang="en">Solar Radiation</lang>
+			<lang xml:lang="de">Sonneneinstrahlung</lang>
+			<lang xml:lang="ru">Солнечное излучение</lang>
+			<lang xml:lang="sv">Solinstrålning</lang>
+			<lang xml:lang="sk">Slnečné žiarenie</lang>
+			<lang xml:lang="cz">Sluneční záření</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">W/m2</lang>
+			<lang xml:lang="de">W/m2</lang>
+			<lang xml:lang="ru">Вт/м2</lang>
+			<lang xml:lang="sv">W/m2</lang>
+			<lang xml:lang="sk">W/m2</lang>
+			<lang xml:lang="cz">W/m2</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="11">
+		<name>
+			<lang xml:lang="en">Dew Point</lang>
+			<lang xml:lang="de">Taupunkt</lang>
+			<lang xml:lang="ru">Точка росы</lang>
+			<lang xml:lang="sv">Daggpunkt</lang>
+			<lang xml:lang="sk">Rosný bod</lang>
+			<lang xml:lang="cz">Rosný bod</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">°C</lang>
+			<lang xml:lang="de">°C</lang>
+			<lang xml:lang="ru">°C</lang>
+			<lang xml:lang="sv">°C</lang>
+			<lang xml:lang="sk">°C</lang>
+			<lang xml:lang="cz">°C</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">°F</lang>
+			<lang xml:lang="de">°F</lang>
+			<lang xml:lang="ru">°F</lang>
+			<lang xml:lang="sv">°F</lang>
+			<lang xml:lang="sk">°F</lang>
+			<lang xml:lang="cz">°F</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="12">
+		<name>
+			<lang xml:lang="en">Rain Rate</lang>
+			<lang xml:lang="de">Niederschlag</lang>
+			<lang xml:lang="ru">Датчик дождя</lang>
+			<lang xml:lang="sv">Nederbörd</lang>
+			<lang xml:lang="sk">Zrážky</lang>
+			<lang xml:lang="cz">Srážky</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">mm/h</lang>
+			<lang xml:lang="de">mm/h</lang>
+			<lang xml:lang="ru">мм/ч</lang>
+			<lang xml:lang="sv">mm/h</lang>
+			<lang xml:lang="sk">mm/h</lang>
+			<lang xml:lang="cz">mm/h</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">inch/h</lang>
+			<lang xml:lang="de">inch/h</lang>
+			<lang xml:lang="ru">дюйм/ч</lang>
+			<lang xml:lang="sv">inch/h</lang>
+			<lang xml:lang="sk">palec/h</lang>
+			<lang xml:lang="cz">palec/h</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="13">
+		<name>
+			<lang xml:lang="en">Tide Level</lang>
+			<lang xml:lang="de">Wasserniveau</lang>
+			<lang xml:lang="ru">Уровень воды</lang>
+			<lang xml:lang="sv">Tidvattennivå</lang>
+			<lang xml:lang="sk">Hladina vody</lang>
+			<lang xml:lang="cz">Hladina vody</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">m</lang>
+			<lang xml:lang="de">m</lang>
+			<lang xml:lang="ru">м</lang>
+			<lang xml:lang="sv">m</lang>
+			<lang xml:lang="sk">m</lang>
+			<lang xml:lang="cz">m</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">feet</lang>
+			<lang xml:lang="de">Fuss</lang>
+			<lang xml:lang="ru">футы</lang>
+			<lang xml:lang="sv">fot</lang>
+			<lang xml:lang="sk">stopa</lang>
+			<lang xml:lang="cz">stopa</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="14">
+		<name>
+			<lang xml:lang="en">Weigth</lang>
+			<lang xml:lang="de">Gewicht</lang>
+			<lang xml:lang="ru">Вес</lang>
+			<lang xml:lang="sv">Vikt</lang>
+			<lang xml:lang="sk">Hmotnosť</lang>
+			<lang xml:lang="cz">Hmotnost</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">kg</lang>
+			<lang xml:lang="de">kg</lang>
+			<lang xml:lang="ru">кг</lang>
+			<lang xml:lang="sv">kg</lang>
+			<lang xml:lang="sk">kg</lang>
+			<lang xml:lang="cz">kg</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">pounds</lang>
+			<lang xml:lang="de">Pfund</lang>
+			<lang xml:lang="ru">фунт</lang>
+			<lang xml:lang="sv">pounds</lang>
+			<lang xml:lang="sk">libier</lang>
+			<lang xml:lang="cz">liber</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="15">
+		<name>
+			<lang xml:lang="en">Voltage</lang>
+			<lang xml:lang="de">Spannung</lang>
+			<lang xml:lang="ru">Напряжение</lang>
+			<lang xml:lang="sv">Spänning</lang>
+			<lang xml:lang="sk">Napätie</lang>
+			<lang xml:lang="cz">Napětí</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">V</lang>
+			<lang xml:lang="de">V</lang>
+			<lang xml:lang="ru">В</lang>
+			<lang xml:lang="sv">V</lang>
+			<lang xml:lang="sk">V</lang>
+			<lang xml:lang="cz">V</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">mV</lang>
+			<lang xml:lang="de">mV</lang>
+			<lang xml:lang="ru">мВ</lang>
+			<lang xml:lang="sv">mV</lang>
+			<lang xml:lang="sk">mV</lang>
+			<lang xml:lang="cz">mV</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="16">
+		<name>
+			<lang xml:lang="en">Current</lang>
+			<lang xml:lang="de">Strom</lang>
+			<lang xml:lang="ru">Ток</lang>
+			<lang xml:lang="sv">Ström</lang>
+			<lang xml:lang="sk">Prúd</lang>
+			<lang xml:lang="cz">Proud</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">A</lang>
+			<lang xml:lang="de">A</lang>
+			<lang xml:lang="ru">А</lang>
+			<lang xml:lang="sv">A</lang>
+			<lang xml:lang="sk">A</lang>
+			<lang xml:lang="cz">A</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">mA</lang>
+			<lang xml:lang="de">mA</lang>
+			<lang xml:lang="ru">мА</lang>
+			<lang xml:lang="sv">mA</lang>
+			<lang xml:lang="sk">mA</lang>
+			<lang xml:lang="cz">mA</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="17">
+		<name>
+			<lang xml:lang="en">CO2 Level</lang>
+			<lang xml:lang="de">Kohlendioxid</lang>
+			<lang xml:lang="ru">Уровень CO2</lang>
+			<lang xml:lang="sv">Koldioxidnivå</lang>
+			<lang xml:lang="sk">Úroveň CO2</lang>
+			<lang xml:lang="cz">Úroveň CO2</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">ppm</lang>
+			<lang xml:lang="de">ppm</lang>
+			<lang xml:lang="ru">промилле</lang>
+			<lang xml:lang="sv">ppm</lang>
+			<lang xml:lang="sk">ppm</lang>
+			<lang xml:lang="cz">ppm</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="18">
+		<name>
+			<lang xml:lang="en">Air Flow</lang>
+			<lang xml:lang="de">Luftdurchsatz</lang>
+			<lang xml:lang="ru">Воздушный поток</lang>
+			<lang xml:lang="sv">Luftflöde</lang>
+			<lang xml:lang="sk">Prúd vzduchu</lang>
+			<lang xml:lang="cz">Proud vzduchu</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">m3/h</lang>
+			<lang xml:lang="de">m3/h</lang>
+			<lang xml:lang="ru">м3/ч</lang>
+			<lang xml:lang="sv">m3/h</lang>
+			<lang xml:lang="sk">m3/h</lang>
+			<lang xml:lang="cz">m3/h</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">cfm</lang>
+			<lang xml:lang="de">cfm</lang>
+			<lang xml:lang="ru">кубический фут в минуту</lang>
+			<lang xml:lang="sv">cfm</lang>
+			<lang xml:lang="sk">cfm</lang>
+			<lang xml:lang="cz">cfm</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="19">
+		<name>
+			<lang xml:lang="en">Tank Capacity</lang>
+			<lang xml:lang="de">Tankkapazität</lang>
+			<lang xml:lang="ru">Объем цистерны</lang>
+			<lang xml:lang="sv">Tankkapacitet</lang>
+			<lang xml:lang="sk">Objem nádrže</lang>
+			<lang xml:lang="cz">Objem nádrže</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">l</lang>
+			<lang xml:lang="de">l</lang>
+			<lang xml:lang="ru">литр</lang>
+			<lang xml:lang="sv">l</lang>
+			<lang xml:lang="sk">l</lang>
+			<lang xml:lang="cz">l</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">cbm</lang>
+			<lang xml:lang="de">cbm</lang>
+			<lang xml:lang="ru">кубический метр</lang>
+			<lang xml:lang="sv">cfm</lang>
+			<lang xml:lang="sk">cfm</lang>
+			<lang xml:lang="cz">cfm</lang>
+		</scale>
+		<scale id="2">
+			<lang xml:lang="en">gallons</lang>
+			<lang xml:lang="de">Gallonen</lang>
+			<lang xml:lang="ru">галлон</lang>
+			<lang xml:lang="sv">gallons</lang>
+			<lang xml:lang="sk">galóny</lang>
+			<lang xml:lang="cz">galony</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="20">
+		<name>
+			<lang xml:lang="en">Distance</lang>
+			<lang xml:lang="de">Abstand</lang>
+			<lang xml:lang="ru">Расстояние</lang>
+			<lang xml:lang="sv">Avstånd</lang>
+			<lang xml:lang="sk">Vzdialenosť</lang>
+			<lang xml:lang="cz">Vzdálenost</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">m</lang>
+			<lang xml:lang="de">m</lang>
+			<lang xml:lang="ru">м</lang>
+			<lang xml:lang="sv">m</lang>
+			<lang xml:lang="sk">m</lang>
+			<lang xml:lang="cz">m</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">cm</lang>
+			<lang xml:lang="de">cm</lang>
+			<lang xml:lang="ru">см</lang>
+			<lang xml:lang="sv">cm</lang>
+			<lang xml:lang="sk">cm</lang>
+			<lang xml:lang="cz">cm</lang>
+		</scale>
+		<scale id="2">
+			<lang xml:lang="en">Feet</lang>
+			<lang xml:lang="de">Feet</lang>
+			<lang xml:lang="ru">футы</lang>
+			<lang xml:lang="sv">fot</lang>
+			<lang xml:lang="sk">Stopa</lang>
+			<lang xml:lang="cz">Stopa</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="21">
+		<name>
+			<lang xml:lang="en">Angle Position</lang>
+			<lang xml:lang="de">Winkelabstand</lang>
+			<lang xml:lang="ru">Угловое направление</lang>
+			<lang xml:lang="sv">Vinkelposition</lang>
+			<lang xml:lang="sk">Uhlová vzdialenosť</lang>
+			<lang xml:lang="cz">Úhlová vzdálenost</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">%</lang>
+			<lang xml:lang="de">%</lang>
+			<lang xml:lang="ru">%</lang>
+			<lang xml:lang="sv">%</lang>
+			<lang xml:lang="sk">%</lang>
+			<lang xml:lang="cz">%</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Degree to North Pole</lang>
+			<lang xml:lang="de">Prozent zum Nordpol</lang>
+			<lang xml:lang="ru">Угол на Северный полюс</lang>
+			<lang xml:lang="sv">Grader till nordpol</lang>
+			<lang xml:lang="sk">Uhol k severnému pólu</lang>
+			<lang xml:lang="cz">Úhel k severnímu pólu</lang>
+		</scale>
+		<scale id="2">
+			<lang xml:lang="en">Degree to South Pole</lang>
+			<lang xml:lang="de">Prozent zum Südpol</lang>
+			<lang xml:lang="ru">Угол на Южный полюс</lang>
+			<lang xml:lang="sv">Grader till sydpol</lang>
+			<lang xml:lang="sk">Uhol k južnému pólu</lang>
+			<lang xml:lang="cz">Úhel k jižnímu pólu</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="22">
+		<name>
+			<lang xml:lang="en">Rotation</lang>
+			<lang xml:lang="de">Rotation</lang>
+			<lang xml:lang="ru">Поворот</lang>
+			<lang xml:lang="sv">Rotation</lang>
+			<lang xml:lang="sk">Rotácia</lang>
+			<lang xml:lang="cz">Rotace</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">rpm</lang>
+			<lang xml:lang="de">U/min</lang>
+			<lang xml:lang="ru">обороты в минуту</lang>
+			<lang xml:lang="sv">rpm</lang>
+			<lang xml:lang="sk">rpm</lang>
+			<lang xml:lang="cz">rpm</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Hz</lang>
+			<lang xml:lang="de">Hz</lang>
+			<lang xml:lang="ru">Гц</lang>
+			<lang xml:lang="sv">Hz</lang>
+			<lang xml:lang="sk">Hz</lang>
+			<lang xml:lang="cz">Hz</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="23">
+		<name>
+			<lang xml:lang="en">Water temperature</lang>
+			<lang xml:lang="de">Wassertemperatur</lang>
+			<lang xml:lang="ru">Температура воды</lang>
+			<lang xml:lang="sv">Vattentemperatur</lang>
+			<lang xml:lang="sk">Teplota vody</lang>
+			<lang xml:lang="cz">Teplota vody</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">°C</lang>
+			<lang xml:lang="de">°C</lang>
+			<lang xml:lang="ru">°C</lang>
+			<lang xml:lang="sv">°C</lang>
+			<lang xml:lang="sk">°C</lang>
+			<lang xml:lang="cz">°C</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">°F</lang>
+			<lang xml:lang="de">°F</lang>
+			<lang xml:lang="ru">°F</lang>
+			<lang xml:lang="sv">°F</lang>
+			<lang xml:lang="sk">°F</lang>
+			<lang xml:lang="cz">°F</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="24">
+		<name>
+			<lang xml:lang="en">Soil temperature</lang>
+			<lang xml:lang="de">Bodentemperatur</lang>
+			<lang xml:lang="ru">Температура почвы</lang>
+			<lang xml:lang="sv">Jordtemperatur</lang>
+			<lang xml:lang="sk">Teplota pôdy</lang>
+			<lang xml:lang="cz">Teplota půdy</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">°C</lang>
+			<lang xml:lang="de">°C</lang>
+			<lang xml:lang="ru">°c</lang>
+			<lang xml:lang="sv">°C</lang>
+			<lang xml:lang="sk">°C</lang>
+			<lang xml:lang="cz">°C</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">°F</lang>
+			<lang xml:lang="de">°F</lang>
+			<lang xml:lang="ru">°F</lang>
+			<lang xml:lang="sv">°F</lang>
+			<lang xml:lang="sk">°F</lang>
+			<lang xml:lang="cz">°F</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="25">
+		<name>
+			<lang xml:lang="en">Seismic intensity</lang>
+			<lang xml:lang="de">Seismische Erschütterung</lang>
+			<lang xml:lang="ru">Сейсмическая интенсивность</lang>
+			<lang xml:lang="sv">Seismisk intensitet</lang>
+			<lang xml:lang="sk">Seizmická intenzita</lang>
+			<lang xml:lang="cz">Seizmická intenzita</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Mercalli</lang>
+			<lang xml:lang="de">Mercalli</lang>
+			<lang xml:lang="ru">Mercalli</lang>
+			<lang xml:lang="sv">Mercalli</lang>
+			<lang xml:lang="sk">Mercalli</lang>
+			<lang xml:lang="cz">Mercalli</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">European Macroseismic</lang>
+			<lang xml:lang="de">Europäische Makroseismische Skale</lang>
+			<lang xml:lang="ru">European Macroseismic</lang>
+			<lang xml:lang="sv">European Macroseismic</lang>
+			<lang xml:lang="sk">Európska Makroseizmická stupnica</lang>
+			<lang xml:lang="cz">Evropská makroseizmické stupnice</lang>
+		</scale>
+		<scale id="2">
+			<lang xml:lang="en">Liedu</lang>
+			<lang xml:lang="de">Liedu</lang>
+			<lang xml:lang="ru">Liedu</lang>
+			<lang xml:lang="sv">Liedu</lang>
+			<lang xml:lang="sk">Liedu</lang>
+			<lang xml:lang="cz">Liedu</lang>
+		</scale>
+		<scale id="3">
+			<lang xml:lang="en">Shindo</lang>
+			<lang xml:lang="de">Shindo</lang>
+			<lang xml:lang="ru">Shindo</lang>
+			<lang xml:lang="sv">Shindo</lang>
+			<lang xml:lang="sk">Shindo</lang>
+			<lang xml:lang="cz">Shindo</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="26">
+		<name>
+			<lang xml:lang="en">Seismic magnitude</lang>
+			<lang xml:lang="de">Seismische Größe</lang>
+			<lang xml:lang="ru">Сейсмическая магнитуда</lang>
+			<lang xml:lang="sv">Seismisk magnitud</lang>
+			<lang xml:lang="sk">Seizmická magnitúda</lang>
+			<lang xml:lang="cz">Seizmická magnituda</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Local</lang>
+			<lang xml:lang="de">Lokal</lang>
+			<lang xml:lang="ru">Локальная</lang>
+			<lang xml:lang="sv">Lokal</lang>
+			<lang xml:lang="sk">Lokal</lang>
+			<lang xml:lang="cz">Lokal</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Moment</lang>
+			<lang xml:lang="de">Moment</lang>
+			<lang xml:lang="ru">Моментальная</lang>
+			<lang xml:lang="sv">Moment</lang>
+			<lang xml:lang="sk">Moment</lang>
+			<lang xml:lang="cz">Moment</lang>
+		</scale>
+		<scale id="2">
+			<lang xml:lang="en">Surface wave</lang>
+			<lang xml:lang="de">Oberflächenwelle</lang>
+			<lang xml:lang="ru">Поверхностная волна</lang>
+			<lang xml:lang="sv">Ytvåg</lang>
+			<lang xml:lang="sk">Povrchové vlny</lang>
+			<lang xml:lang="cz">Povrchové vlny</lang>
+		</scale>
+		<scale id="3">
+			<lang xml:lang="en">Body wave</lang>
+			<lang xml:lang="de">Körperwelle</lang>
+			<lang xml:lang="ru">Объёмная волна</lang>
+			<lang xml:lang="sv">Body wave</lang>
+			<lang xml:lang="sk">Telo vlny</lang>
+			<lang xml:lang="cz">Tělo vlny</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="27">
+		<name>
+			<lang xml:lang="en">Ultraviolet</lang>
+			<lang xml:lang="de">Ultraviolet</lang>
+			<lang xml:lang="ru">Ультрафиолет</lang>
+			<lang xml:lang="sv">Ultraviolet</lang>
+			<lang xml:lang="sk">Ultrafialová</lang>
+			<lang xml:lang="cz">Ultrafialová</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">UV index</lang>
+			<lang xml:lang="de">UV Index</lang>
+			<lang xml:lang="ru">Индекс УФ</lang>
+			<lang xml:lang="sv">UV index</lang>
+			<lang xml:lang="sk">UV index</lang>
+			<lang xml:lang="cz">UV index</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="28">
+		<name>
+			<lang xml:lang="en">Electrical resistivity</lang>
+			<lang xml:lang="de">Elektrischer Widerstand</lang>
+			<lang xml:lang="ru">Электрическое сопротивление</lang>
+			<lang xml:lang="sv">Elektriskt motstånd</lang>
+			<lang xml:lang="sk">Elektrická rezistivita</lang>
+			<lang xml:lang="cz">Elektrická rezistivita</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Ωm</lang>
+			<lang xml:lang="de">Ohm</lang>
+			<lang xml:lang="ru">Ом м</lang>
+			<lang xml:lang="sv">Ohm</lang>
+			<lang xml:lang="sk">Ωm</lang>
+			<lang xml:lang="cz">Ωm</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="29">
+		<name>
+			<lang xml:lang="en">Electrical conductivity</lang>
+			<lang xml:lang="de">Elektrische Leitfähigkeit</lang>
+			<lang xml:lang="ru">Электрическая проводимость</lang>
+			<lang xml:lang="sv">Elektridk konduktivitet</lang>
+			<lang xml:lang="sk">Elektrická vodivosť</lang>
+			<lang xml:lang="cz">Elektrická vodivost</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">siemens per metre</lang>
+			<lang xml:lang="de">Siemens pro Meter</lang>
+			<lang xml:lang="ru">сименс/м</lang>
+			<lang xml:lang="sv">siemens per metre</lang>
+			<lang xml:lang="sk">Siemens na meter</lang>
+			<lang xml:lang="cz">Siemens na metr</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="30">
+		<name>
+			<lang xml:lang="en">Loudness</lang>
+			<lang xml:lang="de">Lautstärke</lang>
+			<lang xml:lang="ru">Громкость</lang>
+			<lang xml:lang="sv">Ljudnivå</lang>
+			<lang xml:lang="sk">Hlasitosť</lang>
+			<lang xml:lang="cz">Hlasitost</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Absolute loudness (dB)</lang>
+			<lang xml:lang="de">Absolute Lautstärke (dB)</lang>
+			<lang xml:lang="ru">Абсолютная громкость (дБ)</lang>
+			<lang xml:lang="sv">Absolut ljudnivå (dB)</lang>
+			<lang xml:lang="sk">Absolutná hlasitosť (dB)</lang>
+			<lang xml:lang="cz">Absolutní hlasitost (dB)</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">A-weighted decibels (dBA)</lang>
+			<lang xml:lang="de">A-bewertete Dezibel (dBA)</lang>
+			<lang xml:lang="ru">А-взвешенные децибеллы (дБА)</lang>
+			<lang xml:lang="sv">A-vägd decibel (dBA)</lang>
+			<lang xml:lang="sk">А-vážené decibely (dBA)</lang>
+			<lang xml:lang="cz">А-vážené decibely (dBA)</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="31">
+		<name>
+			<lang xml:lang="en">Moisture</lang>
+			<lang xml:lang="de">Feuchtigkeit</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Fukt</lang>
+			<lang xml:lang="sk">Vlhkosť</lang>
+			<lang xml:lang="cz">Vlhkost</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">%</lang>
+			<lang xml:lang="de">%</lang>
+			<lang xml:lang="ru">%</lang>
+			<lang xml:lang="sv">%</lang>
+			<lang xml:lang="sk">%</lang>
+			<lang xml:lang="cz">%</lang>
+		</scale>
+
+		<scale id="1">
+			<lang xml:lang="en">Volume water content (m3/m3)</lang>
+			<lang xml:lang="de">Volumen Wassergehalt (m3/m3)</lang>
+			<lang xml:lang="ru"></lang>
+			<lang xml:lang="sv">Volume water content (m3/m3)</lang>
+			<lang xml:lang="sk">Obsah objemu vody (m3/m3)</lang>
+			<lang xml:lang="cz">Obsah objemu vody (m3/m3)</lang>
+		</scale>
+
+		<scale id="2">
+			<lang xml:lang="en">Impedance (kΩ)</lang>
+			<lang xml:lang="de">Scheinwiderstand (kΩ)</lang>
+			<lang xml:lang="ru">Импеданс (kΩ)</lang>
+			<lang xml:lang="sv">Impedance (kΩ)</lang>
+			<lang xml:lang="sk">Impedancia (kΩ)</lang>
+			<lang xml:lang="cz">Impedancia (kΩ)</lang>
+		</scale>
+
+		<scale id="3">
+			<lang xml:lang="en">Water activity (aw)</lang>
+			<lang xml:lang="de">Wasseraktivität (aw)</lang>
+			<lang xml:lang="ru">Water activity (aw)</lang>
+			<lang xml:lang="sv">Water activity (aw)</lang>
+			<lang xml:lang="sk">Aktivita vody (aw)</lang>
+			<lang xml:lang="cz">Aktivita vody (aw)</lang>
+		</scale>
+
+</SensorMultilevel>
+<SensorMultilevel id="32">
+		<name>
+			<lang xml:lang="en">Frequency</lang>
+			<lang xml:lang="de">Frequenz</lang>
+			<lang xml:lang="ru">Частота</lang>
+			<lang xml:lang="sv">Frekvens</lang>
+			<lang xml:lang="sk">Frekvencia</lang>
+			<lang xml:lang="cz">Frekvence</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Hz</lang>
+			<lang xml:lang="de">Hz</lang>
+			<lang xml:lang="ru">Гц</lang>
+			<lang xml:lang="sv">Hz</lang>
+			<lang xml:lang="sk">Hz</lang>
+			<lang xml:lang="cz">Hz</lang>
+		</scale>
+
+		<scale id="1">
+			<lang xml:lang="en">kHz</lang>
+			<lang xml:lang="de">kHz</lang>
+			<lang xml:lang="ru">кГц</lang>
+			<lang xml:lang="sv">kHz</lang>
+			<lang xml:lang="sk">kHz</lang>
+			<lang xml:lang="cz">kHz</lang>
+		</scale>
+
+</SensorMultilevel>
+<SensorMultilevel id="33">
+		<name>
+			<lang xml:lang="en">Time</lang>
+			<lang xml:lang="de">Zeit</lang>
+			<lang xml:lang="ru">Время</lang>
+			<lang xml:lang="sv">Tid</lang>
+			<lang xml:lang="sk">Čas</lang>
+			<lang xml:lang="cz">Čas</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Seconds</lang>
+			<lang xml:lang="de">Sekunden</lang>
+			<lang xml:lang="ru">Секунды</lang>
+			<lang xml:lang="sv">Sekunder</lang>
+			<lang xml:lang="sk">Sekundy</lang>
+			<lang xml:lang="cz">Sekundy</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="34">
+		<name>
+			<lang xml:lang="en">Target Temperature</lang>
+			<lang xml:lang="de">Soll-Temperatur</lang>
+			<lang xml:lang="ru">Температура назначения</lang>
+			<lang xml:lang="sv">Måltemperatur</lang>
+			<lang xml:lang="sk">Nastavená teplota</lang>
+			<lang xml:lang="cz">Nastavená teplota</lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">°C</lang>
+			<lang xml:lang="de">°C</lang>
+			<lang xml:lang="ru">°C</lang>
+			<lang xml:lang="sv">°C</lang>
+			<lang xml:lang="sk">°C</lang>
+			<lang xml:lang="cz">°C</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">°F</lang>
+			<lang xml:lang="de">°F</lang>
+			<lang xml:lang="ru">°F</lang>
+			<lang xml:lang="sv">°F</lang>
+			<lang xml:lang="sk">°F</lang>
+			<lang xml:lang="cz">°F</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="35">
+		<name>
+			<lang xml:lang="en">Particulate Matter</lang>
+			<lang xml:lang="de">Feinstaub</lang>
+			<lang xml:lang="ru">Твердые частицы</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">mol/m3</lang>
+			<lang xml:lang="de">mol/m3</lang>
+			<lang xml:lang="ru">моль/м3</lang>
+			<lang xml:lang="sv">mol/m3</lang>
+			<lang xml:lang="sk">mol/m3</lang>
+			<lang xml:lang="cz">mol/m3</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">μg/m3</lang>
+			<lang xml:lang="de">μg/m3</lang>
+			<lang xml:lang="ru">мкг/м3</lang>
+			<lang xml:lang="sv">μg/m3</lang>
+			<lang xml:lang="sk">μg/m3</lang>
+			<lang xml:lang="cz">μg/m3</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="36">
+		<name>
+			<lang xml:lang="en">Formaldehyde (CH2O)</lang>
+			<lang xml:lang="de">Formaldehydgehalt (CH2O)</lang>
+			<lang xml:lang="ru">Содержание формальдегида (CH2O)</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">mol/m3</lang>
+			<lang xml:lang="de">mol/m3</lang>
+			<lang xml:lang="ru">моль/м3</lang>
+			<lang xml:lang="sv">mol/m3</lang>
+			<lang xml:lang="sk">mol/m3</lang>
+			<lang xml:lang="cz">mol/m3</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="37">
+		<name>
+			<lang xml:lang="en">Radon Concentration</lang>
+			<lang xml:lang="de">Radonkonzentration</lang>
+			<lang xml:lang="ru">Концентрация радона</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">bq/m3</lang>
+			<lang xml:lang="de">bq/m3</lang>
+			<lang xml:lang="ru">Бк/м3</lang>
+			<lang xml:lang="sv">bq/m3</lang>
+			<lang xml:lang="sk">bq/m3</lang>
+			<lang xml:lang="cz">bq/m3</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">pCi/L</lang>
+			<lang xml:lang="de">pCi/L</lang>
+			<lang xml:lang="ru">пКи/л</lang>
+			<lang xml:lang="sv">pCi/L</lang>
+			<lang xml:lang="sk">pCi/L</lang>
+			<lang xml:lang="cz">pCi/L</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="38">
+		<name>
+			<lang xml:lang="en">Methane Density (CH4)</lang>
+			<lang xml:lang="de">Methangehalt (CH4)</lang>
+			<lang xml:lang="ru">Плотность метана (CH4)</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">mol/m3</lang>
+			<lang xml:lang="de">mol/m3</lang>
+			<lang xml:lang="ru">моль/м3</lang>
+			<lang xml:lang="sv">mol/m3</lang>
+			<lang xml:lang="sk">mol/m3</lang>
+			<lang xml:lang="cz">mol/m3</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="39">
+		<name>
+			<lang xml:lang="en">Volatile Organic Compound (VOC)</lang>
+			<lang xml:lang="de">Flüchtige Organische Verbindungen (VOC)</lang>
+			<lang xml:lang="ru">Летучие органические соединения (VOC)</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">mol/m3</lang>
+			<lang xml:lang="de">mol/m3</lang>
+			<lang xml:lang="ru">моль/м3</lang>
+			<lang xml:lang="sv">mol/m3</lang>
+			<lang xml:lang="sk">mol/m3</lang>
+			<lang xml:lang="cz">mol/m3</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="40">
+		<name>
+			<lang xml:lang="en">Carbon Monoxide (CO)</lang>
+			<lang xml:lang="de">Kohlenmonoxidgehalt (CO)</lang>
+			<lang xml:lang="ru">Содержание оксида углерода (CO)</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">mol/m3</lang>
+			<lang xml:lang="de">mol/m3</lang>
+			<lang xml:lang="ru">моль/м3</lang>
+			<lang xml:lang="sv">mol/m3</lang>
+			<lang xml:lang="sk">mol/m3</lang>
+			<lang xml:lang="cz">mol/m3</lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">ppm</lang>
+			<lang xml:lang="de">ppm</lang>
+			<lang xml:lang="ru">ppm</lang>
+			<lang xml:lang="sv">ppm</lang>
+			<lang xml:lang="sk">ppm</lang>
+			<lang xml:lang="cz">ppm</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="41">
+		<name>
+			<lang xml:lang="en">Soil Humidity</lang>
+			<lang xml:lang="de">Bodenfeuchte</lang>
+			<lang xml:lang="ru">Влажность почвы</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">%</lang>
+			<lang xml:lang="de">%</lang>
+			<lang xml:lang="ru">%</lang>
+			<lang xml:lang="sv">%</lang>
+			<lang xml:lang="sk">%</lang>
+			<lang xml:lang="cz">%</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="42">
+		<name>
+			<lang xml:lang="en">Soil Reactivity</lang>
+			<lang xml:lang="de">Bodenreaktivität</lang>
+			<lang xml:lang="ru">Химическая активность почвы</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">pH</lang>
+			<lang xml:lang="de">pH</lang>
+			<lang xml:lang="ru">pH</lang>
+			<lang xml:lang="sv">pH</lang>
+			<lang xml:lang="sk">pH</lang>
+			<lang xml:lang="cz">pH</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="43">
+		<name>
+			<lang xml:lang="en">Soil Salinity</lang>
+			<lang xml:lang="de">Bodensalzgehalt</lang>
+			<lang xml:lang="ru">Соленость почвы</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">mol/m3</lang>
+			<lang xml:lang="de">mol/m3</lang>
+			<lang xml:lang="ru">моль/м3</lang>
+			<lang xml:lang="sv">mol/m3</lang>
+			<lang xml:lang="sk">mol/m3</lang>
+			<lang xml:lang="cz">mol/m3</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="44">
+		<name>
+			<lang xml:lang="en">Heart Rate</lang>
+			<lang xml:lang="de">Herzrate</lang>
+			<lang xml:lang="ru">Пульс</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Bpm</lang>
+			<lang xml:lang="de">Bpm</lang>
+			<lang xml:lang="ru">ударов/мин</lang>
+			<lang xml:lang="sv">Bpm</lang>
+			<lang xml:lang="sk">Bpm</lang>
+			<lang xml:lang="cz">Bpm</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="45">
+		<name>
+			<lang xml:lang="en">Blood Pressure</lang>
+			<lang xml:lang="de">Blutdruck</lang>
+			<lang xml:lang="ru">Кровяное давление</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Systolic (mmHg)</lang>
+			<lang xml:lang="de">Systolischen (mmHg)</lang>
+			<lang xml:lang="ru">Систолическое (мм рт.ст.)</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</scale>
+		<scale id="1">
+			<lang xml:lang="en">Diastolic (mmHg)</lang>
+			<lang xml:lang="de">Diastolische (mmHg)</lang>
+			<lang xml:lang="ru">Диастолическое (мм рт.ст.)</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="46">
+		<name>
+			<lang xml:lang="en">Muscle Mass</lang>
+			<lang xml:lang="de">Muskelmasse</lang>
+			<lang xml:lang="ru">Мышечная масса</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Kg</lang>
+			<lang xml:lang="de">Kg</lang>
+			<lang xml:lang="ru">кг</lang>
+			<lang xml:lang="sv">Kg</lang>
+			<lang xml:lang="sk">Kg</lang>
+			<lang xml:lang="cz">Kg</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="47">
+		<name>
+			<lang xml:lang="en">Fat Mass</lang>
+			<lang xml:lang="de">Fettmasse</lang>
+			<lang xml:lang="ru">Жировая масса</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Kg</lang>
+			<lang xml:lang="de">Kg</lang>
+			<lang xml:lang="ru">кг</lang>
+			<lang xml:lang="sv">Kg</lang>
+			<lang xml:lang="sk">Kg</lang>
+			<lang xml:lang="cz">Kg</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="48">
+		<name>
+			<lang xml:lang="en">Bone Mass</lang>
+			<lang xml:lang="de">Knochenmasse</lang>
+			<lang xml:lang="ru">Масса скелета</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Kg</lang>
+			<lang xml:lang="de">Kg</lang>
+			<lang xml:lang="ru">кг</lang>
+			<lang xml:lang="sv">Kg</lang>
+			<lang xml:lang="sk">Kg</lang>
+			<lang xml:lang="cz">Kg</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="49">
+		<name>
+			<lang xml:lang="en">Total Body Water</lang>
+			<lang xml:lang="de">Gesamtkörperwasser</lang>
+			<lang xml:lang="ru">Масса воды в организме</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">Kg</lang>
+			<lang xml:lang="de">Kg</lang>
+			<lang xml:lang="ru">кг</lang>
+			<lang xml:lang="sv">Kg</lang>
+			<lang xml:lang="sk">Kg</lang>
+			<lang xml:lang="cz">Kg</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="50">
+		<name>
+			<lang xml:lang="en">Basic Metabolic Rate</lang>
+			<lang xml:lang="de">Grundumsatz</lang>
+			<lang xml:lang="ru">Скорость метаболизма</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">J</lang>
+			<lang xml:lang="de">J</lang>
+			<lang xml:lang="ru">Дж</lang>
+			<lang xml:lang="sv">J</lang>
+			<lang xml:lang="sk">J</lang>
+			<lang xml:lang="cz">J</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="51">
+		<name>
+			<lang xml:lang="en">Body Mass Index</lang>
+			<lang xml:lang="de">Body-Mass-Index</lang>
+			<lang xml:lang="ru">Индекс массы тела</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">BMI</lang>
+			<lang xml:lang="de">BMI</lang>
+			<lang xml:lang="ru">ИМТ</lang>
+			<lang xml:lang="sv">BMI</lang>
+			<lang xml:lang="sk">BMI</lang>
+			<lang xml:lang="cz">BMI</lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="52">
+		<name>
+			<lang xml:lang="en">Acceleration￼X-axis</lang>
+			<lang xml:lang="de">Beschleunigung X-Achse</lang>
+			<lang xml:lang="ru">Ускорение по оси X</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">m/s2</lang>
+			<lang xml:lang="de">m/s2</lang>
+			<lang xml:lang="ru">м/с2</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="53">
+		<name>
+			<lang xml:lang="en">Acceleration￼Y-axis</lang>
+			<lang xml:lang="de">Beschleunigung Y-Achse</lang>
+			<lang xml:lang="ru">Ускорение по оси Y</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">m/s2</lang>
+			<lang xml:lang="de">m/s2</lang>
+			<lang xml:lang="ru">м/с2</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="54">
+		<name>
+			<lang xml:lang="en">Acceleration￼Z-axis</lang>
+			<lang xml:lang="de">Beschleunigung Z-Achse</lang>
+			<lang xml:lang="ru">Ускорение по оси Z</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">m/s2</lang>
+			<lang xml:lang="de">m/s2</lang>
+			<lang xml:lang="ru">м/с2</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</scale>
+</SensorMultilevel>
+<SensorMultilevel id="55">
+		<name>
+
+			<lang xml:lang="en">Smoke Density</lang>
+			<lang xml:lang="de"></lang>
+			<lang xml:lang="ru">Задымление</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<scale id="0">
+			<lang xml:lang="en">%</lang>
+			<lang xml:lang="de">%</lang>
+			<lang xml:lang="ru">%</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+
+		</scale>
+</SensorMultilevel>
+<SensorBinary id="1">
+		<name>
+			<lang xml:lang="en">General purpose</lang>
+			<lang xml:lang="de">Allgemeine Anwendung</lang>
+			<lang xml:lang="ru">Общий</lang>
+			<lang xml:lang="sv">Generell tillämpning</lang>
+			<lang xml:lang="sk">Všeobecné aplikácie</lang>
+			<lang xml:lang="cz">Obecné aplikace</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="2">
+		<name>
+			<lang xml:lang="en">Smoke</lang>
+			<lang xml:lang="de">Rauch</lang>
+			<lang xml:lang="ru">Дым</lang>
+			<lang xml:lang="sv">Rök</lang>
+			<lang xml:lang="sk">Dym</lang>
+			<lang xml:lang="cz">Kouř</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="3">
+		<name>
+			<lang xml:lang="en">CO</lang>
+			<lang xml:lang="de">CO</lang>
+			<lang xml:lang="ru">CO</lang>
+			<lang xml:lang="sv">CO</lang>
+			<lang xml:lang="sk">CO</lang>
+			<lang xml:lang="cz">CO</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="4">
+		<name>
+			<lang xml:lang="en">CO2</lang>
+			<lang xml:lang="de">CO2</lang>
+			<lang xml:lang="ru">CO2</lang>
+			<lang xml:lang="sv">CO2</lang>
+			<lang xml:lang="sk">CO2</lang>
+			<lang xml:lang="cz">CO2</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="5">
+		<name>
+			<lang xml:lang="en">Heat</lang>
+			<lang xml:lang="de">Wärme</lang>
+			<lang xml:lang="ru">Перегрев</lang>
+			<lang xml:lang="sv">Värme</lang>
+			<lang xml:lang="sk">Teplo</lang>
+			<lang xml:lang="cz">Teplo</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="6">
+		<name>
+			<lang xml:lang="en">Water</lang>
+			<lang xml:lang="de">Wasser</lang>
+			<lang xml:lang="ru">Протечка</lang>
+			<lang xml:lang="sv">Vatten</lang>
+			<lang xml:lang="sk">Voda</lang>
+			<lang xml:lang="cz">Voda</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="7">
+		<name>
+			<lang xml:lang="en">Freeze</lang>
+			<lang xml:lang="de">Frieren</lang>
+			<lang xml:lang="ru">Замерзание</lang>
+			<lang xml:lang="sv">Frys</lang>
+			<lang xml:lang="sk">Mráz</lang>
+			<lang xml:lang="cz">Mráz</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="8">
+		<name>
+			<lang xml:lang="en">Tamper</lang>
+			<lang xml:lang="de">Erschütterung</lang>
+			<lang xml:lang="ru">Вмешательство</lang>
+			<lang xml:lang="sv">Manipulering</lang>
+			<lang xml:lang="sk">Otras</lang>
+			<lang xml:lang="cz">Otřes</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="9">
+		<name>
+			<lang xml:lang="en">Aux</lang>
+			<lang xml:lang="de">Aux</lang>
+			<lang xml:lang="ru">Вспомогательный</lang>
+			<lang xml:lang="sv">Aux</lang>
+			<lang xml:lang="sk">Aux</lang>
+			<lang xml:lang="cz">Aux</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="10">
+		<name>
+			<lang xml:lang="en">Door/Window</lang>
+			<lang xml:lang="de">Tür/Fenster</lang>
+			<lang xml:lang="ru">Окно/дверь</lang>
+			<lang xml:lang="sv">Dörr/Fönster</lang>
+			<lang xml:lang="sk">Dvere/Okno</lang>
+			<lang xml:lang="cz">Dvere/Okno</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="11">
+		<name>
+			<lang xml:lang="en">Tilt</lang>
+			<lang xml:lang="de">Neigung</lang>
+			<lang xml:lang="ru">Наклон</lang>
+			<lang xml:lang="sv">Tilt</lang>
+			<lang xml:lang="sk">Sklon</lang>
+			<lang xml:lang="cz">Sklon</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="12">
+		<name>
+			<lang xml:lang="en">Motion</lang>
+			<lang xml:lang="de">Bewegung</lang>
+			<lang xml:lang="ru">Движение</lang>
+			<lang xml:lang="sv">Rörelse</lang>
+			<lang xml:lang="sk">Pohyb</lang>
+			<lang xml:lang="cz">Pohyb</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="13">
+		<name>
+			<lang xml:lang="en">Glass Break</lang>
+			<lang xml:lang="de">Glasbruch</lang>
+			<lang xml:lang="ru">Разбитие стекла</lang>
+			<lang xml:lang="sv">Glass krossat</lang>
+			<lang xml:lang="sk">Rozbitie skla</lang>
+			<lang xml:lang="cz">Rozbití skla</lang>
+		</name>
+</SensorBinary>
+<SensorBinary id="255">
+		<name>
+			<lang xml:lang="en">First supported Sensor Type</lang>
+			<lang xml:lang="de">Erster unterstützter Sensortyp</lang>
+			<lang xml:lang="ru">Первый поддерживаемый тип датчика</lang>
+			<lang xml:lang="sv">Första sensortypen som stödjs</lang>
+			<lang xml:lang="sk">Prvé podporované typy senzorov</lang>
+			<lang xml:lang="cz">Prvé podporované typy senzorov</lang>
+		</name>
+</SensorBinary>
+</Scales>

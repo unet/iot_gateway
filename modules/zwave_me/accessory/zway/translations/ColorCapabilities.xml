@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<ColorCapabilities>
+	<Capability id="0x00">
+		<name>
+			<lang xml:lang="en">Soft White</lang>
+			<lang xml:lang="de">Warmes Weis</lang>
+			<lang xml:lang="sv">Varmvit</lang>
+			<lang xml:lang="sk">Teplá biela</lang>
+			<lang xml:lang="cz">Teplá bílá</lang>
+		</name>
+	</Capability>
+	<Capability id="0x01">
+		<name>
+			<lang xml:lang="en">Cold White</lang>
+			<lang xml:lang="de">Kaltes Weis</lang>
+			<lang xml:lang="sv">Kallvit</lang>
+			<lang xml:lang="sk">Studená biela</lang>
+			<lang xml:lang="cz">Studená bílá</lang>
+		</name>
+	</Capability>
+	<Capability id="0x02">
+		<name>
+			<lang xml:lang="en">Red</lang>
+			<lang xml:lang="de">Rot</lang>
+			<lang xml:lang="sv">Röd</lang>
+			<lang xml:lang="sk">Červená</lang>
+			<lang xml:lang="cz">Červená</lang>
+		</name>
+	</Capability>
+	<Capability id="0x03">
+		<name>
+			<lang xml:lang="en">Green</lang>
+			<lang xml:lang="de">Grün</lang>
+			<lang xml:lang="sv">Grön</lang>
+			<lang xml:lang="sk">Zelená</lang>
+			<lang xml:lang="cz">Zelená</lang>
+		</name>
+	</Capability>
+	<Capability id="0x04">
+		<name>
+			<lang xml:lang="en">Blue</lang>
+			<lang xml:lang="de">Blau</lang>
+			<lang xml:lang="sv">Blå</lang>
+			<lang xml:lang="sk">Modrá</lang>
+			<lang xml:lang="cz">Modrá</lang>
+		</name>
+	</Capability>
+	<Capability id="0x05">
+		<name>
+			<lang xml:lang="en">Amber</lang>
+			<lang xml:lang="de">Bernstein</lang>
+			<lang xml:lang="sv">Bärnsten</lang>
+			<lang xml:lang="sk">Jantárová</lang>
+			<lang xml:lang="cz">Jantárová</lang>
+		</name>
+	</Capability>
+	<Capability id="0x06">
+		<name>
+			<lang xml:lang="en">Cyan</lang>
+			<lang xml:lang="de">Cyan</lang>
+			<lang xml:lang="sv">Cyan</lang>
+			<lang xml:lang="sk">Tyrkysová</lang>
+			<lang xml:lang="cz">Tyrkysová</lang>
+		</name>
+	</Capability>
+	<Capability id="0x07">
+		<name>
+			<lang xml:lang="en">Purple</lang>
+			<lang xml:lang="de">Lila</lang>
+			<lang xml:lang="sv">Lila</lang>
+			<lang xml:lang="sk">Fialová</lang>
+			<lang xml:lang="cz">Fialová</lang>
+		</name>
+	</Capability>
+	<Capability id="0x08">
+		<name>
+			<lang xml:lang="en">Color Index</lang>
+			<lang xml:lang="de">Farbindex</lang>
+			<lang xml:lang="sv">Färgindex</lang>
+			<lang xml:lang="sk">Farebný index</lang>
+			<lang xml:lang="cz">Barevný index</lang>
+		</name>
+	</Capability>
+</ColorCapabilities>  

@@ -89,6 +89,7 @@ onerr:
 void iot_thread_item_t::thread_func(void) {
 	thread=uv_thread_self();
 	allocator->set_thread(&thread);
+	tls_allocator=allocator;
 	for(unsigned i=0;i<sizeof(atimer_pool)/sizeof(atimer_pool[0]);i++) atimer_pool[i].timer.set_thread(thread);
 
 	uv_run(loop, UV_RUN_DEFAULT);
@@ -106,6 +107,7 @@ void iot_thread_item_t::thread_func(void) {
 	} else {
 		main_thread_item->send_msg(msg);
 	}
+	tls_allocator=NULL;
 }
 
 
@@ -287,6 +289,7 @@ iot_thread_registry_t::iot_thread_registry_t(void) {
 
 		main_thread=uv_thread_self();
 		main_loop=uv_default_loop();
+		tls_allocator=&main_allocator;
 
 		//fill main thread item
 		main_thread_item=&main_thread_obj;

@@ -21,6 +21,7 @@
 #define PIDFILE_NAME "daemon.pid"
 #define LOGFILE_NAME "daemon.log"
 #define REGISTRYFILE_NAME "registry.json"
+#define OWNCONFIGFILE_NAME "ownconfig.json"
 
 
 uint64_t iot_starttime_ms; //start time of process like returned by uv_now (monotonic in ms since unknown point)
@@ -152,10 +153,82 @@ bool parse_setup(void) {
 	return true;
 }
 
+bool parse_ownconfig(json_object* obj) {
+	if(!json_object_is_type(obj,  json_type_object)) {
+		outlog_error("Invalid ownconfig file '%s', it must have JSON-object as top element\n", OWNCONFIGFILE_NAME);
+		return false;
+	}
+
+	json_object *val=NULL;
+
+	if(json_object_object_get_ex(obj, "modtime", &val)) ownconfig.modtime=json_object_get_int64(val);
+
+	if(json_object_object_get_ex(obj, "load_drivers", &val)) {
+		if(!json_object_is_type(val, json_type_object)) {
+			outlog_error("Invalid 'load_drivers' configuration in ownconfig file '%s', it must have JSON-object", OWNCONFIGFILE_NAME);
+			return false;
+		}
+		ownconfig.load_drivers=json_object_get(val);
+	}
+
+	if(json_object_object_get_ex(obj, "detectors", &val)) {
+		if(!json_object_is_type(val, json_type_object)) {
+			outlog_error("Invalid 'detectors' configuration in ownconfig file '%s', it must have JSON-object", OWNCONFIGFILE_NAME);
+			return false;
+		}
+		ownconfig.detectors=json_object_get(val);
+		json_object_object_foreach(ownconfig.detectors, modid, moddata) {
+			if(!json_object_is_type(moddata, json_type_object)) {
+				outlog_error("Invalid data in ownconfig! Values in 'detectors' object must be JSON-objects, but value under '%s' is not", modid);
+				return false;
+			}
+			uint32_t module_id=0;
+			IOT_STRPARSE_UINT(modid, uint32_t, module_id);
+			if(!module_id) continue;
+			iot_regitem_module_t* regitem=iot_regitem_module_t::find_item(IOT_MODTYPE_DETECTOR, module_id);
+			if(!regitem) continue;
+
+			if(json_object_object_get_ex(moddata, "start", &val)) { //modify autoload only if 'start' exists
+				regitem->autoload=json_object_get_boolean(val) ? true : false;
+			}
+			if(json_object_object_get_ex(moddata, "manual", &val)) {
+				if(!json_object_is_type(val, json_type_array)) {
+					outlog_error("Invalid data in ownconfig! Value in 'detectors.ID.manual' must be JSON-array, but value under 'detectors.%s.manual' is not", modid);
+					return false;
+				}
+				regitem->params.detector.manual=val; //NOT SAFE!!! this reference will be lost if ownconfig is updated! TODO
+				regitem->params.detector.manual_modtime=0; //NOT SAFE!!! this reference will be lost if ownconfig is updated! TODO
+
+				if(json_object_object_get_ex(moddata, "manual_modtime", &val)) regitem->params.detector.manual_modtime=json_object_get_int64(val);
+			}
+		}
+	}
+
+	if(json_object_object_get_ex(obj, "hwdevices", &val)) {
+		if(!json_object_is_type(val, json_type_object)) {
+			outlog_error("Invalid 'hwdevices' configuration in ownconfig file '%s', it must have JSON-object", OWNCONFIGFILE_NAME);
+			return false;
+		}
+		ownconfig.hwdevices=json_object_get(val);
+	}
+
+	if(json_object_object_get_ex(obj, "peer_connect_map", &val)) {
+		if(!json_object_is_type(val, json_type_object)) {
+			outlog_error("Invalid 'peer_connect_map' configuration in ownconfig file '%s', it must have JSON-object", OWNCONFIGFILE_NAME);
+			return false;
+		}
+		ownconfig.connect_map=json_object_get(val);
+	}
+	return true;
+}
+
+
 int main(int argn, char **arg) {
 	int err;
 	bool pidcreated=false;
-	json_object* cfg=NULL;
+	json_object* cfg_json=NULL;
+	json_object* registry_json=NULL;
+	json_object* owncfg_json=NULL;
 
 	assert(sizeof(iot_threadmsg_t)==64);
 
@@ -249,6 +322,19 @@ int main(int argn, char **arg) {
 		outlog_error("Error initializing mesh controller: %s", kapi_strerror(err));
 		goto onexit;
 	}
+
+	//read config to get address of "cfgmanager_host" server
+	cfg_json=iot_configregistry_t::read_jsonfile(conf_dir, IOTCONFIG_NAME, "config");
+	if(!cfg_json) goto onexit;
+	//parse hosts to get "cfgmanager_host" server
+	err=gwinstance->config_registry->load_hosts_config(cfg_json);
+	if(err) {
+		outlog_error("Cannot load config: %s", kapi_strerror(err));
+		goto onexit;
+	}
+
+	//Here setup server connection to actualize config before instantiation. if "cfgmanager_host" has higher host ID listening socks are not necessary
+
 	//create listening IOT GW netcon
 	err=gwinstance->peers_registry->start_iot_listen();
 	if(err) {
@@ -256,17 +342,7 @@ int main(int argn, char **arg) {
 		goto onexit;
 	}
 
-	cfg=iot_configregistry_t::read_jsonfile(conf_dir, IOTCONFIG_NAME, "config");
-	if(!cfg) goto onexit;
-
-	err=gwinstance->config_registry->load_hosts_config(cfg);
-	if(err) {
-		outlog_error("Cannot load config: %s", kapi_strerror(err));
-		goto onexit;
-	}
-
-//	peers_conregistry=new iot_peers_conregistry("peers_conregistry", 100);
-//	assert(peers_conregistry!=NULL);
+	//create listening MESH session netcon
 	if(daemon_setup.listencfg) {
 		err=gwinstance->peers_registry->add_listen_connections(daemon_setup.listencfg, true);
 		if(err) {
@@ -275,39 +351,37 @@ int main(int argn, char **arg) {
 		}
 	}
 
-//	//add client connections
-//	for(auto curhost=config_registry->hosts_listhead(); curhost; curhost=curhost->next) {
-//		if(curhost->host_id==iot_current_hostid) continue;
-//		if(curhost->manual_connect_params) {
-//			iot_objref_ptr<iot_netproto_config_iotgw> protocfg(true, new iot_netproto_config_iotgw(gwinst, curhost->peer, object_destroysub_delete, true));
-//			assert(protocfg!=NULL);
-//			err=peers_conregistry->add_connections(false, curhost->manual_connect_params, protocfg, true);
-//			if(err) {
-//				outlog_error("Error adding connections to host %" IOT_PRIhostid ": %s", kapi_strerror(err));
-//			}
-//		}
-//	}
+	//Here setup server connection to actualize config before instantiation if "cfgmanager_host" has LOWER host ID and listening socks are necessary
 
+	//Here assume config, ownconfig and registry were actualized from "cfgmanager_host" server if possible
 
-	//Here setup server connection to actualize config before instantiation
-	//
+	registry_json=iot_configregistry_t::read_jsonfile(conf_dir, REGISTRYFILE_NAME, "registry");
+	if(!registry_json) goto onexit;
+	if(libregistry->apply_registry(registry_json, true)) goto onexit;
+	json_object_put(registry_json); //libregistry->apply_registry must increment references to necessary sub-objects
+	registry_json=NULL;
 
-	err=gwinstance->config_registry->load_config(cfg, true);
+//server has now ownconfig as it does not work with hwdevices and drivers
+#ifndef IOT_SERVER
+	owncfg_json=iot_configregistry_t::read_jsonfile(conf_dir, OWNCONFIGFILE_NAME, "ownconfig", true);
+	if(!owncfg_json) goto onexit;
+	if(!parse_ownconfig(owncfg_json)) goto onexit;
+	json_object_put(owncfg_json); //parse_ownconfig must increment references to necessary sub-objects
+	owncfg_json=NULL;
+#endif
+
+	err=gwinstance->config_registry->load_config(cfg_json, true);
 	if(err) {
 		outlog_error("Cannot load config: %s", err==IOT_ERROR_NOT_FOUND ? "inconsistent data" : kapi_strerror(err));
 		//try to continue and get config from server or start with empty config
 	}
-	json_object_put(cfg); cfg=NULL;
+	json_object_put(cfg_json); cfg_json=NULL;
 
 	//Assume config was actualized or no server connection and some config got from file or we wait while server connection succeeds
 
-	cfg=iot_configregistry_t::read_jsonfile(conf_dir, REGISTRYFILE_NAME, "registry");
-	if(!cfg) goto onexit;
-	if(libregistry->apply_registry(cfg, true)) goto onexit;
-	json_object_put(cfg); //libregistry->apply_registry must increment references to necessary sub-objects
-	cfg=NULL;
 
-	//load modules with autoload. autoload could be modified by config (TODO)
+
+	//load detector and driver modules with autoload. autoload could be modified by config (TODO)
 	modules_registry->start();
 
 
@@ -356,7 +430,9 @@ onexit:
 	outlog_info("Exiting...");
 	//do hard stop
 
-	if(cfg) {json_object_put(cfg); cfg=NULL;}
+	if(cfg_json) {json_object_put(cfg_json); cfg_json=NULL;}
+	if(registry_json) {json_object_put(registry_json); registry_json=NULL;}
+	if(owncfg_json) {json_object_put(owncfg_json); owncfg_json=NULL;}
 
 	thread_registry->shutdown(); //causes termination of threads
 

@@ -1,0 +1,4 @@
+{
+	"description": "Interface library to in-kernel GPIO implementation for Linux",
+	"platforms": ["linux"]
+}

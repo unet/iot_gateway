@@ -1,42 +1,15 @@
 {
-	"host_id": 1, //host id which corresponds to this own host configuration
 	"modtime": 1234567890, //timestamp of last update
-	"load_modules" : {
-		MODULE_ID: 0 or false to disable loading of module (if it is loaded by default), true or version to enable module loading with mininal version
-	},
 	"detectors" : {
-		MODULE_ID: {
-			"start" : optional key with false value to disable start of detector in module (if it is started by default), true value to enable start of detector
+		"1": {
+			"start" : true,
 			"manual" : [ //optional list of manually configured devices (if module supports)
 				{
-					//CUSTOM DATA composed according to detector's manifest
+					"method": "def", //selected method among those described in manifest
+					"serial_port": "tty19",
 				}
 			],
 			"manual_modtime": 1234566789, //timestamp of last update of manual devices list
-			"params": <custom_object>, //optional user params for detector
-			"params_modtime": 1234567890 //timestamp of last update of params
 		}
-	},
-	"hwdevice_drivers": [ //manual override of driver for hardware devices
-		{
-			"contype_id": 1, //ID of device connection type of hwdevice
-			"ident": <custom object>, //contype-specific data with exact or wildcard specification
-			"driver_modules": [ MODULE_ID1, MODULE_ID2 ] //list of driver modules to try for device in order or precedence. empty list disables driver search
-		}
-	],
-	"peer_connect_map": { //manually specified by user current host to specific host connection parameters override
-		DST_HOST_ID: [
-			{
-				"type": "tcp",
-				"metric": 1,
-				"host": "1.2.3.4", //host/IP which must be used by current host to connect to this host. defaults to connect_host in common hosts config
-				"port" : 12002, //port which must be used by current host to connect to this host. defaults to connect_port in common hosts config. negative value forbids direct connection
-			},
-			{
-				"type": "bt", //bluetooth
-				"metric": 2,
-				"hwaddr": "11:34:65:a5:ba:34",
-			}
-		]
 	}
 }

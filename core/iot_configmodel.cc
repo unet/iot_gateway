@@ -161,6 +161,7 @@ void iot_nodemodel::assign_inputs(void) { //sets correspondence between iot_conf
 			for(j=0;j<node_iface->num_msgoutputs;j++) {
 				if(strcmp(curout->label+1, node_iface->msgoutput[j].label)==0) {
 					curout->real_index=j;
+					curmsgoutput[j].link=curout;
 					//revalidate links
 					for(link=curout->ins_head; link; link=link->next_input) link->check_validity();
 					break;
@@ -341,8 +342,8 @@ bool iot_nodemodel::execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal
 
 	msg->miid=modinstlk.modinst->get_miid();
 
-	if(!is_sync) {
-//		assert(!is_sync); //sync modules should not be called in async mode
+	if(isasync) {
+		assert(!is_sync); //sync modules should not be called in async mode
 		if(is_sync==2) is_sync=1; //disable simple sync mode (in release build)
 		msg->bytearg=1;
 
@@ -457,6 +458,14 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 	//now release previous values (instance will incref if it needs to keep some)
 	for(uint16_t i=0; i<node_iface->num_valueinputs; i++)
 		if(valuesignals[i].prev_value && valuesignals[i].prev_value!=valuesignals[i].new_value) valuesignals[i].prev_value->release();
+	//release msgs
+	for(uint16_t i=0; i<node_iface->num_msginputs; i++) {
+		for(uint16_t j=0;j<msgsignals[i].num;j++) {
+			assert(msgsignals[i].msgs[j]!=NULL);
+			msgsignals[i].msgs[j]->release();
+		}
+	}
+
 
 //	if(err && err!=IOT_ERROR_NOT_READY) TODO
 

@@ -36,6 +36,7 @@ struct iot_hwdevregistry_item_t {
 
 	uint32_t custom_len_alloced:24, //real size of allocated space for custom_data (could be allocated with reserve or have more space from previous use)
 			is_blocked:1,		//flag that hw device is blocked from finding a driver
+			is_new:1,			//flag that hw device was recently added and not yet tried to be connected to driver
 			is_removed:1;		//flag that this item is in removed_dev_head list
 	alignas(sizeof(void*)) char custom_data[];  //depends on devcontype and actual data
 
@@ -79,7 +80,8 @@ struct iot_hwdevregistry_item_t {
 class hwdev_registry_t {
 	iot_hwdevregistry_item_t* actual_dev_head=NULL; //bi-linked list of actual hw devices
 	iot_hwdevregistry_item_t* removed_dev_head=NULL; //bi-linked list of hw devices which were removed but have active reference in driver modules
-
+	uv_async_t newdev_watcher; //gets signaled when new hwdev is added to start search for driver
+	uv_rwlock_t devlist_lock; //protects access to actual_dev_head and removed_dev_head
 
 public:
 	iot_gwinstance* const gwinst;
@@ -87,30 +89,44 @@ public:
 								//TODO. make periodic recheck every 2 minutes
 
 	hwdev_registry_t(iot_gwinstance* gwinst_) : gwinst(gwinst_) {
-//		assert(hwdev_registry==NULL);
-//		hwdev_registry=this;
+		assert(uv_thread_self()==main_thread);
+		uv_async_init(main_loop, &newdev_watcher, [](uv_async_t* handle) -> void {
+					hwdev_registry_t* obj=(hwdev_registry_t*)(handle->data);
+					obj->on_newdev();
+				});
+		newdev_watcher.data=this;
+		int err=uv_rwlock_init(&devlist_lock);
+		assert(err==0);
 	}
-	int list_action(const iot_miid_t &detmiid, iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data); //main thread
+	~hwdev_registry_t(void) {
+		uv_rwlock_destroy(&devlist_lock);
+		uv_close((uv_handle_t*)&newdev_watcher, NULL);
+	}
+	void signal_newdev(void) {
+		uv_async_send(&newdev_watcher);
+	}
+	void on_newdev(void);
+	int list_action(const iot_miid_t &detmiid, iot_action_t action, const iot_hwdev_localident* ident, const iot_hwdev_details* custom_data); //any thread
 	//finish removal of removed device after stopping bound driver
 	void finish_hwdev_removal(iot_hwdevregistry_item_t* it) { //main thread
+		uv_rwlock_wrlock(&devlist_lock);
 		assert(it->is_removed);
 		assert(!it->devdrv_modinstlk);
 		BILINKLIST_REMOVE(it, next, prev); //remove from removed list
+		uv_rwlock_wrunlock(&devlist_lock);
+
+		if(it->dev_data) {
+			it->dev_data->~iot_hwdev_details(); //destruct previous details
+			it->dev_data=NULL;
+		}
 		free(it);
 	}
 
 	void try_find_hwdev_for_driver(iot_driver_module_item_t* module); //main thread
 	int try_connect_local_driver(iot_device_connection_t* conn);
 
-	iot_hwdevregistry_item_t* find_item_byaddr(iot_hwdev_localident* ident) { //looks for device item by contype and address
-		iot_hwdevregistry_item_t* it=actual_dev_head;
-		while(it) {
-			if(it->dev_ident.local->matches_addr(ident)) return it;
-			it=it->next;
-		}
-		return NULL;
-	}
 	iot_hwdevregistry_item_t* find_item_bytmpl(iot_hwdev_localident* tmpl) { //looks for device item by contype and address
+		assert(false); //TODO correct locking of devlist_lock. for now application of this func is unknown
 		iot_hwdevregistry_item_t* it=actual_dev_head;
 		while(it) {
 			if(tmpl->matches(it->dev_ident.local)) return it;
@@ -120,7 +136,16 @@ public:
 	}
 	void remove_hwdev_bydetector(const iot_miid_t &miid);
 private:
-	void remove_hwdev(iot_hwdevregistry_item_t* hwdevitem);
+	void remove_hwdev(iot_hwdevregistry_item_t* hwdevitem); //devlist_lock must be W-locked!!!
+	iot_hwdevregistry_item_t* find_item_byaddr(const iot_hwdev_localident* ident) { //looks for device item by contype and address
+		//devlist_lock MUST BE LOCKED!
+		iot_hwdevregistry_item_t* it=actual_dev_head;
+		while(it) {
+			if(it->dev_ident.local->matches_addr(ident)) return it;
+			it=it->next;
+		}
+		return NULL;
+	}
 };
 
 

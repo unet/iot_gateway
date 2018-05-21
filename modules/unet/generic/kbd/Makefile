@@ -6,9 +6,9 @@ library-patchlevel := 0
 library-revision := 1
 
 #'any' or set of items from list: linux, mswin, darwin, unix (any unix clone including linux and darwin), android?
-bundle-platform := linux
+library-platform := linux
 
-dependency-bundles := 
+dependency-libraries := 
 
 #srcs := inputlinux.cc types.cc
 

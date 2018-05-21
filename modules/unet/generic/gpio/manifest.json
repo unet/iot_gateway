@@ -1,0 +1,106 @@
+{
+	"description": "Support for RaZberry daughter card for RasberryPi-like computers providing Z-Wave static controller functionality",
+	"platforms": ["linux"],
+	"detector_modules": {
+		"det" : {
+			"title": ["txt","det_title"],
+			"description": ["txt","det_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"manual_devices": { //optional set of templates to enter device spec manually. detector's code can (and must) interpret it as hints to find devices
+				"gpio": {
+					"title": "GPIO pins"
+					//"shortDescr":
+					//"longDescr":
+					//"propList":
+					//"newDialog":
+					//"editDialog":
+				}
+			}
+		}
+	},
+	"driver_modules": {
+		"pindrv" : {
+			"title": ["txt","pindrv_title"],
+			"description": ["txt","pindrv_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			}
+		}
+	},
+	"node_modules": {
+		"eventsrc" : {
+			"title": "Multichannel Event Source",
+			"description": "Processes events from any keyboard-like interface",
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"device_connections": {
+				"dev": {
+					"description":"Any device with Keyboard interface"
+				}
+			},
+			"links": {
+				"value_outputs": {
+					"out0": {
+						"description": "State of bit 0 from device",
+					},
+					"out1": {
+						"description": "State of bit 1 from device",
+					},
+					"out2": {
+						"description": "State of bit 2 from device",
+					},
+					"out3": {
+						"description": "State of bit 3 from device",
+					},
+				}
+			}
+		},
+		"act" : {
+			"title": "Activation control",
+			"description": ["txt", "act_descr"],
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"device_connections": {
+				"dev": {
+					"description":"Any device with Activatable interface"
+				},
+			},
+			"links": {
+				"value_inputs": {
+					"in0": {
+						"description": "Activation control for line 0.",
+					},
+					"in1": {
+						"description": "Activation control for line 1.",
+					},
+					"in2": {
+						"description": "Activation control for line 2.",
+					},
+					"in3": {
+						"description": "Activation control for line 3.",
+					}
+				}
+			}
+		}
+	}
+}

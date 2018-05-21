@@ -1,0 +1,4 @@
+{
+	"description": "Library which communicates with RaZberry daughter card providing Z-Wave static controller functionality",
+	"platforms": ["linux"]
+}

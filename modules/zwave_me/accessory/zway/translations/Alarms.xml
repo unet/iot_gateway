@@ -1,0 +1,1485 @@
+<?xml version="1.0"?>
+<Alarms>
+	<Alarm id="0x00">
+		<name>
+			<lang xml:lang="en">General Purpose alarm</lang>
+			<lang xml:lang="de">General Purpose alarm</lang>
+			<lang xml:lang="ru">Общая тревога</lang>
+			<lang xml:lang="sv">Generellt alarm</lang>
+			<lang xml:lang="sk">Univerzálny alarm</lang>
+			<lang xml:lang="cz">Univerzální alarm</lang>
+		</name>
+	</Alarm>
+	<Alarm id="0x01">
+		<name>
+			<lang xml:lang="en">Smoke</lang>
+			<lang xml:lang="de">Rauch</lang>
+			<lang xml:lang="ru">Дым</lang>
+			<lang xml:lang="sv">Rök</lang>
+			<lang xml:lang="sk">Dym</lang>
+			<lang xml:lang="cz">Kouř</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Smoke detected</lang>
+				<lang xml:lang="de">Rauchmeldung</lang>
+				<lang xml:lang="ru">Обнаружен дым</lang>
+				<lang xml:lang="sv">Rök detekterad</lang>
+				<lang xml:lang="sk">Zistený dym</lang>
+				<lang xml:lang="cz">Zjištěný kouř</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Smoke detected, location unknown</lang>
+				<lang xml:lang="de">Rauchmeldung, unbekannter Ort</lang>
+				<lang xml:lang="ru">Обнаружен дым в неизвестном месте</lang>
+				<lang xml:lang="sv">Rök detekterad, plats okänd</lang>
+				<lang xml:lang="sk">Zistený dym, miesto neznáme</lang>
+				<lang xml:lang="cz">Zjištěný kouř, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">Smoke alarm test</lang>
+				<lang xml:lang="de">Rauchmelder Test</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="cz"></lang>
+				<lang xml:lang="sk"></lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Replacement required</lang>
+				<lang xml:lang="de">Austausch erforderlich</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="cz"></lang>
+				<lang xml:lang="sk"></lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm>
+	<Alarm id="0x02">
+		<name>
+			<lang xml:lang="en">CO</lang>
+			<lang xml:lang="de">Kohlenmonoxid</lang>
+			<lang xml:lang="ru">Угарный газ</lang>
+			<lang xml:lang="sv">Kolmonoxid</lang>
+			<lang xml:lang="sk">Oxid uhoľnatý</lang>
+			<lang xml:lang="cz">Oxid uhelnatý</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">CO detected</lang>
+				<lang xml:lang="de">Kohlenmonoxid erkannt</lang>
+				<lang xml:lang="ru">Обнаружен угарный газ</lang>
+				<lang xml:lang="sv">Kolmonoxid detekterat</lang>
+				<lang xml:lang="sk">Zistená prítomnosť Oxidu uhoľnatého</lang>
+				<lang xml:lang="cz">Zjištěna přítomnost Oxidu uhelnatého</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">CO detected, location unknown</lang>
+				<lang xml:lang="de">Kohlenmonoxid erkannt, unbekannter Ort</lang>
+				<lang xml:lang="ru">Обнаружен угарный газ в неизвестном месте</lang>
+				<lang xml:lang="sv">Kolmonoxid detekterat, plats okänd</lang>
+				<lang xml:lang="sk">Zistená prítomnosť Oxidu uhoľnatého, miesto neznáme</lang>
+				<lang xml:lang="cz">Zjištěna přítomnost Oxidu uhelnatého, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">CO alarm test</lang>
+				<lang xml:lang="de">CO Test</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="cz"></lang>
+				<lang xml:lang="sk"></lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Replacement required</lang>
+				<lang xml:lang="de">Austausch erforderlich</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="cz"></lang>
+				<lang xml:lang="sk"></lang>
+			</name>
+		</Event>	
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm>
+	<Alarm id="0x03">
+		<name>
+			<lang xml:lang="en">CO2</lang>
+			<lang xml:lang="de">Kohlendioxid</lang>
+			<lang xml:lang="ru">Углекислый газ</lang>
+			<lang xml:lang="sv">Koldioxid</lang>
+			<lang xml:lang="sk">Oxid uhličitý</lang>
+			<lang xml:lang="cz">Oxid uhličitý</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">CO2 detected</lang>
+				<lang xml:lang="de">Kohlendioxid erkannt</lang>
+				<lang xml:lang="ru">Обнаружен углекислый газ</lang>
+				<lang xml:lang="sv">Koldioxid detekterat</lang>
+				<lang xml:lang="sk">Zistená prítomnosť Oxidu uhličitého</lang>
+				<lang xml:lang="cz">Zjištěna přítomnost Oxidu uhličitého</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">CO2 detected, location unknown</lang>
+				<lang xml:lang="de">Kohlendioxid erkannt, unbekannter Ort</lang>
+				<lang xml:lang="ru">Обнаружен углекислый газ в неизвестном месте</lang>
+				<lang xml:lang="sv">Koldioxid detekterat, plats okänd</lang>
+				<lang xml:lang="sk">Zistená prítomnosť Oxidu uhličitého, miesto neznáme</lang>
+				<lang xml:lang="cz">Zjištěna přítomnost Oxidu uhličitého, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">CO2 alarm test</lang>
+				<lang xml:lang="de">CO2 Test</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="cz"></lang>
+				<lang xml:lang="sk"></lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Replacement required</lang>
+				<lang xml:lang="de">Austausch erforderlich</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="cz"></lang>
+				<lang xml:lang="sk"></lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm> 
+	<Alarm id="0x04">
+		<name>
+			<lang xml:lang="en">Heat</lang>
+			<lang xml:lang="de">Heizung</lang>
+			<lang xml:lang="ru">Нагрев</lang>
+			<lang xml:lang="sv">Värme</lang>
+			<lang xml:lang="sk">Teplo</lang>
+			<lang xml:lang="cz">Teplo</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">overheat</lang>
+				<lang xml:lang="de">Überhitzung</lang>
+				<lang xml:lang="ru">Перегрев</lang>
+				<lang xml:lang="sv">Överhettning</lang>
+				<lang xml:lang="sk">Prehriatie</lang>
+				<lang xml:lang="cz">Přehřátí</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">overheat, location unknown</lang>
+				<lang xml:lang="de">Überhitzung, unbekannter Ort</lang>
+				<lang xml:lang="ru">Перегрев в неизвестном месте</lang>
+				<lang xml:lang="sv">Överhettning, plats okänd</lang>
+				<lang xml:lang="sk">Prehriatie, miesto neznáme</lang>
+				<lang xml:lang="cz">Přehřátí, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">rapid temperature rise</lang>
+				<lang xml:lang="de">schneller Temperaturanstieg</lang>
+				<lang xml:lang="ru">Скачок температуры</lang>
+				<lang xml:lang="sv">Snabb temperaturökning</lang>
+				<lang xml:lang="sk">Rýchle stúpnutie teploty</lang>
+				<lang xml:lang="cz">Rychlé stoupnutí teploty</lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">rapid temperature rise, unknown location</lang>
+				<lang xml:lang="de">schneller Temperaturanstieg an unbekanntem Ort</lang>
+				<lang xml:lang="ru">Скачок температуры в неизвестном месте</lang>
+				<lang xml:lang="sv">Snabb tempeaturökning, plats okänd</lang>
+				<lang xml:lang="sk">Rýchle stúpnutie teploty, miesto neznáme</lang>
+				<lang xml:lang="cz">Rychlé stoupnutí teploty, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x05">
+			<name>
+				<lang xml:lang="en">underheat</lang>
+				<lang xml:lang="de">Unterkühlung</lang>
+				<lang xml:lang="ru">Переохлаждение</lang>
+				<lang xml:lang="sv">Underkylning</lang>
+				<lang xml:lang="sk">Podchladenie</lang>
+				<lang xml:lang="cz">Podchlazení</lang>
+			</name>
+		</Event>
+		<Event id="0x06">
+			<name>
+				<lang xml:lang="en">underheat, unknown location</lang>
+				<lang xml:lang="de">Unterkühlung an unbekanntem Ort</lang>
+				<lang xml:lang="ru">Переохлаждение в неизвестном месте</lang>
+				<lang xml:lang="sv">Underkylning, plats okänd</lang>
+				<lang xml:lang="sk">Podchladenie, miesto neznáme</lang>
+				<lang xml:lang="cz">Podchlazení, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm> 
+	<Alarm id="0x05">
+		<name>
+			<lang xml:lang="en">Water</lang>
+			<lang xml:lang="de">Wasser</lang>
+			<lang xml:lang="ru">Протечка</lang>
+			<lang xml:lang="sv">Vatten</lang>
+			<lang xml:lang="sk">Voda</lang>
+			<lang xml:lang="cz">Voda</lang>
+		</name>
+		<Event id="0x00">
+			<name>
+				<lang xml:lang="en">Off</lang>
+				<lang xml:lang="de">Aus</lang>
+				<lang xml:lang="ru">Всё хорошо</lang>
+				<lang xml:lang="sv">Off</lang>
+				<lang xml:lang="sk">Off</lang>
+				<lang xml:lang="cz">Vypnuto</lang>
+			</name>
+		</Event>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Leak detected</lang>
+				<lang xml:lang="de">Leck erkannt</lang>
+				<lang xml:lang="ru">Обнаружена протечка</lang>
+				<lang xml:lang="sv">Läckage detekterat</lang>
+				<lang xml:lang="sk">Zistený únik</lang>
+				<lang xml:lang="cz">Zjištěný únik</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Leak detected, location unknown</lang>
+				<lang xml:lang="de">Leck erkannt, unbekannter Ort</lang>
+				<lang xml:lang="ru">Обнаружена протечка в неизвестном месте</lang>
+				<lang xml:lang="sv">Läckage detekterat, plats okänd</lang>
+				<lang xml:lang="sk">Zistený únik, miesto neznáme</lang>
+				<lang xml:lang="cz">Zjištěný únik, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">Water level dropped</lang>
+				<lang xml:lang="de">Wasserstand fällt</lang>
+				<lang xml:lang="ru">Уровень воды упал</lang>
+				<lang xml:lang="sv">Vattennivå minskat</lang>
+				<lang xml:lang="sk">Hladina vody klesla</lang>
+				<lang xml:lang="cz">Hladina vody klesla</lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Water level dropped, location unknown</lang>
+				<lang xml:lang="de">Wasserstand fällt, unbekannter Ort</lang>
+				<lang xml:lang="ru">Уровень воды упал в неизвестном месте</lang>
+				<lang xml:lang="sv">Vattennivå minskat, plats okänd</lang>
+				<lang xml:lang="sk">Hladina vody klesla, miesto neznáme</lang>
+				<lang xml:lang="cz">Hladina vody klesla, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x05">
+			<name>
+				<lang xml:lang="en">Replace water filter</lang>
+				<lang xml:lang="de">Wasserfilter austauschen</lang>
+				<lang xml:lang="ru">Замените фильтр воды</lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm> 
+	<Alarm id="0x06">
+		<name>
+			<lang xml:lang="en">Access Control</lang>
+			<lang xml:lang="de">Zustrittssystem</lang>
+			<lang xml:lang="ru">Уровень доступа</lang>
+			<lang xml:lang="sv">Tillträdeskontroll</lang>
+			<lang xml:lang="sk">Riadenie prístupu</lang>
+			<lang xml:lang="cz">Řízení přístupu</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Manual Lock Operation</lang>
+				<lang xml:lang="de">Manuelle Schloßbetätigung</lang>
+				<lang xml:lang="ru">Ручное управление</lang>
+				<lang xml:lang="sv">Manuell låshantering</lang>
+				<lang xml:lang="sk">Manuálne zamknutie</lang>
+				<lang xml:lang="cz">Manuální zamknutí</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Manual Lock Open Operation</lang>
+				<lang xml:lang="de">Manuelle Schloßöffnung</lang>
+				<lang xml:lang="ru">Открытие рукой</lang>
+				<lang xml:lang="sv">Lås låst manuellt</lang>
+				<lang xml:lang="sk">Manuálne odomknutie</lang>
+				<lang xml:lang="cz">Manuální odomknutí</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">RF Lock Operation</lang>
+				<lang xml:lang="de">Drahtlose Schloßbetätigung</lang>
+				<lang xml:lang="ru">Радио управление</lang>
+				<lang xml:lang="sv">Trådlös låshantering</lang>
+				<lang xml:lang="sk">RF zamknutie</lang>
+				<lang xml:lang="cz">RF zamknutí</lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">RF Lock Open Operation</lang>
+				<lang xml:lang="de">Drahtlose Schloßöffnung</lang>
+				<lang xml:lang="ru">Открытие по радио</lang>
+				<lang xml:lang="sv">Trådlös upplåsning</lang>
+				<lang xml:lang="sk">RF odomknutie</lang>
+				<lang xml:lang="cz">RF odomknutí</lang>
+			</name>
+		</Event>			
+		<Event id="0x05">
+			<name>
+				<lang xml:lang="en">Keypad Lock Operation</lang>
+				<lang xml:lang="de">Betätigung des Zahlenschlosses</lang>
+				<lang xml:lang="ru">Управление с клавиатуры</lang>
+				<lang xml:lang="sv">Låshantering via knappsats</lang>
+				<lang xml:lang="sk">Klávesnicové zamknutie</lang>
+				<lang xml:lang="cz">Klávesnicové zamknutí</lang>
+			</name>
+		</Event>
+		<Event id="0x06">
+			<name>
+				<lang xml:lang="en">Keypad Lock Open Operation</lang>
+				<lang xml:lang="de">Öffnen des Zahlenschlosses</lang>
+				<lang xml:lang="ru">Открытие с клавиатуры</lang>
+				<lang xml:lang="sv">Upplåst via knappsats</lang>
+				<lang xml:lang="sk">Klávesnicové odomknutie</lang>
+				<lang xml:lang="cz">Klávesnicové odemknutí</lang>
+			</name>
+		</Event>
+		<Event id="0x07">
+			<name>
+				<lang xml:lang="en">Manual not fully locked operation</lang>
+				<lang xml:lang="de">Manuelle Verriegelung fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x08">
+			<name>
+				<lang xml:lang="en">RF not fully locked operation</lang>
+				<lang xml:lang="de">Verriegelung durch Fernzugriff fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x09">
+			<name>
+				<lang xml:lang="en">Auto lock locked operation</lang>
+				<lang xml:lang="de">Automatische Verriegelung</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0A">
+			<name>
+				<lang xml:lang="en">Auto lock not fully operation</lang>
+				<lang xml:lang="de">Automatische Verriegelung fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0B">
+			<name>
+				<lang xml:lang="en">Lock jammed</lang>
+				<lang xml:lang="de">Verriegelung blockiert</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0C">
+			<name>
+				<lang xml:lang="en">All user codes deleted</lang>
+				<lang xml:lang="de">Alle Benutzercodes gelöscht</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0D">
+			<name>
+				<lang xml:lang="en">Single user code deleted</lang>
+				<lang xml:lang="de">Benutzercode gelöscht</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0E">
+			<name>
+				<lang xml:lang="en">New user code added</lang>
+				<lang xml:lang="de">Neuer Benutzercode hinzugefügt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0F">
+			<name>
+				<lang xml:lang="en">New user code not added (duplicate)</lang>
+				<lang xml:lang="de">Neuer Benutzercode hinzugefügt (Duplikat)</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x10">
+			<name>
+				<lang xml:lang="en">Keypad temporary disabled</lang>
+				<lang xml:lang="de">Keypad vorrübergehend deaktiviert</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x11">
+			<name>
+				<lang xml:lang="en">Keypad busy</lang>
+				<lang xml:lang="de">Keypad in Verwendung</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x12">
+			<name>
+				<lang xml:lang="en">New program code entered</lang>
+				<lang xml:lang="de">Neuer Programmcode eingegeben</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x13">
+			<name>
+				<lang xml:lang="en">Manually entered user code exceeds code limit</lang>
+				<lang xml:lang="de">Der manuell eingegebene Benutzercode ist zu lang</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x14">
+			<name>
+				<lang xml:lang="en">RF unlock with invalid user code</lang>
+				<lang xml:lang="de">RF mit ungültigem Benutzercode entriegelt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x15">
+			<name>
+				<lang xml:lang="en">RF lock with invalid user codes</lang>
+				<lang xml:lang="de">RF mit ungültigem Benutzercode verriegelt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x16">
+			<name>
+				<lang xml:lang="en">Window/door is open</lang>
+				<lang xml:lang="de">Fenster/Tür ist geöffnet</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x17">
+			<name>
+				<lang xml:lang="en">Window/door is closed</lang>
+				<lang xml:lang="de">Fenster/Tür ist geschlossen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x40">
+			<name>
+				<lang xml:lang="en">Barrier performing Initialization process</lang>
+				<lang xml:lang="de">Sperre führt Initialisierungsprozess durch</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x41">
+			<name>
+				<lang xml:lang="en">Barrier operation force has been exceeded</lang>
+				<lang xml:lang="de">Die Betätigungskraft der Sperre wurde überschritten</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x42">
+			<name>
+				<lang xml:lang="en">Barrier motor has exceeded manufacturer’s operational time limit</lang>
+				<lang xml:lang="de">Der Motor der Sperre hat die Betriebszeitbegrenzung des Herstellers überschritten</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x43">
+			<name>
+				<lang xml:lang="en">Barrier operation has exceeded physical mechanical limits</lang>
+				<lang xml:lang="de">Die Betätigung der Sperre hat die physikalischen und mechanischen Grenzwerte überschritten</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x44">
+			<name>
+				<lang xml:lang="en">Barrier unable to perform requested operation due to UL requirements</lang>
+				<lang xml:lang="de">Die Sperre kann die angeforderte Operation aufgrund unzureichender UL-Anforderungen nicht durchführen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x45">
+			<name>
+				<lang xml:lang="en">Barrier Unattended operation has been disabled per UL requirements</lang>
+				<lang xml:lang="de">Der Unbeaufsichtigte Betrieb der Sperre wurde durch UL-Anforderungen deaktiviert</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x46">
+			<name>
+				<lang xml:lang="en">Barrier failed to perform requested operation, device malfunction</lang>
+				<lang xml:lang="de">Die Sperre konnte den Vorgang aufgrund einer Gerätfehlfunktion nicht durchführen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x47">
+			<name>
+				<lang xml:lang="en">Barrier vacation mode</lang>
+				<lang xml:lang="de">Sperre ist im Urlaubsmodus</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x48">
+			<name>
+				<lang xml:lang="en">Barrier safety beam obstacle</lang>
+				<lang xml:lang="de">Sicherheitsstrahl der Sperre wird blockiert</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x49">
+			<name>
+				<lang xml:lang="en">Barrier sensor not detected / supervisory error</lang>
+				<lang xml:lang="de">Sperrensensor nicht erkannt / Überwachungsfehler</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x4A">
+			<name>
+				<lang xml:lang="en">Barrier sensor low battery warning</lang>
+				<lang xml:lang="de">Warnung! Sperrensensor hat niedrige Batteriekapazität</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x4B">
+			<name>
+				<lang xml:lang="en">Barrier detected short in Wall Station wires</lang>
+				<lang xml:lang="de">Sperre hat Kurzschlüsse in den Kabeln zur Wandstation erkannt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x4C">
+			<name>
+				<lang xml:lang="en">Barrier associated with non-Z-wave remote control</lang>
+				<lang xml:lang="de">Sperre mit Nicht-Z-Wave-Fernsteuerung verbunden</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>		
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm> 
+	<Alarm id="0x07">
+		<name>
+			<lang xml:lang="en">Burglar</lang>
+			<lang xml:lang="de">Sicherheit</lang>
+			<lang xml:lang="ru">Проникновение</lang>
+			<lang xml:lang="sv">Säkerhet</lang>
+			<lang xml:lang="sk">Lupič</lang>
+			<lang xml:lang="cz">Lupič</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Intrusion</lang>
+				<lang xml:lang="de">Einbruch</lang>
+				<lang xml:lang="ru">Проникновение</lang>
+				<lang xml:lang="sv">Inbrott</lang>
+				<lang xml:lang="sk">Narušenie</lang>
+				<lang xml:lang="cz">Narušení</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Intrusion, location unknown</lang>
+				<lang xml:lang="de">Einbruch an unbekanntem Ort</lang>
+				<lang xml:lang="ru">Проникновение в неизвестном месте</lang>
+				<lang xml:lang="sv">Inbrott, plats okänd</lang>
+				<lang xml:lang="sk">Narušenie, miesto neznáme</lang>
+				<lang xml:lang="cz">Narušení, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">Tampering, product cover removed</lang>
+				<lang xml:lang="de">Manipulationsversuch, Gehäuse geöffnet</lang>
+				<lang xml:lang="ru">Вмешательство, открыта крышка устройства</lang>
+				<lang xml:lang="sv">Manipulering, hölje öppnat</lang>
+				<lang xml:lang="sk">Manipulácia, kryt zariadenia bol odstránený</lang>
+				<lang xml:lang="cz">Manipulace, kryt zařízení byl odstraněn</lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Tampering, invalid code</lang>
+				<lang xml:lang="de">Manipulationsversuch, ungültiger Zugangscode</lang>
+				<lang xml:lang="ru">Вмешательство, неизвестный код</lang>
+				<lang xml:lang="sv">Manipulerad, felaktig kod</lang>
+				<lang xml:lang="sk">Manipulácia, neplatný kód</lang>
+				<lang xml:lang="cz">Manipulace, neplatný kód</lang>
+			</name>
+		</Event>
+		<Event id="0x05">
+			<name>
+				<lang xml:lang="en">Glass Breakage</lang>
+				<lang xml:lang="de">Glasbruch</lang>
+				<lang xml:lang="ru">Разбито стеколо</lang>
+				<lang xml:lang="sv">Glas krossat</lang>
+				<lang xml:lang="sk">Rozbitie skla</lang>
+				<lang xml:lang="cz">Rozbití skla</lang>
+			</name>
+		</Event>
+		<Event id="0x06">
+			<name>
+				<lang xml:lang="en">Glass Breakage, location unknown</lang>
+				<lang xml:lang="de">Glasbruch an unbekanntem Ort</lang>
+				<lang xml:lang="ru">Разбито стеколо в неизвестном месте</lang>
+				<lang xml:lang="sv">Glas krossat, plats okänd</lang>
+				<lang xml:lang="sk">Rozbitie skla, miesto neznáme</lang>
+				<lang xml:lang="cz">Rozbití skla, místo neznámé</lang>
+			</name>
+		</Event>
+		<Event id="0x07">
+			<name>
+				<lang xml:lang="en">Motion detected</lang>
+				<lang xml:lang="de">Bewegung erkannt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x08">
+			<name>
+				<lang xml:lang="en">Motion detected, location unknown</lang>
+				<lang xml:lang="de">Bewegung erkannt, Ort unbekannt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>		
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm> 
+	<Alarm id="0x08">
+		<name>
+			<lang xml:lang="en">Power Management</lang>
+			<lang xml:lang="de">Energieversorgung</lang>
+			<lang xml:lang="ru">Упрвление питанием</lang>
+			<lang xml:lang="sv">Strömhantering</lang>
+			<lang xml:lang="sk">Správa napájania</lang>
+			<lang xml:lang="cz">Správa napájení</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Power has been applied</lang>
+				<lang xml:lang="de">Strom wurde angeschlossen</lang>
+				<lang xml:lang="ru">Питание подключено</lang>
+				<lang xml:lang="sv">Ström har anslutits</lang>
+				<lang xml:lang="sk">Napájanie bolo pripojené</lang>
+				<lang xml:lang="cz">Napájení bylo připojeno</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">AC mains disconnected</lang>
+				<lang xml:lang="de">Stromversorgung unterbrochen</lang>
+				<lang xml:lang="ru">Основное питание отключено</lang>
+				<lang xml:lang="sv">Strömen har kopplats ifrån</lang>
+				<lang xml:lang="sk">AC napájanie odpojené</lang>
+				<lang xml:lang="cz">AC napájení odpojeno</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">AC mains reconnected</lang>
+				<lang xml:lang="de">Stromversorgung wiederhergestellt</lang>
+				<lang xml:lang="ru">Основное питание восстановленно</lang>
+				<lang xml:lang="sv">Strömen har återanslutits</lang>
+				<lang xml:lang="sk">AC napájanie znovu pripojené</lang>
+				<lang xml:lang="cz">AC napájení znovu připojeno</lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Surge Detection</lang>
+				<lang xml:lang="de">Überspannung</lang>
+				<lang xml:lang="ru">Обнаружен всплеск</lang>
+				<lang xml:lang="sv">Överspänning</lang>
+				<lang xml:lang="sk">Detekcia prepätia</lang>
+				<lang xml:lang="cz">Detekce přepětí</lang>
+			</name>
+		</Event>			
+		<Event id="0x05">
+			<name>
+				<lang xml:lang="en">Voltage Drop/Shift</lang>
+				<lang xml:lang="de">Spannungswechsel</lang>
+				<lang xml:lang="ru">Обнаружено падение напряжения</lang>
+				<lang xml:lang="sv">Spänningsförändring</lang>
+				<lang xml:lang="sk">Pokles alebo zmena Napätia</lang>
+				<lang xml:lang="cz">Pokles nebo změna Napětí</lang>
+			</name>
+		</Event>
+		<Event id="0x06">
+			<name>
+				<lang xml:lang="en">Over-current detected</lang>
+				<lang xml:lang="de">Überstrom festgestellt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x07">
+			<name>
+				<lang xml:lang="en">Over-voltage detected</lang>
+				<lang xml:lang="de">Überspannung festgestellt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x08">
+			<name>
+				<lang xml:lang="en">Over-load detected</lang>
+				<lang xml:lang="de">Überlastung festgestellt</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x09">
+			<name>
+				<lang xml:lang="en">Load error</lang>
+				<lang xml:lang="de">Ladefehler</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0A">
+			<name>
+				<lang xml:lang="en">Replace battery soon</lang>
+				<lang xml:lang="de">Batterie demnächst austauschen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0B">
+			<name>
+				<lang xml:lang="en">Replace battety now</lang>
+				<lang xml:lang="de">Batterie austauschen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0C">
+			<name>
+				<lang xml:lang="en">Battery is charging</lang>
+				<lang xml:lang="de">Batterie wird geladen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0D">
+			<name>
+				<lang xml:lang="en">Battery is fully charged</lang>
+				<lang xml:lang="de">Batterie ist vollständig geladen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0E">
+			<name>
+				<lang xml:lang="en">Charge battery soon</lang>
+				<lang xml:lang="de">Batterie demnächst aufladen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0F">
+			<name>
+				<lang xml:lang="en">Charge battery now</lang>
+				<lang xml:lang="de">Batterie aufladen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm> 
+	<Alarm id="0x09">
+		<name>
+			<lang xml:lang="en">System</lang>
+			<lang xml:lang="de">System</lang>
+			<lang xml:lang="ru">Системное</lang>
+			<lang xml:lang="sv">System</lang>
+			<lang xml:lang="sk">Systém</lang>
+			<lang xml:lang="cz">Systém</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Hardware failure</lang>
+				<lang xml:lang="de">Hardware-Ausfall</lang>
+				<lang xml:lang="ru">Аппаратная ошибка</lang>
+				<lang xml:lang="sv">Hårdvarufel</lang>
+				<lang xml:lang="sk">Zlyhanie hardvéru</lang>
+				<lang xml:lang="cz">Selhání hardvéru</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Software failure</lang>
+				<lang xml:lang="de">Softwareproblem</lang>
+				<lang xml:lang="ru">Программная ошибка</lang>
+				<lang xml:lang="sv">Mjukvarufel</lang>
+				<lang xml:lang="sk">Zlyhanie softvéru</lang>
+				<lang xml:lang="cz">Selhání softvéru</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">Hardware failure with manufacturer failure code</lang>
+				<lang xml:lang="de">Hardwarefehler mit fehlerhaftem Herstellercode</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Software failure with manufacturer failure code</lang>
+				<lang xml:lang="de">Softwarefehler mit fehlerhaftem Herstellercode</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm> 
+	<Alarm id="0x0A">
+		<name>
+			<lang xml:lang="en">Emergency</lang>
+			<lang xml:lang="de">Notfall</lang>
+			<lang xml:lang="ru">Чрезвычайный случай</lang>
+			<lang xml:lang="sv">Nödfall</lang>
+			<lang xml:lang="sk">Pohotovosť</lang>
+			<lang xml:lang="cz">Pohotovost</lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Contact Police</lang>
+				<lang xml:lang="de">Polizei rufen</lang>
+				<lang xml:lang="ru">Вызов полиции</lang>
+				<lang xml:lang="sv">Kontakta polis</lang>
+				<lang xml:lang="sk">Kontaktovanie Polície</lang>
+				<lang xml:lang="cz">Kontaktování Policie</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Contact Fire Service</lang>
+				<lang xml:lang="de">Feuerwehr rufen</lang>
+				<lang xml:lang="ru">Вызов пожарной охраны</lang>
+				<lang xml:lang="sv">Kontakta räddningstjänst</lang>
+				<lang xml:lang="sk">Kontaktovanie Požiarnej služby</lang>
+				<lang xml:lang="cz">Kontaktování Požární služby</lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">Contact Medical Service</lang>
+				<lang xml:lang="de">Rotes Kreuz rufen</lang>
+				<lang xml:lang="ru">Вызов медицинской помощи</lang>
+				<lang xml:lang="sv">Kontakta sjukvård</lang>
+				<lang xml:lang="sk">Kontaktovanie Záchrannej služby</lang>
+				<lang xml:lang="cz">Kontaktování Záchranné služby</lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm> 
+	<Alarm id="0x0B">
+		<name>
+			<lang xml:lang="en">Alarm Clock</lang>
+			<lang xml:lang="de">Uhr</lang>
+			<lang xml:lang="ru">Будильник</lang>
+			<lang xml:lang="sv">Klocka</lang>
+			<lang xml:lang="sk">Budík</lang>
+			<lang xml:lang="cz">Budík</lang>
+		</name>
+		<Event id="0x00">
+			<name>
+				<lang xml:lang="en">Reserved</lang>
+				<lang xml:lang="de">Reserviert</lang>
+				<lang xml:lang="ru">Зарезервированно</lang>
+				<lang xml:lang="sv">Reserverad</lang>
+				<lang xml:lang="sk">Rezervované</lang>
+				<lang xml:lang="cz">Rezervováno</lang>
+			</name>
+		</Event>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Wakeup</lang>
+				<lang xml:lang="de">Weckzeit</lang>
+				<lang xml:lang="ru">Подъём</lang>
+				<lang xml:lang="sv">Vakna</lang>
+				<lang xml:lang="sk">Prebudenie</lang>
+				<lang xml:lang="cz">Probuzení</lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Timer ended</lang>
+				<lang xml:lang="de">Timer beendet</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">Timer remaining</lang>
+				<lang xml:lang="de">Timer verbleibend</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm>
+	<Alarm id="0x0C">
+		<name>
+			<lang xml:lang="en">Appliance</lang>
+			<lang xml:lang="de">Gerät</lang>
+			<lang xml:lang="ru">Бытовой прибор</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Program started</lang>
+				<lang xml:lang="de">Programm startet</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Program in progress</lang>
+				<lang xml:lang="de">Programm läuft</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">Program completed</lang>
+				<lang xml:lang="de">Programm beendet</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Replace filter</lang>
+				<lang xml:lang="de">Filter ersetzen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x05">
+			<name>
+				<lang xml:lang="en">Failed to set target temperature</lang>
+				<lang xml:lang="de">Das Setzen der Zieltemperatur ist fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x06">
+			<name>
+				<lang xml:lang="en">Supplying water</lang>
+				<lang xml:lang="de">Wasserversorgung</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x07">
+			<name>
+				<lang xml:lang="en">Water supply failure</lang>
+				<lang xml:lang="de">Wasserversorgung fehlerhaft</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x08">
+			<name>
+				<lang xml:lang="en">Boiling</lang>
+				<lang xml:lang="de">Boiler Wasseraufbereitung</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x09">
+			<name>
+				<lang xml:lang="en">Boiler Wasseraufbereitung fehlerhaft</lang>
+				<lang xml:lang="de"></lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0A">
+			<name>
+				<lang xml:lang="en">Washing</lang>
+				<lang xml:lang="de">Waschen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0B">
+			<name>
+				<lang xml:lang="en">Washing failure</lang>
+				<lang xml:lang="de">Waschen fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0C">
+			<name>
+				<lang xml:lang="en">Rinsing</lang>
+				<lang xml:lang="de">Spülen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0D">
+			<name>
+				<lang xml:lang="en">Rinsing failure</lang>
+				<lang xml:lang="de">Spülen fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0E">
+			<name>
+				<lang xml:lang="en">Draining</lang>
+				<lang xml:lang="de">Entwässerung</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x0F">
+			<name>
+				<lang xml:lang="en">Draining failure</lang>
+				<lang xml:lang="de">Entwässerung fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x10">
+			<name>
+				<lang xml:lang="en">Spinning</lang>
+				<lang xml:lang="de">Schleudern</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x11">
+			<name>
+				<lang xml:lang="en">Spinning failure</lang>
+				<lang xml:lang="de">Schleudern fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x12">
+			<name>
+				<lang xml:lang="en">Drying</lang>
+				<lang xml:lang="de">Trocknen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x13">
+			<name>
+				<lang xml:lang="en">Drying failure</lang>
+				<lang xml:lang="de">Trocknen fehlgeschlagen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x14">
+			<name>
+				<lang xml:lang="en">Fan failure</lang>
+				<lang xml:lang="de">Lüfterausfall</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x15">
+			<name>
+				<lang xml:lang="en">Compressor failure</lang>
+				<lang xml:lang="de">Kompressorausfall</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm>
+	<Alarm id="0x0D">
+		<name>
+			<lang xml:lang="en">Health</lang>
+			<lang xml:lang="de">Gesundheit</lang>
+			<lang xml:lang="ru">Здоровье</lang>
+			<lang xml:lang="sv"></lang>
+			<lang xml:lang="sk"></lang>
+			<lang xml:lang="cz"></lang>
+		</name>
+		<Event id="0x01">
+			<name>
+				<lang xml:lang="en">Leaving bed</lang>
+				<lang xml:lang="de">Bett verlassen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x02">
+			<name>
+				<lang xml:lang="en">Sitting on bed</lang>
+				<lang xml:lang="de">Auf dem Bett sitzen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x03">
+			<name>
+				<lang xml:lang="en">Lying on bed</lang>
+				<lang xml:lang="de">Auf dem Bett liegen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x04">
+			<name>
+				<lang xml:lang="en">Posture changed</lang>
+				<lang xml:lang="de">Körperhaltung verändert</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x05">
+			<name>
+				<lang xml:lang="en">Sitting on edge of bed</lang>
+				<lang xml:lang="de">Auf der Ecke des Bettes sitzen</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0x06">
+			<name>
+				<lang xml:lang="en">Volatile compound organic level (VOC)</lang>
+
+				<lang xml:lang="de">Level der flüchtigen organischen Verbindungen (VOC)</lang>
+				<lang xml:lang="ru"></lang>
+				<lang xml:lang="sv"></lang>
+				<lang xml:lang="sk"></lang>
+				<lang xml:lang="cz"></lang>
+			</name>
+		</Event>
+		<Event id="0xFE">
+			<name>
+				<lang xml:lang="en">unknown</lang>
+				<lang xml:lang="de">unbekannt</lang>
+				<lang xml:lang="ru">неизвестно</lang>
+				<lang xml:lang="sv">okänd</lang>
+				<lang xml:lang="sk">neznámy</lang>
+				<lang xml:lang="cz">neznámý</lang>
+			</name>
+		</Event>
+	</Alarm>
+</Alarms>
+

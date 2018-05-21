@@ -9,14 +9,6 @@
 
 #include <linux/input.h>
 
-#include "uv.h"
-#include "iot_utils.h"
-#include "iot_error.h"
-
-
-//#define IOT_VENDOR unet
-//#define IOT_BUNDLE generic__toneplayer
-
 #include "iot_module.h"
 
 IOT_LIBVERSION_DEFINE;
@@ -55,7 +47,7 @@ struct basic_instance : public iot_node_base {
 
 	static int deinit_instance(iot_node_base* instance) {
 		basic_instance *inst=static_cast<basic_instance*>(instance);
-		delete inst;
+		inst->unref();
 		return 0;
 	}
 private:

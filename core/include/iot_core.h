@@ -50,6 +50,7 @@ extern iot_thread_item_t* main_thread_item; //prealloc main thread item
 extern iot_thread_registry_t* thread_registry;
 extern volatile sig_atomic_t need_exit;
 extern iot_memallocator main_allocator;
+extern thread_local iot_memallocator* tls_allocator;
 extern iot_modules_registry_t *modules_registry;
 //extern iot_configregistry_t* config_registry;
 //extern hwdev_registry_t* hwdev_registry;
@@ -71,14 +72,15 @@ void iot_init_systime(void);
 inline uint64_t iot_get_systime(void) { //gets real time synchronized within hosts (in nanoseconds)
 	struct timespec ts;
 	clock_gettime(mono_clockid, &ts);
-	return uint64_t(ts.tv_sec*1000000000+ts.tv_nsec)+mono_clock_offset+system_clock_offset;
+
+	return uint64_t(ts.tv_sec)*1000000000ll+ts.tv_nsec+mono_clock_offset+system_clock_offset;
 }
 
 inline uint64_t iot_get_reltime(void) { //gets relative monotonic time not affected by time correction.
 										//Only difference between two consecutive values taken IN SAME PROCESS is meaningful
 	struct timespec ts;
 	clock_gettime(mono_clockid, &ts);
-	return uint64_t(ts.tv_sec*1000000000+ts.tv_nsec);
+	return uint64_t(ts.tv_sec)*1000000000ll+ts.tv_nsec;
 }
 
 
@@ -177,5 +179,13 @@ printf("EVENT %" PRIu64 " allocated\n", rval);
 	void graceful_shutdown_step4(void);
 };
 
+struct iot_ownconfig_t {
+	time_t modtime;
+	json_object *load_drivers; //override to loading of driver modules
+	json_object *detectors; //params and manual devices for detectors
+	json_object *hwdevices; //driver overrides and params for drivers of hw devices
+	json_object *connect_map; //per-destination host override for connection types
+};
+extern iot_ownconfig_t ownconfig;
 
 #endif //IOT_CORE_H

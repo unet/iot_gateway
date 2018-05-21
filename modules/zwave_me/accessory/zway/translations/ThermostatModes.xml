@@ -1,0 +1,399 @@
+<?xml version="1.0"?>
+<ThermostatModes>
+	<ThermostatMode id="0x00">
+		<name>
+			<lang xml:lang="en">Off</lang>
+			<lang xml:lang="de">Aus</lang>
+			<lang xml:lang="ru">Отключен</lang>
+			<lang xml:lang="sv">Av</lang>
+			<lang xml:lang="sk">Off</lang>
+			<lang xml:lang="cz">Off</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x01">
+		<name>
+			<lang xml:lang="en">Heat</lang>
+			<lang xml:lang="de">Heizen</lang>
+			<lang xml:lang="ru">Обогрев</lang>
+			<lang xml:lang="sv">Värme</lang>
+			<lang xml:lang="sk">Teplo</lang>
+			<lang xml:lang="cz">Teplo</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x02">
+		<name>
+			<lang xml:lang="en">Cool</lang>
+			<lang xml:lang="de">Kühlen</lang>
+			<lang xml:lang="ru">Охлаждение</lang>
+			<lang xml:lang="sv">Kyla</lang>
+			<lang xml:lang="sk">Chlad</lang>
+			<lang xml:lang="cz">Chlad</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x03">
+		<name>
+			<lang xml:lang="en">Auto</lang>
+			<lang xml:lang="de">Auto</lang>
+			<lang xml:lang="ru">Авто</lang>
+			<lang xml:lang="sv">Auto</lang>
+			<lang xml:lang="sk">Auto</lang>
+			<lang xml:lang="cz">Auto</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x04">
+		<name>
+			<lang xml:lang="en">Auxiliary</lang>
+			<lang xml:lang="de">Stand-By</lang>
+			<lang xml:lang="ru">Дополнительный</lang>
+			<lang xml:lang="sv">Stand-By</lang>
+			<lang xml:lang="sk">Voliteľný</lang>
+			<lang xml:lang="cz">Volitelný</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x05">
+		<name>
+			<lang xml:lang="en">Resume</lang>
+			<lang xml:lang="de">Zurück</lang>
+			<lang xml:lang="ru">Продолжение</lang>
+			<lang xml:lang="sv">Återuppta</lang>
+			<lang xml:lang="sk">Pokračovať</lang>
+			<lang xml:lang="cz">Pokračovat</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x06">
+		<name>
+			<lang xml:lang="en">Fan Only</lang>
+			<lang xml:lang="de">Nur Lüftung</lang>
+			<lang xml:lang="ru">Только обдув</lang>
+			<lang xml:lang="sv">Endast fläkt</lang>
+			<lang xml:lang="sk">Iba ventilátor</lang>
+			<lang xml:lang="cz">Pouze ventilátor</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x07">
+		<name>
+			<lang xml:lang="en">Furnace</lang>
+			<lang xml:lang="de">Ofen</lang>
+			<lang xml:lang="ru">Печка</lang>
+			<lang xml:lang="sv">Centralvärme</lang>
+			<lang xml:lang="sk">Pec</lang>
+			<lang xml:lang="cz">Pec</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x08">
+		<name>
+			<lang xml:lang="en">Dry Air</lang>
+			<lang xml:lang="de">Trockenluft</lang>
+			<lang xml:lang="ru">Высушивание воздуха</lang>
+			<lang xml:lang="sv">Torr luft</lang>
+			<lang xml:lang="sk">Suchý vzduch</lang>
+			<lang xml:lang="cz">Suchý vzduch</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x09">
+		<name>
+			<lang xml:lang="en">Moist Air</lang>
+			<lang xml:lang="de">Feuchtluft</lang>
+			<lang xml:lang="ru">Увлажнение воздуха</lang>
+			<lang xml:lang="sv">Fuktig luft</lang>
+			<lang xml:lang="sk">Vlhký vzduch</lang>
+			<lang xml:lang="cz">Vlhký vzduch</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x0A">
+		<name>
+			<lang xml:lang="en">Auto Change Over</lang>
+			<lang xml:lang="de">Automatic</lang>
+			<lang xml:lang="ru">Автоматическая смена</lang>
+			<lang xml:lang="sv">Automatisk</lang>
+			<lang xml:lang="sk">Automatická zmena</lang>
+			<lang xml:lang="cz">Automatická změna</lang>
+		</name>
+	</ThermostatMode>   
+	<ThermostatMode id="0x0B">
+		<name>
+			<lang xml:lang="en">Energy Save Heat</lang>
+			<lang xml:lang="de">Energiesparheizung</lang>
+			<lang xml:lang="ru">Энергосберегающий обогрев</lang>
+			<lang xml:lang="sv">Energisparläge värme</lang>
+			<lang xml:lang="sk">Kúrenie s úsporou energie</lang>
+			<lang xml:lang="cz">Topení s úsporou energie</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x0C">
+		<name>
+			<lang xml:lang="en">Energy Save Cool</lang>
+			<lang xml:lang="de">Energysparkühlung</lang>
+			<lang xml:lang="ru">Энергосберегающее охлаждение</lang>
+			<lang xml:lang="sv">Energisparläge kyla</lang>
+			<lang xml:lang="sk">Chladenie s úsporou energie</lang>
+			<lang xml:lang="cz">Chlazení s úsporou energie</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x0D">
+		<name>
+			<lang xml:lang="en">Away Heat</lang>
+			<lang xml:lang="de">Energiesparmodus Heizung</lang>
+			<lang xml:lang="ru">Не дома, обогрев</lang>
+			<lang xml:lang="sv">Bortaläge värme</lang>
+			<lang xml:lang="sk">Úsporný režim vykurovania</lang>
+			<lang xml:lang="cz">Úsporný režim vytápění</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x0E">
+		<name>
+			<lang xml:lang="en">Away Cool</lang>
+			<lang xml:lang="de">Energiesparmodus Kühlung</lang>
+			<lang xml:lang="ru">Не дома, охлаждение</lang>
+			<lang xml:lang="sv">Bortaläge Kyla</lang>
+			<lang xml:lang="sk">Úsporný režim chladenia</lang>
+			<lang xml:lang="cz">Úsporný režim chlazení</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x0F">
+		<name>
+			<lang xml:lang="en">Full Power</lang>
+			<lang xml:lang="de">voller Leistung</lang>
+			<lang xml:lang="ru">Полная мощность</lang>
+			<lang xml:lang="sv">Helt på</lang>
+			<lang xml:lang="sk">Plný výkon</lang>
+			<lang xml:lang="cz">Plný výkon</lang>
+		</name>
+	</ThermostatMode>
+	<ThermostatMode id="0x1F">
+		<name>
+			<lang xml:lang="en">Manufacturer Specific</lang>
+			<lang xml:lang="de">Herstellerspezifisch</lang>
+			<lang xml:lang="ru">Специфичный для произовдителя</lang>
+			<lang xml:lang="sv">Tillverkarspecifik</lang>
+			<lang xml:lang="sk">Špecifikácie výrobcu</lang>
+			<lang xml:lang="cz">Specifikace výrobce</lang>
+		</name>
+	</ThermostatMode>
+	
+	<ThermostatFanMode id="0x00">
+		<name>
+			<lang xml:lang="en">Auto Low</lang>
+			<lang xml:lang="de">Automatisch und langsam</lang>
+			<lang xml:lang="ru">Автоматический слабый</lang>
+			<lang xml:lang="sv">Automtisk lågläge</lang>
+			<lang xml:lang="sk">Auto nízka úroveň</lang>
+			<lang xml:lang="cz">Auto nízká úroveň</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x01">
+		<name>
+			<lang xml:lang="en">On Low</lang>
+			<lang xml:lang="de">Ein und langsam</lang>
+			<lang xml:lang="ru">Включен слабо</lang>
+			<lang xml:lang="sv">På lågläge</lang>
+			<lang xml:lang="sk">On nízka úroveň</lang>
+			<lang xml:lang="cz">On nízká úroveň</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x02">
+		<name>
+			<lang xml:lang="en">Auto High</lang>
+			<lang xml:lang="de">Automatisch und schnell</lang>
+			<lang xml:lang="ru">Автоматический быстрый</lang>
+			<lang xml:lang="sv">Automatiskt högläge</lang>
+			<lang xml:lang="sk">Auto vysoká úroveň</lang>
+			<lang xml:lang="cz">Auto vysoká úroveň</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x03">
+		<name>
+			<lang xml:lang="en">On High</lang>
+			<lang xml:lang="de">Ein und schnell</lang>
+			<lang xml:lang="ru">Включен быстро</lang>
+			<lang xml:lang="sv">På högläge</lang>
+			<lang xml:lang="sk">On vysoká úroveň</lang>
+			<lang xml:lang="cz">On vysoká úroveň</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x04">
+		<name>
+			<lang xml:lang="en">Auto Medium</lang>
+			<lang xml:lang="de">Automatisch und mittelschnell</lang>
+			<lang xml:lang="ru">Автоматический средний</lang>
+			<lang xml:lang="sv">Automatiskt mellanläge</lang>
+			<lang xml:lang="sk">Auto stredná úroveň</lang>
+			<lang xml:lang="cz">Auto střední úroveň</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x05">
+		<name>
+			<lang xml:lang="en">On Medium</lang>
+			<lang xml:lang="de">Ein und mittelschnell</lang>
+			<lang xml:lang="ru">Включен средне</lang>
+			<lang xml:lang="sv">På mellanläge</lang>
+			<lang xml:lang="sk">On stredná úroveň</lang>
+			<lang xml:lang="cz">On střední úroveň</lang>
+		</name>
+	</ThermostatFanMode>
+
+	<!-- needs swedish translation - START -->
+	<ThermostatFanMode id="0x06">
+		<name>
+			<lang xml:lang="en">Circulation</lang>
+			<lang xml:lang="de">Circulation</lang>
+			<lang xml:lang="ru">Циркуляция</lang>
+			<lang xml:lang="sv">Cirkulation</lang>
+			<lang xml:lang="sk">Cirkulácia</lang>
+			<lang xml:lang="cz">Cirkulace</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x07">
+		<name>
+			<lang xml:lang="en">Humidity and circulation</lang>
+			<lang xml:lang="de">Feuchtluft und circulation</lang>
+			<lang xml:lang="ru">Увлажнение и циркуляция</lang>
+			<lang xml:lang="sv">Luftufktighet och cirkulation</lang>
+			<lang xml:lang="sk">Vlhkosť a cirkulácia</lang>
+			<lang xml:lang="cz">Vlhkost a cirkulace</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x08">
+		<name>
+			<lang xml:lang="en">Left and right</lang>
+			<lang xml:lang="de">Links und rechts</lang>
+			<lang xml:lang="ru">Вправо-влево</lang>
+			<lang xml:lang="sv">Vänster och höger</lang>
+			<lang xml:lang="sk">Vľavo a vpravo</lang>
+			<lang xml:lang="cz">Vlevo a vpravo</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x09">
+		<name>
+			<lang xml:lang="en">Up and down</lang>
+			<lang xml:lang="de">Oben und unten</lang>
+			<lang xml:lang="ru">Вверх-вниз</lang>
+			<lang xml:lang="sv">Upp och ner</lang>
+			<lang xml:lang="sk">Hore a dole</lang>
+			<lang xml:lang="cz">Nahoru a dolů</lang>
+		</name>
+	</ThermostatFanMode>
+	<ThermostatFanMode id="0x0A">
+		<name>
+			<lang xml:lang="en">Quite</lang>
+			<lang xml:lang="de">Ruhig</lang>
+			<lang xml:lang="ru">Тихий</lang>
+			<lang xml:lang="sv">Tyst</lang>
+			<lang xml:lang="sk">Tichý</lang>
+			<lang xml:lang="cz">Tichý</lang>
+		</name>
+	</ThermostatFanMode>
+
+	<!-- needs swedish translation - END -->
+	
+	<Setpoint id="0x01">
+		<name>
+			<lang xml:lang="en">Heating</lang>
+			<lang xml:lang="de">Heizung</lang>
+			<lang xml:lang="ru">Обогрев</lang>
+			<lang xml:lang="sv">Värme</lang>
+			<lang xml:lang="sk">Kúrenie</lang>
+			<lang xml:lang="cz">Topení</lang>
+		</name>
+	</Setpoint>
+	<Setpoint id="0x02">
+		<name>
+			<lang xml:lang="en">Cooling</lang>
+			<lang xml:lang="de">Kühlung</lang>
+			<lang xml:lang="ru">Охлаждение</lang>
+			<lang xml:lang="sv">Kyla</lang>
+			<lang xml:lang="sk">Chladenie</lang>
+			<lang xml:lang="cz">Chlazení</lang>
+		</name>
+	</Setpoint>
+	<Setpoint id="0x07">
+		<name>
+			<lang xml:lang="en">Furnace</lang>
+			<lang xml:lang="de">Ofen</lang>
+			<lang xml:lang="ru">Печка</lang>
+			<lang xml:lang="sv">Centralvärme</lang>
+			<lang xml:lang="sk">Pec</lang>
+			<lang xml:lang="cz">Pec</lang>
+		</name>
+	</Setpoint>
+	<Setpoint id="0x08">
+		<name>
+			<lang xml:lang="en">Dry Air</lang>
+			<lang xml:lang="de">Trockne Luft</lang>
+			<lang xml:lang="ru">Высушивание воздуха</lang>
+			<lang xml:lang="sv">Torr luft</lang>
+			<lang xml:lang="sk">Suchý vzduch</lang>
+			<lang xml:lang="cz">Suchý vzduch</lang>
+		</name>
+	</Setpoint>
+	<Setpoint id="0x09">
+		<name>
+			<lang xml:lang="en">Moist Air</lang>
+			<lang xml:lang="de">Feuchte Luft</lang>
+			<lang xml:lang="ru">Увлажнение воздуха</lang>
+			<lang xml:lang="sv">Fuktig luft</lang>
+			<lang xml:lang="sk">Vlhký vzduch</lang>
+			<lang xml:lang="cz">Vlhký vzduch</lang>
+		</name>
+	</Setpoint>		
+	<Setpoint id="0x0A">
+		<name>
+			<lang xml:lang="en">Auto Change Over</lang>
+			<lang xml:lang="de">Automatik</lang>
+			<lang xml:lang="ru">Автоматическая смена</lang>
+			<lang xml:lang="sv">Automatiskt</lang>
+			<lang xml:lang="sk">Automatická zmena</lang>
+			<lang xml:lang="cz">Automatická změna</lang>
+		</name>
+	</Setpoint>   
+	<Setpoint id="0x0B">
+		<name>
+			<lang xml:lang="en">Energy Save Heating</lang>
+			<lang xml:lang="de">Heize energiesparend</lang>
+			<lang xml:lang="ru">Энергосберегающий обогрев</lang>
+			<lang xml:lang="sv">Energibesparingsläge värme</lang>
+			<lang xml:lang="sk">Kúrenie s úsporou energie</lang>
+			<lang xml:lang="cz">Topení s úsporou energie</lang>
+		</name>
+	</Setpoint>
+	<Setpoint id="0x0C">
+		<name>
+			<lang xml:lang="en">Energy Save Cooling</lang>
+			<lang xml:lang="de">Kühle energiesparend</lang>
+			<lang xml:lang="ru">Энергосберегающее охлаждение</lang>
+			<lang xml:lang="sv">Energibesparingsläge kyla</lang>
+			<lang xml:lang="sk">Chladenie s úsporou energie</lang>
+			<lang xml:lang="cz">Chlazení s úsporou energie</lang>
+		</name>
+	</Setpoint>
+	<Setpoint id="0x0D">
+		<name>
+			<lang xml:lang="en">Away Heating</lang>
+			<lang xml:lang="de">Energiesparmodus Heizung</lang>
+			<lang xml:lang="ru">Не дома, обогрев</lang>
+			<lang xml:lang="sv">Bortaläge värme</lang>
+			<lang xml:lang="sk">Úsporný režim vykurovania</lang>
+			<lang xml:lang="cz">Úsporný režim vytápění</lang>
+		</name>
+	</Setpoint>
+	<Setpoint id="0x0E">
+		<name>
+			<lang xml:lang="en">Away Cooling</lang>
+			<lang xml:lang="de">Energiesparmodus Kühlung</lang>
+			<lang xml:lang="ru">Не дома, охлаждение</lang>
+			<lang xml:lang="en">Bortaläge kyla</lang>
+			<lang xml:lang="sk">Úsporný režim chladenia</lang>
+			<lang xml:lang="cz">Úsporný režim chlazení</lang>
+		</name>
+	</Setpoint>
+	<Setpoint id="0x0F">
+		<name>
+			<lang xml:lang="en">Full Power</lang>
+			<lang xml:lang="de">voller Leistung</lang>
+			<lang xml:lang="ru">Полная мощность</lang>
+			<lang xml:lang="sv">Helt på</lang>
+			<lang xml:lang="sk">Plný výkon</lang>
+			<lang xml:lang="cz">Plný výkon</lang>
+		</name>
+	</Setpoint>			 
+</ThermostatModes>

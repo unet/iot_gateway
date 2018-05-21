@@ -964,7 +964,7 @@ bool iot_netproto_session_mesh::process_meshtun_input(iot_meshtun_stream_listen_
 	it.remotehost=repack_hostid(req->srchost);
 	it.initial_sequence=repack_uint64(stream->data_sequence);
 	it.creation_time=0;
-	it.request_time=((iot_get_systime()+500000000)/1000000000)-1000000000; //round to integer seconds and offset by 1e9 seconds
+	it.request_time=((iot_get_systime()+500000000ull)/1000000000ull)-1000000000ull; //round to integer seconds and offset by 1e9 seconds
 	it.peer_rwnd=repack_uint32(stream->rwndsize);
 	it.remoteport=repack_uint16(req->srcport);
 	it.metasize=metasize;

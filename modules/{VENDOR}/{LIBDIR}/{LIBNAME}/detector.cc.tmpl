@@ -1,0 +1,230 @@
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<fcntl.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<assert.h>
+#include<new>
+
+
+#include "iot_module.h"
+
+IOT_LIBVERSION_DEFINE; //creates global symbol with library full version spec according to IOT_LIBVERSION, IOT_LIBPATCHLEVEL and IOT_LIBREVISION defines
+
+
+class detector;
+detector* detector_obj=NULL;
+
+class detector : public iot_device_detector_base {
+	bool is_active=false; //true if instance was started
+	uv_timer_t timer_watcher={};
+	int devinfo_len=0; //number of filled items in devinfo array
+	struct devinfo_t { //short device info indexed by event_index field. minimal info necessary to determine change of device
+		iot_hwdev_localident_linuxinput ident;
+		bool present;
+		bool error; //there was persistent error adding this device, so no futher attempts should be done
+	} devinfo[DETECTOR_MAX_DEVS]={};
+
+	void on_timer(void) {
+		iot_hwdev_details_linuxinput fulldevinfo[DETECTOR_MAX_DEVS];
+		int n=get_event_devices(fulldevinfo, DETECTOR_MAX_DEVS);
+		if(n==0 && devinfo_len==0) return; //nothing to do
+
+		iot_hwdev_localident_linuxinput ident;
+
+		int i, err;
+		int max_n = n>=devinfo_len ? n : devinfo_len;
+
+		for(i=0;i<max_n;i++) { //compare if actual devices changed for common indexes
+			if(i<devinfo_len && devinfo[i].present) {
+				if(i>=n || !fulldevinfo[i].data_valid) { //new state is absent, so device was removed
+					kapi_outlog_info("Hwdevice was removed: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d",i);
+					if(!devinfo[i].error) { //device was added to registry, so must be removed
+						err=kapi_hwdev_registry_action(IOT_ACTION_REMOVE, &devinfo[i].ident, NULL);
+						if(err) kapi_outlog_error("Cannot remove device from registry: %s", kapi_strerror(err));
+						if(err==IOT_ERROR_TEMPORARY_ERROR) continue; //retry
+						//success or critical error
+						devinfo[i].present=false;
+					}
+					continue;
+				}
+				err=ident.init_spec(uint8_t(i), fulldevinfo[i].input.bustype, fulldevinfo[i].input.vendor, fulldevinfo[i].input.product, fulldevinfo[i].input.version, fulldevinfo[i].cap_bitmap, fulldevinfo[i].phys);
+				if(err) {
+					kapi_outlog_error("Cannot fill device local identity: %s", kapi_strerror(err));
+				} else {
+					//check if device looks the same
+					if(devinfo[i].ident.matches(&ident)) continue; //same
+
+					kapi_outlog_info("Hwdevice was replaced: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, new name='%s'",i, fulldevinfo[i].name);
+
+					err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, &fulldevinfo[i]);
+					if(err) kapi_outlog_error("Cannot update device in registry: %s", kapi_strerror(err));
+				}
+				if(err==IOT_ERROR_TEMPORARY_ERROR) continue; //retry
+				//success or critical error
+				devinfo[i].error = !!err;
+				devinfo[i].ident=ident;
+			} else  //previous state was absent
+				if(i<n && fulldevinfo[i].data_valid) { //new state is present, so NEW DEVICE ADDED
+					kapi_outlog_info("Detected new hwdevice with type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, name='%s'",i, fulldevinfo[i].name);
+					err=ident.init_spec(uint8_t(i), fulldevinfo[i].input.bustype, fulldevinfo[i].input.vendor, fulldevinfo[i].input.product, fulldevinfo[i].input.version, fulldevinfo[i].cap_bitmap, fulldevinfo[i].phys);
+					if(err) {
+						kapi_outlog_error("Cannot fill device local identity: %s", kapi_strerror(err));
+					} else {
+						err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, &fulldevinfo[i]);
+						if(err) kapi_outlog_error("Cannot add new device to registry: %s", kapi_strerror(err));
+					}
+					if(err==IOT_ERROR_TEMPORARY_ERROR) continue; //retry
+					//success or critical error
+					devinfo[i].present=true;
+					devinfo[i].error = !!err;
+
+					devinfo[i].ident=ident;
+					if(devinfo_len<i+1) devinfo_len=i+1;
+					continue;
+				} //else do nothing
+		}
+	}
+
+//iot_module_instance_base methods
+
+
+	//Called to start work of previously inited instance.
+	//Return values:
+	//0 - driver successfully started. It could start with temporary error state and have own retry strategy.
+	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked till program restart. this instance will be deinited.
+	//IOT_ERROR_CRITICAL_ERROR - non-recoverable error. may be error in configuration. instanciation for specific entity (device for driver, iot_id for others) will be blocked
+	//IOT_ERROR_TEMPORARY_ERROR - module should be retried later
+	//other errors equivalent to IOT_ERROR_CRITICAL_BUG!!!
+	virtual int start(void) {
+		assert(uv_thread_self()==thread);
+		assert(!is_active);
+		if(is_active) return 0;
+
+		uv_loop_t* loop=kapi_get_event_loop(thread);
+		assert(loop!=NULL);
+
+		uv_timer_init(loop, &timer_watcher);
+		int err=uv_timer_start(&timer_watcher, [](uv_timer_t* handle) -> void {detector_obj->on_timer();}, 0, DETECTOR_POLL_INTERVAL);
+		if(err<0) {
+			kapi_outlog_error("Cannot start timer: %s", uv_strerror(err));
+			return IOT_ERROR_TEMPORARY_ERROR;
+		}
+		is_active=true;
+		return 0;
+	}
+	virtual int stop(void) {
+		assert(uv_thread_self()==thread);
+		assert(is_active);
+
+		if(!is_active) return 0;
+
+		uv_close((uv_handle_t*)&timer_watcher, NULL);
+		is_active=false;
+		return 0;
+	}
+
+public:
+	detector(void) {
+		assert(detector_obj==NULL);
+		detector_obj=this;
+	}
+	virtual ~detector(void) {
+		detector_obj=NULL;
+	}
+	int init() {
+		return 0;
+	}
+	int deinit(void) {
+		assert(!is_active); //must be stopped
+		return 0;
+	}
+
+	static int init_instance(iot_device_detector_base**instance, json_object *json_cfg, json_object *manual_devices) {
+		assert(uv_thread_self()==main_thread);
+
+		detector *inst=new detector();
+		if(!inst) return IOT_ERROR_TEMPORARY_ERROR;
+
+		int err=inst->init();
+		if(err) { //error
+			delete inst;
+			return err;
+		}
+		*instance=inst;
+		return 0;
+	}
+	//called to deinit instance.
+	//Return values:
+	//0 - success
+	//any other error leaves instance in hang state
+	static int deinit_instance(iot_device_detector_base* instance) {
+		assert(uv_thread_self()==main_thread);
+		detector *inst=static_cast<detector*>(instance);
+		int err=inst->deinit();
+		if(err) return err;
+		delete inst;
+		return 0;
+	}
+	static int check_system(void) {
+		struct stat statbuf;
+		int err=stat("/dev/input", &statbuf);
+		if(!err) {
+			if(S_ISDIR(statbuf.st_mode)) return 0; //dir
+			return IOT_ERROR_NOT_SUPPORTED;
+		}
+		if(err==ENOMEM) return IOT_ERROR_TEMPORARY_ERROR;
+		return IOT_ERROR_NOT_SUPPORTED;
+	}
+
+	//traverses all /dev/input/eventX devices and reads necessary props
+	//returns number of found devices
+	static int get_event_devices(iot_hwdev_details_linuxinput* devbuf, int max_devs, int start_index=0) {//takes address for array of devcontype_linuxinput_t structs and size of such array
+		char filepath[32];
+		int fd, idx, n=0;
+		iot_hwdev_details_linuxinput *cur_dev;
+
+		for(idx=0;idx<max_devs;idx++) {
+			cur_dev=devbuf+idx;
+
+			snprintf(filepath, sizeof(filepath), "/dev/input/event%d", idx+start_index);
+			fd=open(filepath, O_RDONLY | O_NONBLOCK); //O_NONBLOCK help to avoid side-effects of open on Linux when only ioctl is necessary
+			if(fd<0) {
+				if(errno!=ENOENT && errno!=ENODEV && errno!=ENXIO) //file present but corresponding device not exists
+					kapi_outlog_debug("Cannot open %s: %s", filepath, uv_strerror(uv_translate_sys_error(errno)));
+				cur_dev->name[0]='\0'; //indicator of skipped device
+				continue;
+			}
+
+			const char* errstr=cur_dev->read_inputdev_caps(fd, idx+start_index);
+
+			if(errstr) { //was ioctl error
+				kapi_outlog_debug("Cannot %s on %s: %s", errstr, filepath, uv_strerror(uv_translate_sys_error(errno)));
+			}
+			n=idx+1; //must return maximum successful index + 1
+			close(fd);
+		}
+		return n;
+	}
+};
+
+//static iot_hwdevcontype_t detector_devcontypes[]={DEVCONTYPE_CUSTOM_LINUXINPUT};
+
+
+iot_detector_moduleconfig_t IOT_DETECTOR_MODULE_CONF(det)={
+	.version = IOT_VERSION_COMPOSE(0,0,1),
+	.cpu_loading = 0,
+//	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
+
+	.init_module = NULL,
+	.deinit_module = NULL,
+	.init_instance = &detector::init_instance,
+	.deinit_instance = &detector::deinit_instance,
+	.check_system = &detector::check_system
+
+//	.hwdevcontypes = detector_devcontypes
+};
+
+//static const iot_hwdevident_iface* detector_devcontype_config[]={&linuxinput_iface_obj};
+
+

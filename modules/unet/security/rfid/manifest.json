@@ -1,0 +1,54 @@
+{
+	"platforms" : ["any"],
+	"node_modules": {
+		"kbdinput" : {
+			"title": "Keyboard RFID reader",
+			"description": "",
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"device_connections": {
+				"dev": {
+					"description":"Any device with Keyboard interface"
+				}
+			},
+			"links": {
+				"msg_outputs": {
+					"out": {
+						"description": "inputted RFID",
+					}
+				}
+			}
+		},
+		"op_inlist" : {
+			"title": "RFID comparator",
+			"description": "Checks provided RFID against predefined list",
+			"params_tmpl": {
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"links": {
+				"msg_inputs": {
+					"in": {
+						"description": "Input for RFID",
+					}
+				},
+				"msg_outputs": {
+					"out": {
+						"description": "Signal about successful comparison",
+					},
+					"neg": {
+						"description": "Signal about unsuccessful comparison",
+					}
+				}
+			}
+		}
+	}
+}

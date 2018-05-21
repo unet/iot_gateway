@@ -11,9 +11,10 @@
 #define IOT_SIGLEN 0
 
 //#define IOTDEBUG_MESHTUN
-#define IOTDEBUG_MESH
+//#define IOTDEBUG_MESH
 #define IOTDEBUG_MODELLING
-#define IOTDEBUG_IOTGW
+//#define IOTDEBUG_IOTGW
+#define IOTDEBUG_DEVREG
 
 
 //default port for TCP and UDP peer connectors

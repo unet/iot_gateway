@@ -34,7 +34,7 @@ int iot_prepare_msg(iot_threadmsg_t *&msg,iot_msg_code_t code, iot_modinstance_i
 		bool msg_alloced=false;
 		if(!msg) {
 			if(!allocator) {
-				allocator=thread_registry->find_allocator(uv_thread_self());
+				allocator=tls_allocator; //thread_registry->find_allocator(uv_thread_self());
 				assert(allocator!=NULL);
 			}
 

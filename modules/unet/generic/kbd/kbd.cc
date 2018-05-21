@@ -41,7 +41,7 @@ struct eventsrc_instance : public iot_node_base {
 	}
 	static int deinit_instance(iot_node_base* instance) {
 		eventsrc_instance *inst=static_cast<eventsrc_instance*>(instance);
-		delete inst;
+		inst->unref();
 		return 0;
 	}
 private:
@@ -164,12 +164,6 @@ private:
 
 //keys_instance* keys_instance::instances_head=NULL;
 
-
-//static iot_module_spec_t drvmodspec={
-//	.vendor=ECB_STRINGIFY(IOT_VENDOR),
-//	.bundle=ECB_STRINGIFY(IOT_BUNDLE),
-//	.module=ECB_STRINGIFY(DRVNAME),
-//};
 
 static const iot_deviface_params_keyboard kbd_filter_pconly(1);
 
@@ -296,7 +290,7 @@ struct oper_keystate_instance : public iot_node_base {
 	}
 
 	static int deinit_instance(iot_node_base* instance) {
-		delete static_cast<oper_keystate_instance*>(instance);
+		static_cast<oper_keystate_instance*>(instance)->unref();
 		return 0;
 	}
 private:
@@ -392,13 +386,6 @@ private:
 //keys_instance* keys_instance::instances_head=NULL;
 
 
-//static iot_module_spec_t drvmodspec={
-//	.vendor=ECB_STRINGIFY(IOT_VENDOR),
-//	.bundle=ECB_STRINGIFY(IOT_BUNDLE),
-//	.module=ECB_STRINGIFY(DRVNAME),
-//};
-
-
 iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(oper_keystate)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
 	.cpu_loading = 0,
@@ -470,7 +457,7 @@ struct leds_instance : public iot_node_base {
 
 	static int deinit_instance(iot_node_base* instance) {
 		leds_instance *inst=static_cast<leds_instance*>(instance);
-		delete inst;
+		inst->unref();
 		return 0;
 	}
 private:
@@ -588,12 +575,6 @@ private:
 
 //keys_instance* keys_instance::instances_head=NULL;
 
-
-//static iot_module_spec_t drvmodspec={
-//	.vendor=ECB_STRINGIFY(IOT_VENDOR),
-//	.bundle=ECB_STRINGIFY(IOT_BUNDLE),
-//	.module=ECB_STRINGIFY(DRVNAME),
-//};
 
 static const iot_deviface_params_activatable leds_filter_min3(3,0);
 

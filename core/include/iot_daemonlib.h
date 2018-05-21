@@ -11,29 +11,8 @@
 #define LDEBUG_MESH (2*(LMASKVAL+1))
 #define LDEBUG_MODELLING (3*(LMASKVAL+1))
 #define LDEBUG_IOTGW (4*(LMASKVAL+1))
+#define LDEBUG_DEVREG (5*(LMASKVAL+1))
 
-
-#define outlog_error(format... ) do_outlog(__FILE__, __LINE__, __func__, LERROR, format)
-
-#if LMIN<=LNOTICE
-#define outlog_notice(format... ) do {if(min_loglevel <= LNOTICE) do_outlog(__FILE__, __LINE__, __func__, LNOTICE, format);} while(0)
-#else
-#define outlog_notice(format... )
-#endif
-
-#if LMIN<=LINFO
-#define outlog_info(format... ) do {if(min_loglevel <= LINFO) do_outlog(__FILE__, __LINE__, __func__, LINFO, format);} while(0)
-#else
-#define outlog_info(format... )
-#endif
-
-#if LMIN<=LDEBUG
-#define outlog_debug(format... ) do {if(LMIN<=LDEBUG && min_loglevel <= LDEBUG) do_outlog(__FILE__, __LINE__, __func__, LDEBUG, format);} while(0)
-#else
-#define outlog_debug(format... )
-#endif
-
-#define outlog(level, format... )do { if(LMIN<=level && min_loglevel <= level) do_outlog(__FILE__, __LINE__, __func__, level, format);} while(0)
 
 #ifndef NDEBUG
 
@@ -55,6 +34,11 @@
 	#ifdef IOTDEBUG_IOTGW
 	#define outlog_debug_iotgw_vars(VARDECL, format... ) do {if(min_loglevel <= LNOTICE) {VARDECL; do_outlog(__FILE__, __LINE__, __func__, LDEBUG+LDEBUG_IOTGW, format);}} while(0)
 	#define outlog_debug_iotgw(format... ) outlog_debug_iotgw_vars( , format)
+	#endif
+
+	#ifdef IOTDEBUG_DEVREG
+	#define outlog_debug_devreg_vars(VARDECL, format... ) do {if(min_loglevel <= LNOTICE) {VARDECL; do_outlog(__FILE__, __LINE__, __func__, LDEBUG+LDEBUG_DEVREG, format);}} while(0)
+	#define outlog_debug_devreg(format... ) outlog_debug_devreg_vars( , format)
 	#endif
 
 
@@ -79,6 +63,11 @@
 #ifndef outlog_debug_iotgw
 #define outlog_debug_iotgw_vars(VARDECL, format... )
 #define outlog_debug_iotgw(format... )
+#endif
+
+#ifndef outlog_debug_devreg
+#define outlog_debug_devreg_vars(VARDECL, format... )
+#define outlog_debug_devreg(format... )
 #endif
 
 

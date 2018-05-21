@@ -345,6 +345,84 @@ inline const iot_datavalue_boolean* iot_datavalue_boolean::cast(const iot_datava
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////  PULSE (for used in messages) ///////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+//this datavalue holds no any subvalue, so can represent only availability of itself
+class iot_datavalue_pulse: public iot_datavalue {
+//	friend class iot_datatype_metaclass_boolean;
+	//forbid to create class objects other than static constants by making constructor private
+	constexpr iot_datavalue_pulse(void);// : iot_datavalue(&iot_datatype_metaclass_boolean::object, sizeof(iot_datavalue_pulse), 0, val ? 1 : 0) {}
+public:
+	static const iot_datavalue_pulse object;
+
+	iot_datavalue_pulse(const iot_datavalue_pulse&) = delete; //forbid implicit copy (and move) constructor
+
+	static const iot_datavalue_pulse* cast(const iot_datavalue *val);// { //if val is not NULL and has correct class, casts pointer to this class
+//		if(val && val->get_metaclass()==&iot_datatype_metaclass_boolean::object) return static_cast<const iot_datavalue_pulse*>(val);
+//		return NULL;
+//	}
+};
+
+class iot_datatype_metaclass_pulse : public iot_datatype_metaclass {
+	/*constexpr*/ iot_datatype_metaclass_pulse(void) : iot_datatype_metaclass(0, "pulse", IOT_VERSION_COMPOSE(0,0,1), true) {}
+
+public:
+	static iot_datatype_metaclass_pulse object;
+
+	virtual char* sprint(const iot_datavalue* v, char* buf, size_t bufsize, int* doff=NULL) const override { //bufsize must include space for NUL
+		assert(v && v->get_metaclass()==this);
+//		const iot_datavalue_pulse* val=static_cast<const iot_datavalue_pulse*>(v);
+		if(!bufsize) return buf;
+//		snprintf(buf, bufsize, "'%s' %s",type_name, val->custom_u8==1 ? "TRUE" : "FALSE");
+		int len=snprintf(buf, bufsize, "'%s'",type_name);
+		if(doff) *doff += len>=int(bufsize-1) ? int(bufsize-1) : len;
+		return buf;
+	}
+	virtual bool check_eq(const iot_datavalue* v, const iot_datavalue *op) const override {
+		assert(v && v->get_metaclass()==this && op && op->get_metaclass()==this);
+		return v==op; //this class has static value instances
+//		const iot_datavalue_pulse* val=static_cast<const iot_datavalue_pulse*>(v);
+//		const iot_datavalue_pulse* opval=static_cast<const iot_datavalue_pulse*>(op);
+//		return val->custom_u8==opval->custom_u8;
+	}
+private:
+	virtual int p_serialized_size(const iot_datavalue* obj0) const override {
+		const iot_datavalue_pulse* obj=iot_datavalue_pulse::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+		return 0;
+	}
+	virtual int p_serialize(const iot_datavalue* obj0, char* buf, size_t bufsize) const override {
+		const iot_datavalue_pulse* obj=iot_datavalue_pulse::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+		return 0;
+	}
+	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_datavalue*& obj) const override {
+		assert(false);
+		return 0;
+	}
+	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_datavalue*& obj) const override {
+		assert(false);
+		return 0;
+	}
+	virtual int p_to_json(const iot_datavalue* obj0, json_object* &dst) const override {
+		const iot_datavalue_pulse* obj=iot_datavalue_pulse::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+
+		dst=NULL;
+		return 0;
+	}
+};
+
+constexpr iot_datavalue_pulse::iot_datavalue_pulse(void) : iot_datavalue(&iot_datatype_metaclass_pulse::object, sizeof(iot_datavalue_pulse), 0, 0) {}
+
+inline const iot_datavalue_pulse* iot_datavalue_pulse::cast(const iot_datavalue *val) { //if val is not NULL and has correct class, casts pointer to this class
+	if(val && val->get_metaclass()==&iot_datatype_metaclass_pulse::object) return static_cast<const iot_datavalue_pulse*>(val);
+	return NULL;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////  NODEERRORSTATE   //////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -646,6 +724,114 @@ inline iot_datavalue_bitmap::iot_datavalue_bitmap(uint32_t max_code, const uint3
 
 inline const iot_datavalue_bitmap* iot_datavalue_bitmap::cast(const iot_datavalue *val) { //if val is not NULL and has correct class, casts pointer to this class
 	if(val && val->get_metaclass()==&iot_datatype_metaclass_bitmap::object) return static_cast<const iot_datavalue_bitmap*>(val);
+	return NULL;
+}
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////  NUMERIC   /////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+class iot_datavalue_numeric: public iot_datavalue {
+	double value;
+
+public:
+	iot_datavalue_numeric(double val, bool memblock);
+
+	static const iot_datavalue_numeric* cast(const iot_datavalue *val);
+
+	double get_value(void) const {
+		return value;
+	}
+
+	void set_value(double val) {
+		value=val;
+	}
+	iot_datavalue_numeric& operator= (const iot_datavalue_numeric& op) {
+		if(&op==this) return *this;
+		value=op.value;
+		return *this;
+	}
+};
+
+class iot_datatype_metaclass_numeric : public iot_datatype_metaclass {
+	iot_datatype_metaclass_numeric(void) : iot_datatype_metaclass(0, "numeric", IOT_VERSION_COMPOSE(0,0,1), false, true) {}
+	PACKED(
+		struct serialize_t {
+			double value;
+		}
+	);
+
+public:
+	static iot_datatype_metaclass_numeric object;
+
+	virtual char* sprint(const iot_datavalue* v, char* buf, size_t bufsize, int* doff=NULL) const override { //bufsize must include space for NUL
+		assert(v && v->get_metaclass()==this);
+		if(!bufsize) return buf;
+		const iot_datavalue_numeric* val=static_cast<const iot_datavalue_numeric*>(v);
+		int len=snprintf(buf, bufsize, "'%s' value=%.12g", type_name, val->get_value());
+		if(doff) *doff += len>=int(bufsize) ? int(bufsize)-1 : len;
+		return buf;
+	}
+	virtual bool check_eq(const iot_datavalue* v, const iot_datavalue *op) const override {
+		assert(v && v->get_metaclass()==this && op && op->get_metaclass()==this);
+		const iot_datavalue_numeric* val=static_cast<const iot_datavalue_numeric*>(v);
+		const iot_datavalue_numeric* opval=static_cast<const iot_datavalue_numeric*>(op);
+
+		return val->get_value()==opval->get_value();
+	}
+private:
+	virtual int p_serialized_size(const iot_datavalue* obj0) const override {
+		const iot_datavalue_numeric* obj=iot_datavalue_numeric::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+		return sizeof(serialize_t);
+	}
+	virtual int p_serialize(const iot_datavalue* obj0, char* buf, size_t bufsize) const override {
+		const iot_datavalue_numeric* obj=iot_datavalue_numeric::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+//		if(bufsize<sizeof(serialize_t)) return IOT_ERROR_NO_BUFSPACE;
+
+//		serialize_t *s=(serialize_t*)buf;
+//		s->value=repack_uint16(obj->value());
+		assert(false);
+		return 0;
+	}
+	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_datavalue*& obj) const override {
+		assert(false);
+		return 0;
+	}
+	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_datavalue*& obj) const override {
+		assert(false);
+		return 0;
+	}
+	virtual int p_to_json(const iot_datavalue* obj0, json_object* &dst) const override {
+		const iot_datavalue_numeric* obj=iot_datavalue_numeric::cast(obj0);
+		if(!obj) return IOT_ERROR_INVALID_ARGS;
+
+//		json_object* ob=json_object_new_object();
+//		if(!ob) return IOT_ERROR_NO_MEMORY;
+
+//		json_object* val=json_object_new_int(obj->value());
+//		if(!val) {
+//			json_object_put(ob);
+//			return IOT_ERROR_NO_MEMORY;
+//		}
+//		json_object_object_add(ob, "value", val);
+//		dst=ob;
+		assert(false);
+		return 0;
+	}
+};
+
+inline iot_datavalue_numeric::iot_datavalue_numeric(double val, bool is_memblock) : 
+				iot_datavalue(&iot_datatype_metaclass_numeric::object, is_memblock, sizeof(iot_datavalue_numeric)) {
+		value=val;
+	}
+
+inline const iot_datavalue_numeric* iot_datavalue_numeric::cast(const iot_datavalue *val) { //if val is not NULL and has correct class, casts pointer to this class
+	if(val && val->get_metaclass()==&iot_datatype_metaclass_numeric::object) return static_cast<const iot_datavalue_numeric*>(val);
 	return NULL;
 }
 

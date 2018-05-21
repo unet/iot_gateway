@@ -1,0 +1,74 @@
+{
+	"platforms" : ["any"],
+	"node_modules": {
+		"pulse_bool" : {
+			"title": "Generator of series of periodic Boolean values after Pulse",
+			"description": "Wait for Pulse to start outputting variable True/False values",
+			"params_tmpl": { //num_pulses, true_dur, false_dur, allow_restart
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"links": {
+				"msg_inputs": {
+					"in": {
+						"description": "Pulse input line",
+					}
+				},
+				"value_outputs": {
+					"out": {
+						"description": "Booleans values output",
+					}
+				}
+			}
+		},
+		"pulse" : {
+			"title": "Generator of serie of Pulses after Pulse",
+			"description": "Wait for Pulse to start sending several periodic Pulses",
+			"params_tmpl": { //num_pulses, period_dur, allow_restart
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"links": {
+				"msg_inputs": {
+					"in": {
+						"description": "Pulse input line",
+					}
+				},
+				"msg_outputs": {
+					"out": {
+						"description": "Pulses output",
+					}
+				}
+			}
+		},
+		"cpulse" : {
+			"title": "Controlled generator of periodic Pulses on True input",
+			"description": "Generates periodic Pulses while input is True",
+			"params_tmpl": { //period_dur
+				//"shortDescr":
+				//"longDescr":
+				//"propList":
+				//"newDialog":
+				//"editDialog":
+			},
+			"links": {
+				"value_inputs": {
+					"in": {
+						"description": "Control input line",
+					}
+				},
+				"msg_outputs": {
+					"out": {
+						"description": "Pulses output",
+					}
+				}
+			}
+		}
+	}
+}

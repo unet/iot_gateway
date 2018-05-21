@@ -117,15 +117,20 @@ private:
 	virtual int p_to_json(const iot_hwdev_localident* obj, json_object* &dst) const = 0;
 };
 
+
+
 class iot_hwdev_details { //base abstract class for extended device data
 	const iot_hwdevcontype_metaclass* meta; //keep reference to metaclass here to optimize (exclude virtual function call) requests which are redirected to metaclass
 
-//?	iot_hwdev_localident(const iot_hwdev_localident&) = delete;
 	iot_hwdev_details(void) = delete;
 protected:
-	constexpr iot_hwdev_details(const iot_hwdevcontype_metaclass* meta): meta(meta) { //only derived classes can create instances
+	iot_hwdev_details(const iot_hwdevcontype_metaclass* meta): meta(meta) { //only derived classes can create instances
+	}
+	iot_hwdev_details(const iot_hwdev_details& ob): meta(ob.meta) {
 	}
 public:
+	virtual ~iot_hwdev_details(void) {
+	}
 	const iot_hwdevcontype_metaclass* get_metaclass(void) const {
 		return meta;
 	}
@@ -135,8 +140,22 @@ public:
 	bool is_valid(void) const {
 		return get_id()!=0;
 	}
-	virtual size_t get_size(void) const = 0; //must return 0 if object is statically precreated and thus must not be copied by value, only by reference
+	//must return 0 if object is statically precreated and thus must not be copied by value, only by reference
+	virtual size_t get_size(void) const = 0;
+
+	//this function must create copy of target object at provided memory location. buffer_size must be >= get_size(), otherwise function must return false
+	virtual bool copy_to(void *buffer, size_t buffer_size) const = 0;
+
+	//this function must generate correct (of same type) localident structure in provided memory. Must return false if incorrect buffer or current type DOES NOT ALLOW
+	//such generation (e.g. if details contain no enough data for localident)
+	//on success 'identptr' (if not NULL) must be correctly assigned to provided buffer OR TO static localident object if apropriate. buffer does not matter if static localident is to be returned
+	virtual bool fill_localident(void *buffer, size_t buffer_size, const iot_hwdev_localident** identptr) const = 0;
+
+	//must return 0 if object is statically precreated and thus must not be copied by value, only by reference
+	virtual bool operator==(const iot_hwdev_details&) const = 0;
 };
+
+
 
 class iot_hwdev_localident { //base abstract class for local device identity
 	const iot_hwdevcontype_metaclass* meta; //keep reference to metaclass here to optimize (exclude virtual function call) requests which are redirected to metaclass
@@ -446,6 +465,22 @@ struct iot_hwdev_ident_buffered : public iot_hwdev_ident { //same as iot_hwdev_i
 		iot_hwdev_localident* p=(iot_hwdev_localident*)localbuf;
 		local=p;
 		p->invalidate();
+	}
+	iot_hwdev_ident_buffered(iot_hostid_t hostid_, const iot_hwdev_details* details) { //tries to initialize from device details (subclass of iot_hwdev_details)
+		//local will point to invalid localident if subclass rejected call to fill_localident()
+		hostid=hostid_;
+		init_fromdetails(details);
+	}
+
+	bool init_fromdetails(const iot_hwdev_details* details) { //hostid must be already set in constructor!
+		assert(details!=NULL);
+		if(!details->fill_localident(localbuf, sizeof(localbuf), &local)) {
+			iot_hwdev_localident* p=(iot_hwdev_localident*)localbuf;
+			local=p;
+			p->invalidate();
+			return false;
+		}
+		return true;
 	}
 
 	static int deserialize(const char* data, size_t datasize, iot_hwdev_ident_buffered* obj) { //obj must point to somehow allocated iot_hwdev_ident_buffered struct

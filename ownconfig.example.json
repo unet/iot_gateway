@@ -1,0 +1,56 @@
+{
+	"modtime": 1234567890, //timestamp of last update
+	"drivers" : {
+		MODULE_ID: {
+			"load": 0 or false to disable loading of module (if it is loaded by default), true or version to enable module loading with mininal version
+			"params": <custom_object>, //optional DEFAULT params for driver (used if no hwdevice-specific params specified)
+			"params_modtime": 1234567890 //timestamp of last update of params
+		}
+	},
+	"detectors" : {
+		MODULE_ID: {
+			"start" : 0, //0 or false to disable loading and starting of module (if it is loaded by default), true or version to enable module loading with mininal version
+			"manual" : [ //optional list of manually configured devices (if module supports)
+				{
+					"method": USED_METHOD, //selected method among those described in manifest
+					<method and module dependent params>
+				}
+			],
+			"manual_modtime": 1234566789, //timestamp of last update of manual devices list
+			"params": <custom object>, //optional user params for detector
+			"params_modtime": 1234567890 //timestamp of last update of params
+		}
+	},
+	"hwdevices": { //TODO manual override of driver for hardware devices AND user params for devices with dependence on driver
+		IDENTCRC: { - CRC of canonized JSON of object like {"contype_id" : CONTYPE_ID, "ident" : <custom object>}
+			"contype_id": 1, //ID of device connection type of hwdevice
+			"ident": <custom object>, //contype-specific data with exact specification
+			"driver_override": [ MODULE_ID1, MODULE_ID2 ] //list of driver modules to try for device in order or precedence. empty list disables driver search
+			"driver_override_modtime" : 1234567890, //timestamp when "driver_override" was updated
+			"driver_params": { //user specified params for specific driver module
+				DRVMODULE_ID : {
+					"params": <custom_object>, //optional user params for driver
+					"params_modtime": 1234567890 //timestamp of last update of params
+				}
+			}
+		}
+	},
+	"peer_connect_map": { //TODO manually specified by user current host to specific host connection parameters override
+		DST_HOST_ID: {
+			"map" : [
+				{
+					"type": "tcp",
+					"metric": 1,
+					"host": "1.2.3.4", //host/IP which must be used by current host to connect to this host. defaults to connect_host in common hosts config
+					"port" : 12002, //port which must be used by current host to connect to this host. defaults to connect_port in common hosts config. negative value forbids direct connection
+				},
+				{
+					"type": "bt", //bluetooth
+					"metric": 2,
+					"hwaddr": "11:34:65:a5:ba:34",
+				}
+			],
+			"map_modtime" : 1234567890
+		}
+	}
+}

@@ -9,7 +9,6 @@
 #include "json.h"
 
 #include "uv.h"
-#include "iot_utils.h"
 #include "iot_compat.h"
 #include "iot_error.h"
 
@@ -27,6 +26,8 @@
 #endif
 
 extern int min_loglevel;
+
+#define EXPORTSYM __attribute__ ((visibility ("default")))
 
 #define IOT_VERSION_COMPOSE(ver, patchlevel, revision) ((((ver)&0xFF)<<24)|(((patchlevel)&0xFF)<<16)|((revision)&0xFFFF))
 
@@ -48,35 +49,31 @@ extern uint32_t IOT_ABI_TOKEN_NAME;
 ///////////////////////////Specific declarations for external modules
 ////////////////////////////////////////////////////////////////////
 
-//BEFORE INCLUDING THIS FILE BY MODULE SOURCE SUCH DEFINES MUST BE DONE:
-//#define IOT_VENDOR vendor		//"unet" in "unet:generic:sensor:temperature" type spec
-//#define IOT_BUNDLE bundle		//"generic:sensor" in same type spec with ":" changed into "__"
-
-#ifndef IOT_VENDOR
-#error IOT_VENDOR must be defined before including iot_module.h
+#ifndef IOT_LIBVENDOR
+#error IOT_LIBVENDOR must be defined before including iot_module.h
 #endif
 
-#ifndef IOT_BUNDLEDIR
-#error IOT_BUNDLEDIR must be defined before including iot_module.h
+#ifndef IOT_LIBDIR
+#error IOT_LIBDIR must be defined before including iot_module.h
 #endif
 
-#ifndef IOT_BUNDLENAME
-#error IOT_BUNDLENAME must be defined before including iot_module.h
+#ifndef IOT_LIBNAME
+#error IOT_LIBNAME must be defined before including iot_module.h
 #endif
 
-#define IOT_CURLIBRARY ECB_STRINGIFY(IOT_VENDOR) "/" ECB_STRINGIFY(IOT_BUNDLEDIR) "/" ECB_STRINGIFY(IOT_BUNDLENAME)
+#define IOT_CURLIBRARY ECB_STRINGIFY(IOT_LIBVENDOR) "/" ECB_STRINGIFY(IOT_LIBDIR) "/" ECB_STRINGIFY(IOT_LIBNAME)
 
-#define IOT_LIBSYMBOL_NAME(prefix, name) ECB_CONCAT(prefix, ECB_CONCAT(IOT_VENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLEDIR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLENAME, ECB_CONCAT(_, name)))))))
-#define IOT_LIBSYMBOL(name) ECB_CONCAT(name, ECB_CONCAT(IOT_VENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_BUNDLEDIR, ECB_CONCAT(__, IOT_BUNDLENAME)))))
+#define IOT_LIBSYMBOL_NAME(prefix, name) ECB_CONCAT(prefix, ECB_CONCAT(IOT_LIBVENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_LIBDIR, ECB_CONCAT(__, ECB_CONCAT(IOT_LIBNAME, ECB_CONCAT(_, name)))))))
+#define IOT_LIBSYMBOL(name) ECB_CONCAT(name, ECB_CONCAT(IOT_LIBVENDOR, ECB_CONCAT(__, ECB_CONCAT(IOT_LIBDIR, ECB_CONCAT(__, IOT_LIBNAME)))))
 
-#define IOT_DETECTOR_MODULE_CONF(modulename) IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _detector_modconf ## _), _ ## modulename)
-#define IOT_DRIVER_MODULE_CONF(modulename) IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _driver_modconf ## _), _ ## modulename)
-#define IOT_NODE_MODULE_CONF(modulename) IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _node_modconf ## _), _ ## modulename)
+#define IOT_DETECTOR_MODULE_CONF(modulename) EXPORTSYM IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _detector_modconf ## _), _ ## modulename)
+#define IOT_DRIVER_MODULE_CONF(modulename) EXPORTSYM IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _driver_modconf ## _), _ ## modulename)
+#define IOT_NODE_MODULE_CONF(modulename) EXPORTSYM IOT_LIBSYMBOL_NAME(ECB_CONCAT(ECB_CONCAT(iot_ ## abi, IOT_CORE_ABI_VERSION), _node_modconf ## _), _ ## modulename)
 
 //builds unique identifier name for exporting moduleconfig_t object from module bundle
 #define IOT_LIBVERSION_VAR IOT_LIBSYMBOL(iot_libversion ## _)
 
-#define IOT_LIBVERSION_DEFINE uint32_t IOT_LIBVERSION_VAR=IOT_VERSION_COMPOSE(IOT_LIBVERSION, IOT_LIBPATCHLEVEL, IOT_LIBREVISION)
+#define IOT_LIBVERSION_DEFINE uint32_t EXPORTSYM IOT_LIBVERSION_VAR=IOT_VERSION_COMPOSE(IOT_LIBVERSION, IOT_LIBPATCHLEVEL, IOT_LIBREVISION)
 
 
 
@@ -87,6 +84,29 @@ extern uint32_t IOT_ABI_TOKEN_NAME;
 #define kapi_outlog(level, format... ) do {if(LMIN<=level && min_loglevel <= level) do_outlog(__FILE__, __LINE__, __func__, level, format);} while(0)
 
 #else
+
+#define outlog_error(format... ) do_outlog(__FILE__, __LINE__, __func__, LERROR, format)
+
+#if LMIN<=LNOTICE
+#define outlog_notice(format... ) do {if(min_loglevel <= LNOTICE) do_outlog(__FILE__, __LINE__, __func__, LNOTICE, format);} while(0)
+#else
+#define outlog_notice(format... )
+#endif
+
+#if LMIN<=LINFO
+#define outlog_info(format... ) do {if(min_loglevel <= LINFO) do_outlog(__FILE__, __LINE__, __func__, LINFO, format);} while(0)
+#else
+#define outlog_info(format... )
+#endif
+
+#if LMIN<=LDEBUG
+#define outlog_debug(format... ) do {if(LMIN<=LDEBUG && min_loglevel <= LDEBUG) do_outlog(__FILE__, __LINE__, __func__, LDEBUG, format);} while(0)
+#else
+#define outlog_debug(format... )
+#endif
+
+#define outlog(level, format... )do { if(LMIN<=level && min_loglevel <= level) do_outlog(__FILE__, __LINE__, __func__, level, format);} while(0)
+
 
 ////////////////////////////////////////////////////////////////////
 ///////////////////////////Specific declarations for core
@@ -102,6 +122,9 @@ extern uint32_t IOT_ABI_TOKEN_NAME;
 
 #endif //DAEMON_CORE
 
+void do_outlog(const char*file, int line, const char* func, int level, const char *fmt, ...);
+
+#include "iot_utils.h"
 
 ////////////////////////////////////////////////////////////////////
 ///////////////////////////Declarations for everybody
@@ -134,7 +157,6 @@ extern const uint32_t iot_core_version;
 extern uv_thread_t main_thread;
 extern uint64_t iot_starttime_ms; //start time of process like returned by uv_now (in ms since unknown point)
 
-void do_outlog(const char*file, int line, const char* func, int level, const char *fmt, ...);
 
 
 typedef uint64_t iot_hostid_t;					//type for Host ID
@@ -165,6 +187,14 @@ typedef uint32_t iot_type_id_t;					//type for type (or class) ID for customizab
 #define uint8_t_MAX UINT8_MAX
 
 
+enum h_state_t : uint8_t { //libuv handle state
+	HS_UNINIT=0,
+	HS_CLOSING,
+	HS_INIT,
+	HS_ACTIVE
+}; //activation way: UNINIT -> INIT -> ACTIVE  , stop: ACTIVE -> CLOSING -> UNINIT   , reactivation: (stop) -> (activate)
+
+
 extern iot_hostid_t iot_current_hostid; //ID of current host in user config
 
 typedef uint16_t iot_iid_t;					//type for running Instance ID
@@ -178,7 +208,7 @@ typedef iot_type_id_t iot_valuenotion_id_t;			//type for data value notion ID of
 
 //uniquely identifies event in whole cluster
 struct iot_event_id_t {
-	uint64_t numerator; //from bottom is limited by current timestamp with microseconds - 1e15 (offset timestamp in seconds for 1`000`000`000)
+	uint64_t numerator; //from bottom is limited by current timestamp with microseconds - 1e15 (offset timestamp in seconds for 1`000`000`000) multiplied by 1000
 	iot_hostid_t host_id;
 
 	bool operator!(void) const {
@@ -189,6 +219,9 @@ struct iot_event_id_t {
 	}
 	bool operator==(const iot_event_id_t &op) {
 		return numerator==op.numerator && host_id==op.host_id;
+	}
+	uint64_t get_reltime_ms(void) {
+		return ((numerator/1000)+500)/1000;
 	}
 };
 
@@ -237,6 +270,7 @@ struct iot_objid_t {
 enum iot_action_t : uint8_t {
 	IOT_ACTION_ADD=1,
 	IOT_ACTION_REMOVE=2,
+	IOT_ACTION_TRYREMOVE=3,
 //	IOT_ACTION_REPLACE=3
 };
 
@@ -246,6 +280,8 @@ struct iot_miid_t {
 	iot_iid_t iid;
 
 	iot_miid_t(void) {
+		created=0;
+		iid=0;
 	}
 	iot_miid_t(uint32_t created_, iot_iid_t iid_) {
 		created=created_;
@@ -437,11 +473,10 @@ static inline time_t fix_time32(uint32_t tm) { //restores normal timestamp value
 
 
 //base class for all module instances (detector, driver, event source etc)
-struct iot_module_instance_base {
+struct iot_module_instance_base : public iot_objectrefable {
 	uv_thread_t thread=0; //working thread of this instance after start
-	iot_miid_t miid={};    //modinstance id of this instance after start
-//	iot_memallocator *memallocator=NULL;
-	uv_loop_t *loop=NULL;
+	iot_miid_t miid={};    //modinstance id of this instance after start. becomes false after instance is stopped
+	uv_loop_t *loop=NULL;  //correct loop for STARTED instance
 
 //called in instance thread:
 
@@ -454,6 +489,26 @@ struct iot_module_instance_base {
 	//IOT_ERROR_TEMPORARY_ERROR - just request to recreate instance after some time due to some temporary error.
 	int kapi_self_abort(int errcode);
 
+	//Returns full path to library(bundle)-specific run-directory. Module instances can use it to store runtime data. Module isolation must be done by module code if necessary (e.g. by adding more subdirs)
+	//'create' shows if directory must be created if doesn't exists already. Creation does not occur if return value>buffer_size
+	//Returns
+	//positive number of bytes written to buffer. If this value is less than buffer_size, then buffer was not enough. Path will be NUL-terminated anyway
+	//negative error code:
+	//IOT_ERROR_INVALID_ARGS - invalid buffer pointer or buffer_size is less than 2
+	//IOT_ERROR_CRITICAL_ERROR - filesystem-level error. errno is actual
+	//IOT_ERROR_CRITICAL_BUG
+	int kapi_lib_rundir(char *buffer, size_t buffer_size, bool create);
+
+	//Returns full path to library(bundle)-specific shared data directory (read-only data which were provided by lib vendor).
+	//libname defaults to library of module of this instance. format of libname is "vendor/libdir/name"
+	//Returns
+	//positive number of bytes written to buffer. If this value is less than buffer_size, then buffer was not enough. Path will be NUL-terminated anyway
+	//negative error code:
+	//IOT_ERROR_INVALID_ARGS - invalid buffer pointer or buffer_size is less than 2
+	//IOT_ERROR_CRITICAL_ERROR - filesystem-level error. errno is actual
+	//IOT_ERROR_NOT_FOUND - libname was non-NULL and no library found with that full name
+	//IOT_ERROR_CRITICAL_BUG
+	int kapi_lib_datadir(char *buffer, size_t buffer_size, const char* libname=NULL);
 
 
 	//Called to start work of previously inited instance.
@@ -467,16 +522,25 @@ struct iot_module_instance_base {
 
 	//called to stop work of started instance. call is always followed by instance_deinit
 	//Return values:
-	//0 - driver successfully stopped and can be deinited
-	//IOT_ERROR_TRY_AGAIN - driver requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify core when stop is finished.
-	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hang state (deinit
+	//0 - instance successfully stopped and can be deinited
+	//IOT_ERROR_TRY_AGAIN - instance requires some time (async operation) to stop gracefully. kapi_self_abort() will be called to notify core when stop is finished.
+	//						anyway second stop() call must free all resources correctly, may be in a hard way. otherwise module will be blocked and left in hung state (deinit
 	//						cannot be called until stop reports OK)
 	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
 	virtual int stop(void)=0;
 
+	
+
+	static void kapi_process_uv_close(uv_handle_t *handle);
+
+//	~iot_module_instance_base(void) {}
+protected:
+	iot_module_instance_base(object_destroysub_t destroy_sub=object_destroysub_delete, bool is_dynamic=true) : iot_objectrefable(destroy_sub, is_dynamic) {
+	}
+
 private:
 	friend struct iot_modinstance_item_t;
-	void kapi_internal_init(const iot_miid_t& miid_, const uv_thread_t& thread_, uv_loop_t* loop_) { //will be called by core before start
+	void kapi_internal_init(const iot_miid_t& miid_, const uv_thread_t& thread_, uv_loop_t* loop_) { //will be called by core just before start
 		miid=miid_;
 		thread=thread_;
 		loop=loop_;
@@ -489,7 +553,37 @@ private:
 //additional specific interface for driver module instances
 struct iot_device_detector_base : public iot_module_instance_base {
 //interface to core:
-	int kapi_hwdev_registry_action(enum iot_action_t action, iot_hwdev_localident* ident, iot_hwdev_details* custom_data);
+	int kapi_hwdev_registry_action(enum iot_action_t action, const iot_hwdev_localident* ident, iot_hwdev_details* custom_data);
+
+	//notification that user params for detector/driver was updated so they could be applied without restarting detector instance and re-attaching slave devices
+	//Return values:
+	//	0 - success
+	//	IOT_ERROR_CRITICAL_ERROR - provided params are invalid, detector will be stopped. new start can be attempted if new params arrive
+	//	IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked. instance will be destroyed
+	//	IOT_ERROR_TEMPORARY_ERROR - call failed for temporary reason and will be retried several times
+	//	IOT_ERROR_TRY_AGAIN - instance must be restarted to apply new params
+	//other errors treated as IOT_ERROR_CRITICAL_BUG
+	virtual int update_params(json_object *json_params) {
+		return IOT_ERROR_TRY_AGAIN;
+	}
+
+
+	//notification that manual device specs for this detector were changed by user so they could be applied without restarting detector instance and re-attaching slave devices
+	//Return values:
+	//	0 - success
+	//	IOT_ERROR_CRITICAL_ERROR - provided params are invalid, detector will be stopped. new start can be attempted if new params arrive
+	//	IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked. instance will be destroyed
+	//	IOT_ERROR_TEMPORARY_ERROR - call failed for temporary reason and will be retried several times
+	//	IOT_ERROR_TRY_AGAIN - instance must be restarted to apply new params
+	//other errors treated as IOT_ERROR_CRITICAL_BUG
+	virtual int update_manual_devices(json_object *manual_devices) {
+		return IOT_ERROR_TRY_AGAIN;
+	}
+
+protected:
+	iot_device_detector_base(object_destroysub_t destroy_sub=object_destroysub_delete, bool is_dynamic=true) : iot_module_instance_base(destroy_sub, is_dynamic) {
+	}
+
 };
 
 
@@ -556,7 +650,7 @@ struct iot_conn_clientview {
 
 
 //additional specific interface for driver module instances
-struct iot_device_driver_base : public iot_module_instance_base {
+struct iot_device_driver_base : public iot_device_detector_base {
 //called in instance thread:
 
 	//enables or disables notifications about free space in send buffer
@@ -587,6 +681,10 @@ struct iot_device_driver_base : public iot_module_instance_base {
 	//	IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be blocked. instance will be destroyed
 	//other errors treated as IOT_ERROR_CRITICAL_BUG
 	virtual int device_action(const iot_conn_drvview* conn, iot_devconn_action_t action_code, uint32_t data_size, const void* data)=0;
+
+protected:
+	iot_device_driver_base(object_destroysub_t destroy_sub=object_destroysub_delete, bool is_dynamic=true) : iot_device_detector_base(destroy_sub, is_dynamic) {
+	}
 };
 
 
@@ -655,7 +753,7 @@ struct iot_deviceconn_filter_t { //represents general filter for selecting devic
 	uint8_t num_devifaces:4,					//number of allowed classes for current device (number of items in devifaces list in this struct). can be zero when item is unused (num_devices <= index of current struct) of when ANY classid is suitable.
 		flag_canauto:1,						//flag that current device can be automatically selected by core according to classids. otherwise only user can select device
 		flag_localonly:1;					//flag that current driver (and thus hwdevice) must run on same host as node instance
-	const iot_deviface_params **devifaces;		//pointer to array (with num_classids items) of device interface params this module can be connected to
+	const iot_deviface_params **devifaces;		//pointer to array (with num_devifaces items) of device interface params this module can be connected to
 };
 
 
@@ -760,7 +858,8 @@ struct iot_driver_moduleconfig_t {
 
 	uint8_t cpu_loading;							//average level of cpu loading of started driver instance. 0 - minimal loading (unlimited such tasks can work in same working thread), 3 - very high loading (this module requires separate working thread per instance)
 	uint8_t num_hwdev_idents;						//number of items in hwdev_idents array in this struct. can be zero if hwdevices with any contype must be tried
-	uint8_t num_dev_ifaces;							//number of items in dev_ifaces array in this struct. should not be zero as this disables ability to find driver matching requirements of some node
+	uint8_t num_dev_ifaces;							//number of items in dev_ifaces array in this struct. should not be zero for non-detecting drivers as this disables ability to find driver matching requirements of some node
+	uint8_t is_detector;							//this driver can detect hardware devices. actual if described driver is for some device hub (e.g. z-wave)
 
 	const iot_hwdev_localident** hwdev_idents;		//pointer to array (with num_hwdev_idents items) of device idents this module can probe. i.e. module knows how to check hwdevice identity for such contypes or can filter by vendor etc.
 	const iot_devifacetype_metaclass** dev_ifaces;	//pointer to array (with num_dev_ifaces items) of device iface metaclasses this driver can provide. used for manifests only
@@ -770,14 +869,15 @@ struct iot_driver_moduleconfig_t {
 
 
 	//Called to create instance of driver. Must check provided device and return status telling if device is supported. Always called in main thread
+	//dev_ident and dev_data are given by some detector. json_params can be provided by user. it is passed if dev_ident matches some record in ownconfig.hwdevices.DEVICEIDENTCRC.driver_params.DRVMODULE_ID
 	//Return values:
-	//0 - device is supported, instance was successfully created and saved to *instance.
+	//0 - device is supported, instance was successfully created and saved to *instance, deviface was fillec with supported interfaces
 	//IOT_ERROR_NOT_SUPPORTED - device is not supported, so next driver module should be tried
 	//IOT_ERROR_INVALID_DEVICE_DATA - provided custom_len is invalid or custom_data has invalid structure. next driver can be tried
 	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be disabled. next driver should be tried
 	//IOT_ERROR_TEMPORARY_ERROR - driver init should be retried after some time (with progressive interval). next driver should be tried immediately.
 	//other errors treated as IOT_ERROR_CRITICAL_BUG
-	int (*init_instance)(iot_device_driver_base**instance, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, iot_devifaces_list* devifaces);
+	int (*init_instance)(iot_device_driver_base**instance, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, iot_devifaces_list* devifaces, json_object *json_params);
 
 	//called to deinit instance.
 	//Return values:
@@ -804,6 +904,7 @@ struct iot_detector_moduleconfig_t {
 
 	uint8_t cpu_loading;						//average level of cpu loading of started detector. 0 - minimal loading (unlimited such tasks can work in same working thread), 3 - very high loading (this module requires separate working thread for detector)
 //	uint32_t //num_hwdevcontypes:2,				//number of items in hwdevcontypes array in this struct. 
+	uint8_t manual_devices_required;			//flag that this module requires non-empty manual params (so cannot be used for auto detection of devices)
 
 	int (*init_module)(void);						//always called in main thread. once after loading (if loaded dynamically) or during startup (if compiled in statically)
 	int (*deinit_module)(void);						//called in main thread before unloading dynamically loaded module
@@ -816,7 +917,7 @@ struct iot_detector_moduleconfig_t {
 	//IOT_ERROR_CRITICAL_BUG - critical bug in module, so it must be disabled. next driver should be tried
 	//IOT_ERROR_TEMPORARY_ERROR - driver init should be retried after some time (with progressive interval). next driver should be tried immediately.
 	//other errors treated as IOT_ERROR_CRITICAL_BUG
-	int (*init_instance)(iot_device_detector_base** instance, json_object *json_cfg, json_object *manual_devices);
+	int (*init_instance)(iot_device_detector_base** instance, json_object *json_params, json_object *manual_devices);
 
 	//called to deinit single instance.
 	//Return values:

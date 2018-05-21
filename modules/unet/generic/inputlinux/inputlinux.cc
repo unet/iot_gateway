@@ -9,14 +9,11 @@
 
 #include <linux/input.h>
 
-#include "uv.h"
-#include "iot_utils.h"
-#include "iot_error.h"
-
-
 #include "iot_module.h"
 
 IOT_LIBVERSION_DEFINE; //creates global symbol with library full version spec according to IOT_LIBVERSION, IOT_LIBPATCHLEVEL and IOT_LIBREVISION defines
+
+#include "contype_linuxinput.h"
 
 #include "iot_devclass_keyboard.h"
 #include "iot_devclass_activatable.h"
@@ -24,558 +21,12 @@ IOT_LIBVERSION_DEFINE; //creates global symbol with library full version spec ac
 
 // "/dev/input/eventX" device on linuxes
 //#define DEVCONTYPE_CUSTOM_LINUXINPUT	IOT_DEVCONTYPE_CUSTOM(MODULEID_inputlinux, 1)
-#define DEVCONTYPESTR_CUSTOM_LINUXINPUT	"LinuxInput"
+//#define DEVCONTYPESTR_CUSTOM_LINUXINPUT	"LinuxInput"
 
 
-class iot_hwdev_localident_linuxinput : public iot_hwdev_localident {
-	friend class iot_hwdevcontype_metaclass_linuxinput;
-	struct spec_t {
-		uint16_t vendor,
-			product,	 //this field can be 0 meaning "any product" or exact product id
-			version;	 //used to specify exact product version (only if product is exact) or 0xFFFF meaning "any"
-	};
-	union {
-		struct {
-//hwid:
-			uint16_t bustype,  //id of physical bus as per BUS_XXX constants in include/linux/input.h (1-0x1f for now)
-				vendor,
-				product,
-				version;
-			uint32_t cap_bitmap;
-			char phys[64]; //physical connection spec
-//address:
-			uint8_t event_index; //X in /dev/input/eventX
-		} spec;
-		struct {
-			uint32_t bustype; //bitmask of allowed bus types or 0 for any bus type
-			spec_t spec[8]; //array with specific product requirements
-			uint32_t cap_bitmap; //bitmap of required caps, so 0 means 'no requirements'
-			uint8_t num_specs; //number of valid items in spec[]. zero means that no specific product requirements
-		} tmpl;
-	};
-	bool istmpl;
-//
-public:
-	
-	iot_hwdev_localident_linuxinput(void);
-	iot_hwdev_localident_linuxinput(uint8_t event_index, uint16_t bustype, uint16_t vendor, uint16_t product, uint16_t version, uint32_t cap_bitmap, const char* phys);
-	iot_hwdev_localident_linuxinput(uint32_t bustypemask, uint32_t cap_bitmap, uint8_t num_specs, const spec_t (&spec)[8]);
-
-	static const iot_hwdev_localident_linuxinput* cast(const iot_hwdev_localident* ident);
-
-	int init_spec(uint8_t event_index, uint16_t bustype, uint16_t vendor, uint16_t product, uint16_t version, uint32_t cap_bitmap, const char* phys) {
-		if(!cap_bitmap || !phys) return IOT_ERROR_INVALID_ARGS;
-		istmpl=false;
-		spec.event_index=event_index;
-		spec.bustype=bustype;
-		spec.vendor=vendor;
-		spec.product=product;
-		spec.version=version;
-		spec.cap_bitmap=cap_bitmap;
-		snprintf(spec.phys, sizeof(spec.phys), "%s", phys);
-		return 0;
-	}
-	int init_tmpl(uint32_t bustypemask, uint32_t cap_bitmap, uint8_t num_specs, const spec_t (&spec)[8]) {
-		if(num_specs>8) return IOT_ERROR_INVALID_ARGS;
-		istmpl=true;
-		tmpl.bustype=bustypemask;
-		tmpl.cap_bitmap=cap_bitmap;
-		tmpl.num_specs=num_specs;
-		uint8_t i;
-		for(i=0;i<num_specs;i++) tmpl.spec[i]=spec[i];
-		for(;i<8;i++) tmpl.spec[i]={};
-		return 0;
-	}
-
-	virtual bool is_tmpl(void) const override {
-		return istmpl;
-	}
-	virtual size_t get_size(void) const override {
-		return sizeof(*this);
-	}
-	virtual char* sprint_addr(char* buf, size_t bufsize, int* doff=NULL) const override { //actual address printing function. it must return number of written bytes (without NUL)
-		if(!bufsize) return buf;
-		int len;
-		if(istmpl) { //template
-			len=snprintf(buf, bufsize, "any event index");
-		} else {
-			len=snprintf(buf, bufsize, "event index=%u",unsigned(spec.event_index));
-		}
-		if(doff) *doff += len>=int(bufsize) ? int(bufsize-1) : len;
-		return buf;
-	}
-	virtual char* sprint_hwid(char* buf, size_t bufsize, int* doff=NULL) const override { //actual hw id printing function. it must return number of written bytes (without NUL)
-		if(!bufsize) return buf;
-		int len;
-		if(istmpl) { //template
-			len=snprintf(buf, bufsize, "template"); //TODO
-		} else {
-			const char *bus;
-			switch(spec.bustype) {
-				case 0x01: bus="PCI";break;
-				case 0x03: bus="USB";break;
-				case 0x05: bus="BT";break;
-				case 0x10: bus="ISA";break;
-				case 0x11: bus="PS/2";break;
-				case 0x19: bus="Host";break;
-				default: bus=NULL;
-			}
-			if(bus) {
-				len=snprintf(buf, bufsize, "bus=%s,vendor=%04x,product=%04x,ver=%04x,caps=%x,phys=%s",bus,unsigned(spec.vendor),
-					unsigned(spec.product),unsigned(spec.version),unsigned(spec.cap_bitmap),spec.phys);
-			} else {
-				len=snprintf(buf, bufsize, "bus=%u,vendor=%04x,product=%04x,ver=%04x,caps=%x,phys=%s",unsigned(spec.bustype),unsigned(spec.vendor),
-					unsigned(spec.product),unsigned(spec.version),unsigned(spec.cap_bitmap),spec.phys);
-			}
-		}
-		if(doff) *doff += len>=int(bufsize) ? int(bufsize-1) : len;
-		return buf;
-	}
-private:
-	virtual bool p_matches(const iot_hwdev_localident* opspec) const override {
-		return iot_hwdev_localident_linuxinput::p_matches_hwid(opspec) && iot_hwdev_localident_linuxinput::p_matches_addr(opspec);
-	}
-	virtual bool p_matches_hwid(const iot_hwdev_localident* opspec0) const override {
-		const iot_hwdev_localident_linuxinput* opspec=cast(opspec0);
-		if(!opspec) return false;
-		if(istmpl) {
-			if(tmpl.bustype && (tmpl.bustype & (1u<<opspec->spec.bustype))==0) return false;
-			if(tmpl.cap_bitmap && (tmpl.cap_bitmap & opspec->spec.cap_bitmap)!=tmpl.cap_bitmap) return false;
-			if(!tmpl.num_specs) return true;
-			for(unsigned i=0;i<tmpl.num_specs;i++) { //check if any exact spec matches
-				if(tmpl.spec[i].vendor==opspec->spec.vendor && (!tmpl.spec[i].product ||
-					(tmpl.spec[i].product==opspec->spec.product && (tmpl.spec[i].version==0xFFFF || tmpl.spec[i].version==opspec->spec.version))))
-						return true;
-			}
-			return false;
-		}
-		return spec.bustype==opspec->spec.bustype && 
-			spec.vendor==opspec->spec.vendor && 
-			spec.product==opspec->spec.product && 
-			spec.version==opspec->spec.version &&
-			spec.cap_bitmap==opspec->spec.cap_bitmap &&
-			strcmp(spec.phys, opspec->spec.phys)==0;
-	}
-	virtual bool p_matches_addr(const iot_hwdev_localident* opspec0) const override {
-		const iot_hwdev_localident_linuxinput* opspec=cast(opspec0);
-		if(!opspec) return false;
-		if(istmpl) return true;
-		return spec.event_index==opspec->spec.event_index;
-	}
-};
-
-class iot_hwdevcontype_metaclass_linuxinput : public iot_hwdevcontype_metaclass {
-	iot_hwdevcontype_metaclass_linuxinput(void) : iot_hwdevcontype_metaclass(0, "linuxinput", IOT_VERSION_COMPOSE(0,0,1)) {}
-
-	PACKED(
-		struct serialize_header_t {
-			uint32_t format; //format/version of pack
-			uint8_t istmpl;
-		}
-	);
-	PACKED(
-		struct serialize_spec_t {
-			uint8_t event_index; //X in /dev/input/eventX
-			uint32_t cap_bitmap;
-			uint16_t bustype;  //id of physical bus as per BUS_XXX constants in include/linux/input.h (1-0x1f for now)
-			uint16_t vendor;
-			uint16_t product;
-			uint16_t version;
-			uint8_t phys_len; //number of chars in phys excluding NUL-terminator
-			char phys[]; //physical connection spec
-		}
-	);
-	PACKED(
-		struct serialize_tmpl_t {
-			uint8_t num_specs; //number of valid items in spec[]. zero means that no specific product requirements
-			uint32_t cap_bitmap; //bitmap of required caps, so 0 means 'no requirements'
-			uint32_t bustype; //bitmask of allowed bus types or 0 for any bus type
-			struct {
-				uint16_t vendor;
-				uint16_t product;	 //this field can be 0 meaning "any product" or exact product id
-				uint16_t version;	 //used to specify exact product version or 0xFFFF meaning "any"
-			} spec[]; //array with specific product requirements
-		}
-	);
-
-public:
-	static iot_hwdevcontype_metaclass_linuxinput object; //the only instance of this class
-
-private:
-	virtual int p_serialized_size(const iot_hwdev_localident* obj0) const override {
-		const iot_hwdev_localident_linuxinput* obj=iot_hwdev_localident_linuxinput::cast(obj0);
-		if(!obj) return IOT_ERROR_INVALID_ARGS;
-		if(obj->istmpl) return sizeof(serialize_header_t)+sizeof(serialize_tmpl_t)+obj->tmpl.num_specs*sizeof(serialize_tmpl_t::spec[0]);
-		return sizeof(serialize_header_t)+sizeof(serialize_spec_t)+strlen(obj->spec.phys);
-	}
-	virtual int p_serialize(const iot_hwdev_localident* obj0, char* buf, size_t bufsize) const override {
-		const iot_hwdev_localident_linuxinput* obj=iot_hwdev_localident_linuxinput::cast(obj0);
-		if(!obj) return IOT_ERROR_INVALID_ARGS;
-		if(bufsize<sizeof(serialize_header_t)) return IOT_ERROR_NO_BUFSPACE;
-		bufsize-=sizeof(serialize_header_t);
-
-		serialize_header_t *h=(serialize_header_t*)buf;
-		if(obj->istmpl) {
-			if(bufsize < sizeof(serialize_tmpl_t)+obj->tmpl.num_specs*sizeof(serialize_tmpl_t::spec[0])) return IOT_ERROR_NO_BUFSPACE;
-			h->format=repack_uint32(uint32_t(1));
-			h->istmpl=1;
-			serialize_tmpl_t *t=(serialize_tmpl_t*)(h+1);
-			t->num_specs=obj->tmpl.num_specs;
-			t->cap_bitmap=repack_uint32(obj->tmpl.cap_bitmap);
-			t->bustype=repack_uint32(obj->tmpl.bustype);
-			for(uint8_t i=0;i<obj->tmpl.num_specs;i++) {
-				t->spec[i].vendor=repack_uint16(obj->tmpl.spec[i].vendor);
-				t->spec[i].product=repack_uint16(obj->tmpl.spec[i].product);
-				t->spec[i].version=repack_uint16(obj->tmpl.spec[i].version);
-			}
-		} else {
-			size_t len=strlen(obj->spec.phys);
-			if(bufsize < sizeof(serialize_spec_t)+len) return IOT_ERROR_NO_BUFSPACE;
-			h->format=repack_uint32(uint32_t(1));
-			h->istmpl=0;
-			serialize_spec_t *s=(serialize_spec_t*)(h+1);
-			s->event_index=obj->spec.event_index;
-			s->cap_bitmap=repack_uint32(obj->spec.cap_bitmap);
-			s->bustype=repack_uint16(obj->spec.bustype);
-			s->vendor=repack_uint16(obj->spec.vendor);
-			s->product=repack_uint16(obj->spec.product);
-			s->version=repack_uint16(obj->spec.version);
-			s->phys_len=uint8_t(len);
-			if(len>0) memcpy(s->phys, obj->spec.phys, len);
-		}
-		return 0;
-	}
-	virtual int p_deserialize(const char* data, size_t datasize, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const override {
-		assert(false);
-		return 0;
-	}
-	virtual int p_from_json(json_object* json, char* buf, size_t bufsize, const iot_hwdev_localident*& obj) const override {
-		assert(false);
-		return 0;
-	}
-	virtual int p_to_json(const iot_hwdev_localident* obj0, json_object* &dst) const override {
-		const iot_hwdev_localident_linuxinput* obj=iot_hwdev_localident_linuxinput::cast(obj0);
-		if(!obj) return IOT_ERROR_INVALID_ARGS;
-
-		json_object* ob=json_object_new_object();
-		if(!ob) return IOT_ERROR_NO_MEMORY;
-
-		json_object* val;
-
-		if(obj->istmpl) { //{is_tmpl: true, bustype_mask: integer/undefined, cap_mask: integer/undefined, product_specs: [[vendor(integer), product(integer/undefined), version]]/undefined}
-			val=json_object_new_boolean(1);
-			if(!val) goto nomem;
-			json_object_object_add(ob, "is_tmpl", val);
-			if(obj->tmpl.bustype>0) {
-				val=json_object_new_int64(obj->tmpl.bustype);
-				if(!val) goto nomem;
-				json_object_object_add(ob, "bustype_mask", val);
-			} //alse "any" bustype allowed. represent it as undefined
-			if(obj->tmpl.cap_bitmap>0) {
-				val=json_object_new_int64(obj->tmpl.cap_bitmap);
-				if(!val) goto nomem;
-				json_object_object_add(ob, "cap_mask", val);
-			} //alse "any" capability allowed. represent it as undefined
-			if(obj->tmpl.num_specs>0) {
-				val=json_object_new_array();
-				if(!val) goto nomem;
-				json_object_object_add(ob, "product_specs", val);
-				json_object* arr, *subval;
-				for(uint8_t i=0;i<obj->tmpl.num_specs; i++) {
-					arr=json_object_new_array();
-					if(!arr) goto nomem;
-					json_object_array_add(val, arr);
-					//add vendor
-					subval=json_object_new_int(obj->tmpl.spec[i].vendor);
-					if(!subval) goto nomem;
-					json_object_array_add(arr, subval);
-					if(obj->tmpl.spec[i].product>0) { //product specifed, add it
-						subval=json_object_new_int(obj->tmpl.spec[i].product);
-						if(!subval) goto nomem;
-						json_object_array_add(arr, subval);
-						if(obj->tmpl.spec[i].version!=0xFFFF) { //version specifed, add it
-							subval=json_object_new_int(obj->tmpl.spec[i].version);
-							if(!subval) goto nomem;
-							json_object_array_add(arr, subval);
-						}
-					}
-				}
-			}
-		} else { //{event_index: integer, cap_mask: integer, bustype: integer, vendor: integer, product: integer, version: integer, phys_path: string}
-			val=json_object_new_int(obj->spec.event_index);
-			if(!val) goto nomem;
-			json_object_object_add(ob, "event_index", val);
-
-			val=json_object_new_int64(obj->spec.cap_bitmap);
-			if(!val) goto nomem;
-			json_object_object_add(ob, "cap_mask", val);
-
-			val=json_object_new_int(obj->spec.bustype);
-			if(!val) goto nomem;
-			json_object_object_add(ob, "bustype", val);
-
-			val=json_object_new_int(obj->spec.vendor);
-			if(!val) goto nomem;
-			json_object_object_add(ob, "vendor", val);
-
-			val=json_object_new_int(obj->spec.product);
-			if(!val) goto nomem;
-			json_object_object_add(ob, "product", val);
-
-			val=json_object_new_int(obj->spec.version);
-			if(!val) goto nomem;
-			json_object_object_add(ob, "version", val);
-
-			val=json_object_new_string(obj->spec.phys);
-			if(!val) goto nomem;
-			json_object_object_add(ob, "phys_path", val);
-		}
-		dst=ob;
-		return 0;
-nomem:
-		json_object_put(ob);
-		return IOT_ERROR_NO_MEMORY;
-	}
-};
 
 iot_hwdevcontype_metaclass_linuxinput iot_hwdevcontype_metaclass_linuxinput::object; //the only instance of this class
 
-
-iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(void)
-: iot_hwdev_localident(&iot_hwdevcontype_metaclass_linuxinput::object)
-{
-}
-iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(uint8_t event_index, uint16_t bustype, uint16_t vendor, uint16_t product, uint16_t version, uint32_t cap_bitmap, const char* phys)
-: iot_hwdev_localident(&iot_hwdevcontype_metaclass_linuxinput::object)
-{
-	if(init_spec(event_index, bustype, vendor, product, version, cap_bitmap, phys)) {
-		assert(false);
-	}
-}
-iot_hwdev_localident_linuxinput::iot_hwdev_localident_linuxinput(uint32_t bustypemask, uint32_t cap_bitmap, uint8_t num_specs, const spec_t (&spec)[8])
-: iot_hwdev_localident(&iot_hwdevcontype_metaclass_linuxinput::object)
-{
-	if(init_tmpl(bustypemask, cap_bitmap, num_specs, spec)) {
-		assert(false);
-	}
-}
-
-const iot_hwdev_localident_linuxinput* iot_hwdev_localident_linuxinput::cast(const iot_hwdev_localident* ident) {
-	if(!ident) return NULL;
-	return ident->get_metaclass()==&iot_hwdevcontype_metaclass_linuxinput::object ? static_cast<const iot_hwdev_localident_linuxinput*>(ident) : NULL;
-}
-
-
-/*
-
-
-//interface for DEVCONTYPE_CUSTOM_LINUXINPUT contype
-static struct linuxinput_iface : public iot_hwdevident_iface {
-	struct hwid_t {
-		input_id input;
-		uint32_t cap_bitmap; //value 0xFFFFFFFFu means 'any hwid' (for templates)
-	};
-	struct addr_t {
-		uint8_t event_index; //X in /dev/input/eventX. value 0xFF means 'any' (for templates)
-	};
-	struct data_t {
-		uint32_t format; //version of format and/or magic code. current is 1, and it is the only supported.
-		hwid_t hwid;
-		addr_t addr;
-	};
-
-	linuxinput_iface(void) : iot_hwdevident_iface(DEVCONTYPE_CUSTOM_LINUXINPUT) {
-	}
-
-	void init_localident(iot_hwdev_localident_t* dev_ident, uint32_t detector_module_id) { //must be called first to init iot_hwdev_localident_t structure
-		dev_ident->contype=contype;
-		dev_ident->detector_module_id=detector_module_id;
-		data_t *data=(data_t*)dev_ident->data;
-		*data={ //init as template
-			.format = 1,
-			.hwid = {
-				.input = {0, 0, 0, 0},
-				.cap_bitmap = 0xFFFFFFFFu
-			},
-			.addr = {
-				.event_index = 0xFF
-			}
-		};
-	}
-	void set_hwid(iot_hwdev_localident_t* dev_ident, hwid_t* hwid) {
-		assert(dev_ident->contype==contype);
-		assert(check_data(dev_ident->data));
-		data_t* data=(data_t*)dev_ident->data;
-		data->hwid=*hwid;
-	}
-	void set_addr(iot_hwdev_localident_t* dev_ident, addr_t* addr) {
-		assert(dev_ident->contype==contype);
-		assert(check_data(dev_ident->data));
-		data_t* data=(data_t*)dev_ident->data;
-		data->addr=*addr;
-	}
-
-	virtual const char* get_name(void) const override {
-		return DEVCONTYPESTR_CUSTOM_LINUXINPUT;
-	}
-
-private:
-	virtual bool from_json(json_object* obj, char* dev_data) const override { //must convert json data into correct binary representation and return true if provided obj is valid
-		return false; //TODO
-	}
-	virtual bool check_data(const char* dev_data) const override { //actual check that data is good by format
-		data_t* data=(data_t*)dev_data;
-		return data->format==1;
-	}
-	virtual bool check_istmpl(const char* dev_data) const override { //actual check that data corresponds to template (so not all data components are specified)
-		data_t* data=(data_t*)dev_data;
-		return data->hwid.cap_bitmap==0xFFFFFFFFu || data->addr.event_index==0xFF;
-	}
-	virtual bool compare_hwid(const char* dev_data, const char* tmpl_data) const override { //actual comparison function for hwid component of device ident data
-		data_t* data=(data_t*)dev_data;
-		data_t* tmpl=(data_t*)tmpl_data;
-		return tmpl->hwid.cap_bitmap==0xFFFFFFFFu || !memcmp(&tmpl->hwid, &data->hwid, sizeof(tmpl->hwid));
-	}
-	virtual bool compare_addr(const char* dev_data, const char* tmpl_data) const override { //actual comparison function for address component of device ident data
-		data_t* data=(data_t*)dev_data;
-		data_t* tmpl=(data_t*)tmpl_data;
-		return tmpl->addr.event_index==data->addr.event_index || tmpl->addr.event_index==0xFF;
-	}
-	virtual size_t to_json(const char* dev_data, char* buf, size_t bufsize) const override { //actual encoder to json
-//		data_t* data=(data_t*)dev_data;
-
-{
-	tmpl: absent (meaning 0) or 1 to show if this data refers to template. 
-	addr: {
-		i: uint8 from 0 to 254 to mean specific input line or "*" to mean 'any line' in template
-	},
-	hwid: {
-		bus: name of specific bus or "*" in template
-		vendor: vendor code from 0 to 65534 or "*" in template
-		model: model code from 0 to 65534 or "*" in template
-		ver: model version code from 0 to 65534 or "*" in template
-		caps: subhash from {'key':1,'led':1,'snd':1,'sw':1,'rel':1} or for templates can be "*" of list with all required caps like ['key','led'].
-	}
-
-		return 0;
-	}
-	virtual const char* get_vistmpl(void) const override { //actual visualization template generator
-		return R"!!!({
-"shortDescr":	["concatws", " ",
-					["data", "hwid.bus"],
-					["case", 
-						[["hash_exists", ["data", "hwid.caps"], "key", "rel"],		["txt","dev_mouse"]],
-						[["hash_exists", ["data", "hwid.caps"], "key"],				["txt","dev_keyboard"]],
-						[["hash_exists", ["data", "hwid.caps"], "led"],				["txt","dev_led"]],
-						[["hash_exists", ["data", "hwid.caps"], "snd"],				["txt","dev_snd"]],
-						[["hash_exists", ["data", "hwid.caps"], "sw"],				["txt","dev_sw"]]
-					],
-					["vendor_name", ["data", "hwid.vendor"]]
-				],
-"longDescr":
-"propList":
-"newDialog":
-"editDialog":
-})!!!";
-	}
-} linuxinput_iface_obj;
-*/
-
-class iot_hwdev_details_linuxinput : public iot_hwdev_details {
-public:
-	char name[256];
-	char phys[64];
-	input_id input; //__u16 bustype;__u16 vendor;__u16 product;__u16 version;
-
-	uint32_t cap_bitmap; //bitmap of available capabilities. we process: EV_KEY, EV_LED, EV_SW, EV_SND
-	uint32_t keys_bitmap[(KEY_CNT+31)/32]; //when EV_KEY capability present, bitmap of available keys as reported by driver (this is NOT physically present buttons but they can be present)
-	uint16_t leds_bitmap; //when EV_LED capability present, bitmap of available leds as reported by driver (this is NOT physically present leds but they can be present)
-	uint16_t sw_bitmap; //when EV_SW capability present, bitmap of available switch events
-	uint8_t snd_bitmap; //when EV_SND capability present, bitmap of available sound capabilities
-	uint8_t event_index; //X in /dev/input/eventX
-	bool data_valid=false;
-
-
-	iot_hwdev_details_linuxinput(void) : iot_hwdev_details(&iot_hwdevcontype_metaclass_linuxinput::object) {}
-
-	static const iot_hwdev_details_linuxinput* cast(const iot_hwdev_details* data) {
-		if(!data || !data->is_valid()) return NULL;
-		return data->get_metaclass()==&iot_hwdevcontype_metaclass_linuxinput::object ? static_cast<const iot_hwdev_details_linuxinput*>(data) : NULL;
-	}
-
-	virtual size_t get_size(void) const override {
-		return sizeof(*this);
-	}
-
-	bool operator==(const iot_hwdev_details_linuxinput &op) {
-		if(&op==this) return true;
-		if(data_valid!=op.data_valid) return false;
-		if(!data_valid) return true; //both invalid
-
-		if(strcmp(name, op.name)!=0) return false;
-		if(strcmp(phys, op.phys)!=0) return false;
-		if(memcmp(&input, &op.input, sizeof(input))) return false;
-		if(cap_bitmap!=op.cap_bitmap || leds_bitmap!=op.leds_bitmap || sw_bitmap!=op.sw_bitmap || snd_bitmap!=op.snd_bitmap || 
-			memcmp(keys_bitmap, op.keys_bitmap, sizeof(keys_bitmap))) return false;
-		return true;
-	}
-	bool operator!=(const iot_hwdev_details_linuxinput &op) {
-		return !((*this)==op);
-	}
-
-	const char* read_inputdev_caps(int fd, uint8_t index) {
-		data_valid=false;
-		event_index=index;
-
-		const char* errstr=NULL;
-		do { //create block for common error processing
-			if(ioctl(fd, EVIOCGID, &input)==-1) {errstr="ioctl for id";break;} //get bus, vendor, product, version
-
-			if(ioctl(fd, EVIOCGNAME(sizeof(name)), name)==-1) {errstr="ioctl for name";break;} //get name
-			if(!name[0]) {
-				strcpy(name,"N/A"); //ensure name is not empty
-			} else {
-				name[sizeof(name)-1]='\0'; //ensure NUL-terminated
-			}
-			if(ioctl(fd, EVIOCGPHYS(sizeof(phys)), phys)==-1) {errstr="ioctl for phys";break;} //get phys
-			phys[sizeof(phys)-1]='\0'; //ensure NUL-terminated
-
-			if(ioctl(fd, EVIOCGBIT(0,sizeof(cap_bitmap)), &cap_bitmap)==-1) {errstr="ioctl for cap bitmap";break;} //get capability bitmap
-			if(bitmap32_test_bit(&cap_bitmap, EV_KEY)) { //has EV_KEY cap
-				if(ioctl(fd, EVIOCGBIT(EV_KEY,sizeof(keys_bitmap)), keys_bitmap)==-1) {errstr="ioctl for keys bitmap";break;} //get available keys bitmap
-			} else memset(keys_bitmap, 0, sizeof(keys_bitmap));
-			if(bitmap32_test_bit(&cap_bitmap, EV_LED)) { //has EV_LED cap
-				if(ioctl(fd, EVIOCGBIT(EV_LED,sizeof(leds_bitmap)), &leds_bitmap)==-1) {errstr="ioctl for leds bitmap";break;} //get available leds bitmap
-			} else leds_bitmap=0;
-			if(bitmap32_test_bit(&cap_bitmap, EV_SW)) { //has EV_SW cap
-				if(ioctl(fd, EVIOCGBIT(EV_SW,sizeof(sw_bitmap)), &sw_bitmap)==-1) {errstr="ioctl for sw bitmap";break;} //get available switch events bitmap
-			} else sw_bitmap=0;
-			if(bitmap32_test_bit(&cap_bitmap, EV_SND)) { //has EV_SND cap
-				if(ioctl(fd, EVIOCGBIT(EV_SND,sizeof(snd_bitmap)), &snd_bitmap)==-1) {errstr="ioctl for snd bitmap";break;} //get available sound caps bitmap
-			} else snd_bitmap=0;
-			data_valid=true;
-		} while(0);
-		return errstr;
-	}
-
-};
-/*
-struct devcontype_linuxinput_t { //represents custom data for devices with DEVCONTYPE_CUSTOM_LINUXINPUT connection type
-	char name[256];
-	input_id input; //__u16 bustype;__u16 vendor;__u16 product;__u16 version;
-
-	uint32_t cap_bitmap; //bitmap of available capabilities. we process: EV_KEY, EV_LED, EV_SW, EV_SND
-	uint32_t keys_bitmap[(KEY_CNT+31)/32]; //when EV_KEY capability present, bitmap of available keys as reported by driver (this is NOT physically present buttons but they can be present)
-	uint16_t leds_bitmap; //when EV_LED capability present, bitmap of available leds as reported by driver (this is NOT physically present leds but they can be present)
-	uint16_t sw_bitmap; //when EV_SW capability present, bitmap of available switch events
-	uint8_t snd_bitmap; //when EV_SND capability present, bitmap of available sound capabilities
-	uint8_t event_index; //X in /dev/input/eventX
-};
-
-*/
-//common functions
-//fills devcontype_linuxinput_t struct with input device capabilities
-//returns NULL on success or error descr on error (with errno properly set to OS error)
 
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -587,9 +38,6 @@ struct devcontype_linuxinput_t { //represents custom data for devices with DEVCO
 #define DETECTOR_POLL_INTERVAL 5000
 //maximum event devices for detection
 #define DETECTOR_MAX_DEVS 32
-
-class detector;
-detector* detector_obj=NULL;
 
 class detector : public iot_device_detector_base {
 	bool is_active=false; //true if instance was started
@@ -614,7 +62,6 @@ class detector : public iot_device_detector_base {
 		for(i=0;i<max_n;i++) { //compare if actual devices changed for common indexes
 			if(i<devinfo_len && devinfo[i].present) {
 				if(i>=n || !fulldevinfo[i].data_valid) { //new state is absent, so device was removed
-					kapi_outlog_info("Hwdevice was removed: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d",i);
 					if(!devinfo[i].error) { //device was added to registry, so must be removed
 						err=kapi_hwdev_registry_action(IOT_ACTION_REMOVE, &devinfo[i].ident, NULL);
 						if(err) kapi_outlog_error("Cannot remove device from registry: %s", kapi_strerror(err));
@@ -624,14 +71,14 @@ class detector : public iot_device_detector_base {
 					}
 					continue;
 				}
-				err=ident.init_spec(uint8_t(i), fulldevinfo[i].input.bustype, fulldevinfo[i].input.vendor, fulldevinfo[i].input.product, fulldevinfo[i].input.version, fulldevinfo[i].cap_bitmap, fulldevinfo[i].phys);
-				if(err) {
+//				err=ident.init_spec(uint8_t(i), fulldevinfo[i].input.bustype, fulldevinfo[i].input.vendor, fulldevinfo[i].input.product, fulldevinfo[i].input.version, fulldevinfo[i].cap_bitmap, fulldevinfo[i].phys);
+				if(!fulldevinfo[i].fill_localident(&ident, sizeof(ident), NULL)) {
+					err=IOT_ERROR_INVALID_ARGS;
+//				if(err) {
 					kapi_outlog_error("Cannot fill device local identity: %s", kapi_strerror(err));
 				} else {
 					//check if device looks the same
 					if(devinfo[i].ident.matches(&ident)) continue; //same
-
-					kapi_outlog_info("Hwdevice was replaced: type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, new name='%s'",i, fulldevinfo[i].name);
 
 					err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, &fulldevinfo[i]);
 					if(err) kapi_outlog_error("Cannot update device in registry: %s", kapi_strerror(err));
@@ -642,9 +89,10 @@ class detector : public iot_device_detector_base {
 				devinfo[i].ident=ident;
 			} else  //previous state was absent
 				if(i<n && fulldevinfo[i].data_valid) { //new state is present, so NEW DEVICE ADDED
-					kapi_outlog_info("Detected new hwdevice with type=" DEVCONTYPESTR_CUSTOM_LINUXINPUT ", input=%d, name='%s'",i, fulldevinfo[i].name);
-					err=ident.init_spec(uint8_t(i), fulldevinfo[i].input.bustype, fulldevinfo[i].input.vendor, fulldevinfo[i].input.product, fulldevinfo[i].input.version, fulldevinfo[i].cap_bitmap, fulldevinfo[i].phys);
-					if(err) {
+//					err=ident.init_spec(uint8_t(i), fulldevinfo[i].input.bustype, fulldevinfo[i].input.vendor, fulldevinfo[i].input.product, fulldevinfo[i].input.version, fulldevinfo[i].cap_bitmap, fulldevinfo[i].phys);
+					if(!fulldevinfo[i].fill_localident(&ident, sizeof(ident), NULL)) {
+						err=IOT_ERROR_INVALID_ARGS;
+//					if(err) {
 						kapi_outlog_error("Cannot fill device local identity: %s", kapi_strerror(err));
 					} else {
 						err=kapi_hwdev_registry_action(IOT_ACTION_ADD, &ident, &fulldevinfo[i]);
@@ -677,12 +125,17 @@ class detector : public iot_device_detector_base {
 		assert(!is_active);
 		if(is_active) return 0;
 
-		uv_loop_t* loop=kapi_get_event_loop(thread);
-		assert(loop!=NULL);
-
 		uv_timer_init(loop, &timer_watcher);
-		int err=uv_timer_start(&timer_watcher, [](uv_timer_t* handle) -> void {detector_obj->on_timer();}, 0, DETECTOR_POLL_INTERVAL);
+		timer_watcher.data=this;
+		ref(); //instance is now additionally reffered in uv handle, so increase refcount to have correct closing of handle
+
+		int err=uv_timer_start(&timer_watcher, [](uv_timer_t* handle) -> void {
+			detector* obj=(detector*)(handle->data);
+			obj->on_timer();
+		}, 0, DETECTOR_POLL_INTERVAL);
 		if(err<0) {
+			uv_close((uv_handle_t*)&timer_watcher, kapi_process_uv_close); //kapi_process_uv_close requires 'data' field of handle assigned to 'this'
+
 			kapi_outlog_error("Cannot start timer: %s", uv_strerror(err));
 			return IOT_ERROR_TEMPORARY_ERROR;
 		}
@@ -694,25 +147,18 @@ class detector : public iot_device_detector_base {
 		assert(is_active);
 
 		if(!is_active) return 0;
-
-		uv_close((uv_handle_t*)&timer_watcher, NULL);
 		is_active=false;
+
+		uv_close((uv_handle_t*)&timer_watcher, kapi_process_uv_close); //kapi_process_uv_close requires 'data' field of handle assigned to 'this'
 		return 0;
 	}
 
 public:
 	detector(void) {
-		assert(detector_obj==NULL);
-		detector_obj=this;
 	}
 	virtual ~detector(void) {
-		detector_obj=NULL;
 	}
 	int init() {
-		return 0;
-	}
-	int deinit(void) {
-		assert(!is_active); //must be stopped
 		return 0;
 	}
 
@@ -724,7 +170,7 @@ public:
 
 		int err=inst->init();
 		if(err) { //error
-			delete inst;
+			inst->unref();
 			return err;
 		}
 		*instance=inst;
@@ -737,9 +183,7 @@ public:
 	static int deinit_instance(iot_device_detector_base* instance) {
 		assert(uv_thread_self()==main_thread);
 		detector *inst=static_cast<detector*>(instance);
-		int err=inst->deinit();
-		if(err) return err;
-		delete inst;
+		inst->unref();
 		return 0;
 	}
 	static int check_system(void) {
@@ -790,6 +234,7 @@ public:
 iot_detector_moduleconfig_t IOT_DETECTOR_MODULE_CONF(det)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
 	.cpu_loading = 0,
+	.manual_devices_required = 0,
 //	.num_hwdevcontypes = sizeof(detector_devcontypes)/sizeof(detector_devcontypes[0]),
 
 	.init_module = NULL,
@@ -849,7 +294,8 @@ struct input_drv_instance : public iot_device_driver_base {
 	int eventfd=-1; //FD of opened /dev/input/eventX or <0 if not opened. 
 	uv_tcp_t io_watcher={}; //watcher over eventfd
 	uv_timer_t timer_watcher={}; //to count different retries
-	enum internal_error_t {
+	h_state_t io_watcher_state=HS_UNINIT;
+	enum internal_error_t : uint8_t {
 		ERR_NONE=0,
 		ERR_OPEN_TEMP=1,
 		ERR_EVENT_MGR=2,
@@ -871,7 +317,7 @@ struct input_drv_instance : public iot_device_driver_base {
 
 
 /////////////static fields/methods for driver instances management
-	static int init_instance(iot_device_driver_base**instance, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, iot_devifaces_list* devifaces) {
+	static int init_instance(iot_device_driver_base**instance, const iot_hwdev_ident* dev_ident, const iot_hwdev_details* dev_data, iot_devifaces_list* devifaces, json_object *json_params) {
 		assert(uv_thread_self()==main_thread);
 
 		//FILTER HW DEVICE CAPABILITIES
@@ -946,7 +392,7 @@ struct input_drv_instance : public iot_device_driver_base {
 	static int deinit_instance(iot_device_driver_base* instance) {
 		assert(uv_thread_self()==main_thread);
 		input_drv_instance *inst=static_cast<input_drv_instance*>(instance);
-		delete inst;
+		inst->unref();;
 
 		return 0;
 	}
@@ -989,13 +435,19 @@ private:
 
 		uv_timer_init(loop, &timer_watcher);
 		timer_watcher.data=this;
+		ref(); //instance is now additionally reffered in uv handle, so increase refcount to have correct closing of handle
 
 		uv_timer_init(loop, &tonetimer_watcher);
 		tonetimer_watcher.data=this;
+		ref(); //instance is now additionally reffered in uv handle, so increase refcount to have correct closing of handle
 
 		int err=setup_device_polling();
+		if(err<0) {
+			stop();
+			return err;
+		}
 		started=true;
-		return err;
+		return 0;
 	}
 	//called to stop work of started instance. call can be followed by deinit or started again (if stop was manual, by user)
 	//Return values:
@@ -1006,15 +458,17 @@ private:
 	//any other error is treated as critical bug and driver is blocked for further starts. deinit won't be called for such instance. instance is put into hang state
 	virtual int stop(void) {
 		assert(uv_thread_self()==thread);
-		if(!stopping && tone_playing && uv_is_active((uv_handle_t*)&io_watcher)) {
+		if(!stopping && tone_playing && io_watcher_state==HS_ACTIVE) {
 			stopping=true;
 			toneplay_stop();
 			return IOT_ERROR_TRY_AGAIN;
 		}
+		started=false;
 
 		stop_device_polling(false);
 
-		uv_close((uv_handle_t*)&timer_watcher, NULL);
+		uv_close((uv_handle_t*)&timer_watcher, kapi_process_uv_close); //kapi_process_uv_close requires 'data' field of handle assigned to 'this'
+		uv_close((uv_handle_t*)&tonetimer_watcher, kapi_process_uv_close); //kapi_process_uv_close requires 'data' field of handle assigned to 'this'
 		return 0;
 	}
 
@@ -1225,6 +679,12 @@ private:
 		bool criterror=false;
 		do {
 			if(eventfd<0) { //open device file
+				if(io_watcher_state!=HS_UNINIT) { //io handle still not closed, retry on next event loop iteration
+					temperr=ERR_EVENT_MGR;
+					retrytm=0;
+					break;
+				}
+
 				snprintf(device_path,sizeof(device_path),"/dev/input/event%d",dev_info.event_index);
 				eventfd=open(device_path, O_RDWR | O_NONBLOCK);
 				if(eventfd<0) {
@@ -1238,7 +698,9 @@ private:
 				}
 
 				uv_tcp_init(loop, &io_watcher);
+				io_watcher_state=HS_INIT;
 				io_watcher.data=this;
+				ref();
 				//attach device file FD to io watcher
 				err=uv_tcp_open(&io_watcher, eventfd);
 				if(err<0) {
@@ -1313,6 +775,7 @@ private:
 				snprintf(internal_error_descr, sizeof(internal_error_descr), "Cannot set read event listener: %s", uv_strerror(err));
 				break;
 			}
+			io_watcher_state=HS_ACTIVE;
 			write_todevice();
 			return 0;
 		} while(0);
@@ -1322,7 +785,14 @@ private:
 		return 0;
 	}
 	void stop_device_polling(bool criterror, internal_error_t temperr=ERR_NONE, int retrytm=30) {
-		if(uv_is_active((uv_handle_t*)&io_watcher)) uv_close((uv_handle_t*)&io_watcher, NULL);
+		if(io_watcher_state>=HS_INIT) {
+			io_watcher_state=HS_CLOSING;
+			uv_close((uv_handle_t*)&io_watcher, [](uv_handle_t* handle)->void {
+				input_drv_instance* inst=(input_drv_instance*)handle->data;
+				inst->io_watcher_state=HS_UNINIT;
+				inst->kapi_process_uv_close(handle);
+			});
+		}
 		if(eventfd>=0) {
 			close(eventfd);
 			eventfd=-1;
@@ -1333,17 +803,15 @@ private:
 			return;
 		}
 
-		if(temperr!=ERR_NONE) {
-			if(temperr==internal_error) error_count++;
-			else {
-				internal_error=temperr;
-				error_count=1;
-			}
-			uv_timer_stop(&timer_watcher);
-			uv_timer_start(&timer_watcher, on_timer_static, (error_count>10 ? 10 : error_count)*retrytm*1000, 0);
-			return;
+		if(temperr==ERR_NONE) return; //no errors, just stopped polling and closed device
+
+		if(temperr==internal_error) error_count++;
+		else {
+			internal_error=temperr;
+			error_count=1;
 		}
-		//here no errors, just stopped polling and closed device
+		uv_timer_stop(&timer_watcher);
+		uv_timer_start(&timer_watcher, on_timer_static, (error_count>10 ? 10 : error_count)*retrytm*1000, 0);
 	}
 
 	static void on_timer_static(uv_timer_t* handle) {
@@ -1356,7 +824,7 @@ private:
 	}
 	void on_timer(void) {
 		int err;
-		if(uv_is_active((uv_handle_t*)&io_watcher)) {
+		if(io_watcher_state==HS_ACTIVE) {
 			if(resync_state) {
 				resync_state=false;
 				if(bitmap32_test_bit(&dev_info.cap_bitmap, EV_KEY)) { //has EV_KEY cap
@@ -1391,7 +859,7 @@ private:
 
 
 	void write_todevice(void) {
-		if(!uv_is_active((uv_handle_t*)&io_watcher)) return; //currently no connection to device
+		if(io_watcher_state!=HS_ACTIVE) return; //currently no connection to device
 		if(write_inprogress) { //write request already pending. it can be already made but not notified, so schedule recheck
 			write_repeat=true;
 			return;
@@ -1583,6 +1051,7 @@ iot_driver_moduleconfig_t IOT_DRIVER_MODULE_CONF(drv)={
 	.cpu_loading = 3,
 	.num_hwdev_idents = sizeof(driver_devidents)/sizeof(driver_devidents[0]),
 	.num_dev_ifaces = sizeof(driver_ifaces)/sizeof(driver_ifaces[0]),
+	.is_detector = 0,
 
 	.hwdev_idents = driver_devidents,
 	.dev_ifaces = driver_ifaces,
