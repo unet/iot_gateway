@@ -40,7 +40,6 @@ struct iot_config_item_node_t;
 struct iot_nodemodel;
 struct iot_remote_driverinst_item_t;
 
-#define IOT_MAX_MODINSTANCES 8192
 #define IOT_MAX_DRIVER_CLIENTS 3
 
 #define IOT_MSGSTRUCTS_PER_MODINST 2
@@ -105,26 +104,27 @@ struct iot_driverclient_conndata_t {
 };
 
 
-struct iot_modinstance_item_t {
+struct iot_modinstance_item_t : public iot_objectrefable {
 	friend class iot_modules_registry_t;
 	friend struct iot_modinstance_locker;
 
-	iot_modinstance_item_t *next_inmod, *prev_inmod; //next instance of same type and module_id  for the list with head in iot_[node|driver|detector]_module_item_t::[node|driver|detector]_instance[s_head|]
+	iot_modinstance_item_t *next_ingwinst=NULL, *prev_ingwinst=NULL; //next instance for the list with head in iot_gwinstance::[node|driver|detector]_instances_head
+	iot_gwinstance *gwinst; //can be NULL for common detectors in server?
+
+	iot_modinstance_item_t *next_inmod=NULL, *prev_inmod=NULL; //next instance of same type and module_id  for the list with head in iot_[node|driver|detector]_module_item_t::[node|driver|detector]_instance[s_head|]
 	iot_any_module_item_t *module;
 
-	iot_modinstance_item_t *next_inthread, *prev_inthread; //next instance for the list with head in iot_thread_item_t::instances_head
-	iot_thread_item_t *thread;
+	iot_modinstance_item_t *next_inthread=NULL, *prev_inthread=NULL; //next instance for the list with head in iot_thread_item_t::instances_head
+	iot_thread_item_t *thread=NULL;
 
-	iot_modinstance_item_t *next_ingwinst, *prev_ingwinst; //next instance for the list with head in iot_gwinstance::[node|driver|detector]_instances_head
-	iot_gwinstance *gwinst;
 
-	iot_module_instance_base *instance;
+	iot_module_instance_base *instance=NULL;
 	uint64_t started; //non-zero if instance was requested to start. this property is assigned in main thread.
 	uint64_t state_timeout; //for state-related delayed tasks time of recheck (exact task is determined by state/target_state)
 	iot_atimer_item instrecheck_timer; //used to recheck all delayed tasks by checking all error states
 	int aborted_error; //contains abortion error code in case modinst aborted itself
 
-	volatile iot_modinstance_state_t state; //inited to IOT_MODINSTSTATE_INITED main thread, updated in working thread
+	volatile iot_modinstance_state_t state=IOT_MODINSTSTATE_INITED; //inited to IOT_MODINSTSTATE_INITED main thread, updated in working thread
 	volatile iot_modinstance_state_t target_state; //assigned in main or working thread
 	iot_module_type_t type;
 	uint8_t cpu_loading; //copied from corresponding iface from module's config
@@ -164,18 +164,29 @@ struct iot_modinstance_item_t {
 		~modinsttype_data_t(void) {} //to make compiler happy
 	} data;
 private:
-	volatile std::atomic_flag acclock=ATOMIC_FLAG_INIT; //lock protecting access to next 2 fields
-	int8_t refcount; //how many times this struct was locked. can be accessed under acclock only
-	uint8_t pendfree; //flag that this struct in waiting for zero in refcount to be freed. can be accessed under acclock only
+//	volatile std::atomic_flag acclock=ATOMIC_FLAG_INIT; //lock protecting access to next 2 fields
+//	int8_t refcount; //how many times this struct was locked. can be accessed under acclock only
+//	uint8_t pendfree; //flag that this struct in waiting for zero in refcount to be freed. can be accessed under acclock only
 	iot_miid_t miid; //module instance id (index in iot_modinstances array and creation time). zero iid field indicates unused structure.
-	bool in_recheck_job;
+	bool in_recheck_job=false;
 
-public:
-	iot_modinstance_item_t(void) {
+
+	iot_modinstance_item_t(void) = delete; //
+	iot_modinstance_item_t(iot_gwinstance* gwinst, const iot_miid_t &miid, iot_any_module_item_t* module, iot_module_type_t type)
+		: iot_objectrefable(modinstance_destroysub, true), gwinst(gwinst), module(module), type(type), miid(miid) {
+
+		memset(msg_structs, 0, sizeof(msg_structs));
+		memset(&data,0, sizeof(data));
+		instrecheck_timer.init(this, [](void* param)->void {((iot_modinstance_item_t*)param)->recheck_job(false);});
 	}
-	bool init(iot_gwinstance* gwinst_, const iot_miid_t &miid_, iot_any_module_item_t* module_, iot_module_type_t type_, iot_thread_item_t *thread_, iot_module_instance_base* instance_, uint8_t cpu_loading_);
+	~iot_modinstance_item_t(void) {
+		assert(!miid && !gwinst && !module && !thread);
+	}
+	bool init(iot_thread_item_t *thread_, iot_module_instance_base* instance_);
 	void deinit(void);
+public:
 
+	static void modinstance_destroysub(iot_objectrefable*);
 	const iot_miid_t& get_miid(void) const {return miid;}
 	bool is_working_not_stopping(void) { //check if instance is started and not going to be stopped
 		return state==IOT_MODINSTSTATE_STARTED && target_state==IOT_MODINSTSTATE_STARTED;
@@ -183,7 +194,7 @@ public:
 	bool is_working(void) { //check if instance is started
 		return state==IOT_MODINSTSTATE_STARTED || state==IOT_MODINSTSTATE_STOPPING;
 	}
-	bool lock(void) { //tries to lock structure from releasing. returns true if structure can be accessed
+/*	bool lock(void) { //tries to lock structure from releasing. returns true if structure can be accessed
 		uint16_t c=1;
 		while(acclock.test_and_set(std::memory_order_acquire)) {
 			//busy wait
@@ -211,6 +222,7 @@ public:
 		return canfree;
 	}
 	void unlock(void); //unlocked previously locked structure. CANNOT BE called if lock() returned false
+*/
 /*	iot_threadmsg_t* try_get_msgreserv(void) { //tries to lock and returns iot_threadmsg_t struct from statically allocated reserv. returns NULL if no available
 		//can work in any thread
 		for(int i=0;i<IOT_MSGSTRUCTS_PER_MODINST;i++) {
@@ -280,14 +292,14 @@ protected:
 };
 
 //represents loaded and inited module
-struct iot_node_module_item_t : public iot_any_module_item_t {
-	iot_node_module_item_t *next_node=NULL, *prev_node=NULL;//position in iot_modules_registry_t::node_head list
-	const iot_node_moduleconfig_t *config;
 
-	iot_modinstance_item_t* node_instances_head=NULL; //list of existing node instances (module must have node interface)
+struct iot_detector_module_item_t : public iot_any_module_item_t {
+	iot_detector_module_item_t *next_detector, *prev_detector; //position in iot_modules_registry_t::detectors_head list
+	const iot_detector_moduleconfig_t *config;
 
-	iot_node_module_item_t(const iot_node_moduleconfig_t* cfg, iot_regitem_module_t *dbitem) : 
-								iot_any_module_item_t(dbitem, [](void* param)->void {((iot_node_module_item_t*)param)->recheck_job(false);}),
+	iot_modinstance_item_t* detector_instance=NULL;
+	iot_detector_module_item_t(const iot_detector_moduleconfig_t* cfg, iot_regitem_module_t *dbitem) :
+								iot_any_module_item_t(dbitem, [](void* param)->void {((iot_detector_module_item_t*)param)->recheck_job(false);}),
 								config(cfg) {
 	}
 	virtual void recheck_job(bool) override;
@@ -318,14 +330,14 @@ struct iot_driver_module_item_t : public iot_any_module_item_t {
 	}
 };
 
+struct iot_node_module_item_t : public iot_any_module_item_t {
+	iot_node_module_item_t *next_node=NULL, *prev_node=NULL;//position in iot_modules_registry_t::node_head list
+	const iot_node_moduleconfig_t *config;
 
-struct iot_detector_module_item_t : public iot_any_module_item_t {
-	iot_detector_module_item_t *next_detector, *prev_detector; //position in iot_modules_registry_t::detectors_head list
-	const iot_detector_moduleconfig_t *config;
+	iot_modinstance_item_t* node_instances_head=NULL; //list of existing node instances (module must have node interface)
 
-	iot_modinstance_item_t* detector_instance=NULL;
-	iot_detector_module_item_t(const iot_detector_moduleconfig_t* cfg, iot_regitem_module_t *dbitem) :
-								iot_any_module_item_t(dbitem, [](void* param)->void {((iot_detector_module_item_t*)param)->recheck_job(false);}),
+	iot_node_module_item_t(const iot_node_moduleconfig_t* cfg, iot_regitem_module_t *dbitem) : 
+								iot_any_module_item_t(dbitem, [](void* param)->void {((iot_node_module_item_t*)param)->recheck_job(false);}),
 								config(cfg) {
 	}
 	virtual void recheck_job(bool) override;
@@ -333,20 +345,40 @@ struct iot_detector_module_item_t : public iot_any_module_item_t {
 
 
 class iot_modules_registry_t {
+	friend void iot_modinstance_item_t::modinstance_destroysub(iot_objectrefable*);
+
 	iot_detector_module_item_t *detectors_head=NULL;
 	iot_driver_module_item_t *drivers_head=NULL;
 	iot_node_module_item_t *node_head=NULL;
 
+	struct modinstref_t {
+		uint32_t created;
+		iot_objref_ptr<iot_modinstance_item_t> item;
+	} *modinstances_array=NULL;
+	iot_iid_t num_modinst=0; //shows how many space is currently allocated in modinstances_array
+	iot_iid_t max_modinst; //max allowed num_modinst (determined by configuration?)
+	iot_iid_t last_iid=0; //holds last assigned module instance id
+	iot_spinlock instlock; //protects num_modinst, modinstances_array pointer, modinstances_array items
+
 public:
-	iot_modules_registry_t(void) {
+	iot_modules_registry_t(iot_iid_t max_modinst=1024): max_modinst(max_modinst) {
 		assert(modules_registry==NULL);
 		modules_registry=this;
 	}
-	void free_modinstance(const iot_miid_t &miid) { //main thread
-		iot_modinstance_item_t* modinst=find_modinstance_byid(miid);
-		if(modinst) free_modinstance(modinst);
+	~iot_modules_registry_t(void) {
+		assert(modules_registry!=NULL);
+		modules_registry=NULL;
+		if(modinstances_array) {
+			free(modinstances_array);
+			modinstances_array=NULL;
+		}
+		num_modinst=0;
 	}
-	void free_modinstance(iot_modinstance_item_t* modinst); //main thread
+	void unregister_modinstance(const iot_miid_t &miid) { //main thread
+		iot_modinstance_item_t* modinst=find_modinstance_byid(miid);
+		if(modinst) unregister_modinstance(modinst);
+	}
+	void unregister_modinstance(iot_modinstance_item_t* modinst); //main thread
 
 	//inits some object data, loads modules marked for autoload, starts detectors. must be called once during startup
 	void start(void); //main thread
@@ -389,7 +421,7 @@ public:
 
 //METHODS CALLED IN OTHER THREADS
 
-	iot_modinstance_locker get_modinstance(const iot_miid_t &miid); //any thread
+	iot_objref_ptr<iot_modinstance_item_t> get_modinstance(const iot_miid_t &miid); //any thread
 
 
 private:
@@ -397,7 +429,7 @@ private:
 	int register_module(iot_driver_moduleconfig_t* cfg, iot_regitem_module_t *dbitem); //main thread
 	int register_module(iot_detector_moduleconfig_t* cfg, iot_regitem_module_t *dbitem); //main thread
 
-	iot_modinstance_item_t* register_modinstance(iot_gwinstance* gwinst_, iot_any_module_item_t* module, iot_module_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance, uint8_t cpu_loading); //main thread
+	iot_modinstance_item_t* register_modinstance(iot_gwinstance* gwinst_, iot_any_module_item_t* module, iot_module_type_t type, iot_thread_item_t *thread, iot_module_instance_base* instance); //main thread
 	iot_modinstance_item_t* find_modinstance_byid(const iot_miid_t &miid); //core code in main thread
 
 };

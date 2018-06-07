@@ -460,8 +460,8 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 		while(nextmsg) {
 			msg=nextmsg;
 			nextmsg=(nextmsg->next).load(std::memory_order_relaxed);
-			iot_modinstance_locker modinstlk=modules_registry->get_modinstance(msg->miid);
-			iot_modinstance_item_t* modinst=modinstlk.modinst;
+			iot_objref_ptr<iot_modinstance_item_t> modinstlk=modules_registry->get_modinstance(msg->miid);
+			iot_modinstance_item_t* modinst=(iot_modinstance_item_t*)modinstlk;
 
 			if(msg->is_core) { //msg for core
 				switch(msg->code) {
@@ -524,11 +524,11 @@ void iot_thread_registry_t::on_thread_msg(uv_async_t* handle) { //static
 						//main thread
 						assert(uv_thread_self()==main_thread);
 
-						if(modinstlk) modinstlk.unlock();
+						if(modinstlk) modinstlk=NULL;
 						iot_miid_t miid=msg->miid;
 
 						iot_release_msg(msg); msg=NULL;
-						modules_registry->free_modinstance(miid);
+						modules_registry->unregister_modinstance(miid);
 						break;
 					}
 					case IOT_MSG_DRVOPEN_CONNECTION: {//try to open connection to driver instance

@@ -364,7 +364,6 @@ public:
 private:
 	iot_threadmsg_t com_msg={};
 
-//	iot_spinlock statelock; //used to protect com_msg and stop_pending in started state
 	volatile bool destroy_pending=false; //becomes true after stop(true) is called
 	volatile bool graceful_sesstop=false; //shows if destroying with graceful session stop was requested
 	volatile std::atomic_flag stop_pending=ATOMIC_FLAG_INIT; //becomes true after restart(_, false) is called

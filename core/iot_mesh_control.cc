@@ -1469,7 +1469,7 @@ int iot_meshtun_stream_state::connect(const iot_netprototype_metaclass* protomet
 		num_in_dis=0;
 		num_output_inprog=0;
 		iot_gen_random((char*)random, IOT_MESHPROTO_TUNSTREAM_IDLEN);
-		creation_time=((iot_get_systime()+500000000ull)/1000000000ull)-1000000000ull; //round to integer seconds and offset by 1e9 seconds
+		creation_time=iot_get_systime();
 
 		cancel_timer();
 		finalize_expires=input_ack_expires=UINT64_MAX;
@@ -1527,7 +1527,7 @@ int iot_meshtun_stream_state::accept_connection(iot_meshtun_stream_listen_state:
 		num_in_dis=0;
 		num_output_inprog=0;
 		memcpy(random, item->random, IOT_MESHPROTO_TUNSTREAM_IDLEN);
-		creation_time=((iot_get_systime()+500000000ull)/1000000000ull)-1000000000ull; //round to integer seconds and offset by 1e9 seconds
+		creation_time=iot_get_systime();
 
 		if(inmeta) {
 			assert(!inmeta_data && inmeta_size_>0);
@@ -1996,8 +1996,8 @@ int iot_meshtun_stream_listen_state::accept(iot_meshtun_stream_state* rep) { //t
 
 		if(state!=ST_LISTENING || !con || !input_pending || !is_bound) goto onexit;
 		assert(uv_thread_self()==con->thread->thread);
-		uint32_t now;
-		now=((iot_get_systime()+500000000ull)/1000000000ull)-1000000000ull;
+		int64_t now;
+		now=iot_get_systime();
 
 		uint32_t pending;
 		pending=listenq.pending_read();

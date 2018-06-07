@@ -651,8 +651,8 @@ struct iot_meshtun_stream_listen_state : public iot_meshtun_state { //keeps stat
 	struct listenq_item { //such struct is written to listenq when incoming request to setup tunnelled stream arrives
 		iot_hostid_t remotehost;
 		uint64_t initial_sequence; //data sequence used in SYN request
-		uint32_t creation_time; //UNUSED FOR NOW, set to 0   timestamp - 1e9 in seconds when connection was created by client side (by clock of client)
-		uint32_t request_time; //timestamp - 1e9 in seconds when connection request arrived by local clock
+//		int64_t creation_time; //UNUSED FOR NOW, set to 0   timestamp in seconds when connection was created by client side (by clock of client)
+		int64_t request_time; //timestamp in seconds when connection request arrived by local clock
 		uint32_t peer_rwnd; //receive window size of peer
 		uint16_t remoteport;
 		uint16_t metasize;
@@ -758,14 +758,14 @@ class iot_meshtun_stream_state : public iot_meshtun_state { //keeps state of con
 	uint8_t random[IOT_MESHPROTO_TUNSTREAM_IDLEN]; //random session identifier
 	byte_fifo_buf buffer_in;
 	byte_fifo_buf buffer_out;
+	int64_t creation_time; //timestamp in seconds when connection was created by client side (by clock of client) or accepted by server side (by clock of server)
+//	int64_t acception_time; //timestamp  in seconds when connection was accepted by server side (by clock of server)
 //	iot_netproto_session_mesh* output_inprogress[IOT_MESHTUN_MAXDISTRIBUTION]; //list of mesh sessions which now do actual output of data.
 																			//their prop current_outmeshtun_segment contains exact ranges of data being written
 
 //	uint32_t used_buffer_in; //how many bytes of input data is currently unread in buffer_in. maxseen_sequenced_in-used_buffer_in gives position in stream corresponding to writepos of buffer_in
 	uint32_t peer_rwnd; //receive window size of peer. obtained together with each ack_sequenced_out and determines maximum of sequenced_out-ack_sequenced_out. write must stop if this difference is >= than peer_rwnd
 	volatile std::atomic<uint32_t> local_rwnd; //local receive window size to tell it to peer
-	uint32_t creation_time; //timestamp - 1e9 in seconds when connection was created by client side (by clock of client) or accepted by server side (by clock of server)
-//	uint32_t acception_time; //timestamp - 1e9 in seconds when connection was accepted by server side (by clock of server)
 
 	uint64_t total_output; //total outputed bytes (unacknowledged). total_output+1 (for SYN bit) must == sequenced_out, FIN bit adds one more.
 	uint64_t total_input; //total inputed bytes (can have holes)
@@ -1867,7 +1867,7 @@ struct iot_meshtun_datagram_state : public iot_meshtun_state { //keeps state of 
 	byte_fifo_buf buffer_in;
 	byte_fifo_buf buffer_out;
 //	uint32_t used_buffer_in; //how many bytes of input data is currently unread in buffer_in. maxseen_sequenced_in-used_buffer_in gives position in stream corresponding to writepos of buffer_in
-	uint32_t creation_time; //timestamp - 1e9 in seconds when connection was created by client side (by clock of client) or accepted by server side (by clock of server)
+	int64_t creation_time; //timestamp in seconds when connection was created by client side (by clock of client) or accepted by server side (by clock of server)
 
 	iot_meshtun_state(uint8_t inbuf_size_power, char* inbuf, uint8_t outbuf_size_power, char* outbuf) : iot_objectrefable(object_destroysub_memblock, true){
 		bool rval=buffer_in.setbuf(inbuf_size_power, inbuf);

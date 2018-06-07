@@ -12,25 +12,10 @@
 //struct iot_config_actlist_item_t;
 //struct iot_config_item_group_t;
 
-class iot_nodemodel;
 //class iot_nodelink;
 //class iot_nodevaluelink;
 //class iot_nodemsglink;
-struct iot_modelsignal;
-struct iot_modelevent;
-struct iot_modelnegsignal;
 struct iot_notify_inputsupdate;
-
-
-struct iot_config_item_node_t;
-struct iot_configregistry_t;
-struct iot_config_item_group_t;
-struct iot_config_node_in_t;
-struct iot_config_node_out_t;
-struct iot_config_item_host_t;
-struct iot_config_item_link_t;
-
-
 
 //#include "iot_configregistry.h"
 
@@ -165,7 +150,7 @@ struct iot_nodemodel {
 
 	iot_id_t node_id;
 	iot_config_item_node_t* cfgitem; //can be NULL when model is being stopped.
-	iot_modinstance_locker modinstlk;
+	iot_objref_ptr<iot_modinstance_item_t> modinstlk;
 
 	struct {
 		iot_event_id_t event_id;
@@ -246,6 +231,8 @@ struct iot_modelevent {
 
 	iot_modelsignal *signals_head, *signals_tail; //added to tail (to preserve natural order of signals), processed from head
 	iot_config_item_node_t *blocked_nodes_head; //list of nodes involved in event processing
+	iot_config_item_rule_t *blocked_rules_head; //list of rules involved in event processing
+	iot_config_item_node_t *tmp_blocked_nodes_head; //list of nodes involved in event processing
 	iot_config_item_node_t *initial_nodes_head; //list of initial nodes of current modelling step
 	iot_config_item_node_t *waitexec_head; //list of initial nodes of current modelling step
 	uint16_t step;
@@ -264,7 +251,7 @@ struct iot_modelevent {
 		qnext=qprev=waiters_head=wnext=NULL;
 		signals_head=signals_tail=NULL;
 		waitexec_head=NULL;
-		blocked_nodes_head=NULL;
+		blocked_nodes_head=tmp_blocked_nodes_head=NULL;
 		initial_nodes_head=NULL;
 		id.numerator=numerator;
 		id.host_id=iot_current_hostid;

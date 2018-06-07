@@ -197,8 +197,8 @@ enum h_state_t : uint8_t { //libuv handle state
 
 extern iot_hostid_t iot_current_hostid; //ID of current host in user config
 
-typedef uint16_t iot_iid_t;					//type for running Instance ID
-typedef uint16_t iot_connsid_t;				//type for connection struct ID
+typedef uint32_t iot_iid_t;					//type for running Instance ID
+typedef uint32_t iot_connsid_t;				//type for Connection Struct ID
 
 
 typedef iot_type_id_t iot_datatype_id_t;		//type for class ID of value or message for node input/output
@@ -406,6 +406,8 @@ struct iot_connid_t {
 	}
 };
 
+struct iot_modinstance_item_t;
+
 struct iot_module_instance_base;
 struct iot_device_driver_base;
 struct iot_driver_client_base;
@@ -432,13 +434,6 @@ void iot_release_memblock(void *memblock);
 bool iot_incref_memblock(void *memblock);
 
 
-static inline uint32_t get_time32(time_t tm) { //gets modified 32-bit timestamp. it has some offset to allow 32-bit var to work many years
-	return uint32_t(tm-1000000000);
-}
-
-static inline time_t fix_time32(uint32_t tm) { //restores normal timestamp value
-	return time_t(tm)+1000000000;
-}
 
 
 
@@ -540,6 +535,7 @@ protected:
 
 private:
 	friend struct iot_modinstance_item_t;
+//	iot_modinstance_item_t *modinst=NULL;
 	void kapi_internal_init(const iot_miid_t& miid_, const uv_thread_t& thread_, uv_loop_t* loop_) { //will be called by core just before start
 		miid=miid_;
 		thread=thread_;
@@ -731,7 +727,7 @@ struct iot_node_base : public iot_driver_client_base {
 
 //called in instance thread:
 
-	//Updates specific value outputs and sends messages from specific msg outputs
+	//Updates specific value outputs and sends messages from specific msg outputs. Both zeros in num_values and num_msgs is valid when 'no update' should answered by sync nodes in regular sync mode of execution.
 	//	IOT_ERROR_INVALID_ARGS - provided index or type of value are illegal.
 	//	IOT_ERROR_NO_MEMORY - no memory to process value change. try later.
 	int kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_datavalue** values, uint8_t num_msgs=0, const uint8_t *msgout_indexes=NULL, const iot_datavalue** msgs=NULL);
@@ -740,6 +736,17 @@ struct iot_node_base : public iot_driver_client_base {
 	//Returned NULL value can mean either undefined value or illegal index
 	const iot_datavalue* kapi_get_outputvalue(uint8_t index);
 
+
+	//During processing of this event one or several calls to kapi_update_outputs can be made. For async nodes (is_sync is 0 in module config) this is irrelevant, but
+	//sync nodes loose their simple sync mode of execution if kapi_update_outputs() was called more than ones or for another eventid or if return value was not 0. 
+	//
+	//Allowed return values:
+	//0 - success. For sync node also means that no outputs were changed if no kapi_update_outputs() call was made (it could also be called with correct eventid and all rest zeros to show absence of update).
+	//IOT_ERROR_NOT_READY - for async nodes just means success (same as 0 return value). For sync node, which HAD NOT DONE CALL to kapi_update_outputs() with
+	//						passed eventid, means that kapi_update_outputs() WILL BE CALLED LATER (processing of event is stopped until such call is made). For
+	//						nodes in simple sync mode such error also disables simple mode (node is turned into regular sync node) even if kapi_update_outputs()
+	//						was called with passed eventid.
+	//other errors equivalent to IOT_ERROR_NOT_READY. TODO: may be treat other errors as critical
 	virtual int process_input_signals(iot_event_id_t eventid, uint8_t num_valueinputs, const iot_value_signal *valueinputs, uint8_t num_msginputs, const iot_msg_signal *msginputs) {
 		return 0; //by default say that outputs are not changed
 	}
@@ -821,7 +828,7 @@ struct iot_node_moduleconfig_t {
 												//some value output values or msg output messages only latest will be noticed and processed) when node is blocked
 												//during some related rule processing.
 												//Additionally nodes with this flag and zero cpu_loading start in 'simple synchronous mode' if they are started 
-												//in main thread. In simple mode instance gets input change notification directly during event processing
+												//in modelling (now it is main) thread. In simple mode instance gets input change notification directly during event processing
 												//bypassing thread message queue and gives outputs directly to event processing routine. This greatly speeds up
 												//processing. But simple mode is disabled when instance gives delayed answer or generates unrelated signal for the
 												//first time

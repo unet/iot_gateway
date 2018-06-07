@@ -99,23 +99,23 @@ int iot_devifaces_list::add(const iot_deviface_params *cls) {
 int iot_device_detector_base::kapi_hwdev_registry_action(enum iot_action_t action, const iot_hwdev_localident* ident, iot_hwdev_details* custom_data) {
 	//TODO check that ident->contype is listed in .devcontypes field of detector module interface
 	if(!miid) return IOT_ERROR_INVALID_STATE;
-	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
+	iot_objref_ptr<iot_modinstance_item_t> modinstlk=modules_registry->get_modinstance(miid);
 	if(!modinstlk) return IOT_ERROR_INVALID_STATE;
 
-	if(modinstlk.modinst->type!=IOT_MODTYPE_DETECTOR) {
-		if(modinstlk.modinst->type!=IOT_MODTYPE_DRIVER || !((iot_driver_module_item_t*)modinstlk.modinst->module)->config->is_detector) return IOT_ERROR_NOT_SUPPORTED; //this driver has no detector's functionality
+	if(modinstlk->type!=IOT_MODTYPE_DETECTOR) {
+		if(modinstlk->type!=IOT_MODTYPE_DRIVER || !((iot_driver_module_item_t*)modinstlk->module)->config->is_detector) return IOT_ERROR_NOT_SUPPORTED; //this driver has no detector's functionality
 	}
 
 	hwdev_registry_t* reg;
 
-	if(!modinstlk.modinst->gwinst) { //or may be just look at ident->guid?
+	if(!modinstlk->gwinst) { //or may be just look at ident->guid?
 		assert(false);
 #ifdef IOT_SERVER
 		//TODO. allow detectors on server to find devices for any instance
 		//reg=iot_gwinstance::find(ident->guid)->hwdev_registry;
 #endif
 	} else {
-		reg=modinstlk.modinst->gwinst->hwdev_registry;
+		reg=modinstlk->gwinst->hwdev_registry;
 	}
 
 	return reg->list_action(miid, action, ident, custom_data);
@@ -131,12 +131,12 @@ void iot_module_instance_base::kapi_process_uv_close(uv_handle_t *handle) {
 int iot_module_instance_base::kapi_lib_rundir(char *buffer, size_t buffer_size, bool create) {
 	if(!buffer || buffer_size<2) return IOT_ERROR_INVALID_ARGS;
 	if(!miid) return IOT_ERROR_INVALID_STATE;
-	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
-	if(!modinstlk || modinstlk.modinst->instance!=this) {
+	iot_objref_ptr<iot_modinstance_item_t> modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk->instance!=this) {
 		assert(false);
 		return IOT_ERROR_CRITICAL_BUG;
 	}
-	int rval=snprintf(buffer, buffer_size, "%s/%s", run_dir, modinstlk.modinst->module->dbitem->bundle->name);
+	int rval=snprintf(buffer, buffer_size, "%s/%s", run_dir, modinstlk->module->dbitem->bundle->name);
 	if(rval<0) return IOT_ERROR_INVALID_ARGS;
 	if(size_t(rval)>=buffer_size) { //output was truncated, creation not possible
 		return int(rval)-1;
@@ -177,14 +177,14 @@ int iot_module_instance_base::kapi_lib_rundir(char *buffer, size_t buffer_size, 
 int iot_module_instance_base::kapi_lib_datadir(char *buffer, size_t buffer_size, const char* libname) {
 	if(!buffer || buffer_size<2) return IOT_ERROR_INVALID_ARGS;
 	if(!miid) return IOT_ERROR_INVALID_STATE;
-	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
-	if(!modinstlk || modinstlk.modinst->instance!=this) {
+	iot_objref_ptr<iot_modinstance_item_t> modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk->instance!=this) {
 		assert(false);
 		return IOT_ERROR_CRITICAL_BUG;
 	}
 	int rval;
 	if(!libname) { //get datadir of current instance library
-		rval=snprintf(buffer, buffer_size, "%s/%s", modules_dir, modinstlk.modinst->module->dbitem->bundle->name);
+		rval=snprintf(buffer, buffer_size, "%s/%s", modules_dir, modinstlk->module->dbitem->bundle->name);
 	} else {
 		iot_regitem_lib_t* libitem=iot_regitem_lib_t::find_item(libname);
 		if(!libitem) return IOT_ERROR_NOT_FOUND;
@@ -210,12 +210,12 @@ int iot_module_instance_base::kapi_lib_datadir(char *buffer, size_t buffer_size,
 //	0 - success, instance IS queuered to be stopped or is not running.
 //	IOT_ERROR_NOT_READY
 int iot_module_instance_base::kapi_self_abort(int errcode) { //can be called in modinstance thread
-	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
-	if(!modinstlk || modinstlk.modinst->instance!=this) {
+	iot_objref_ptr<iot_modinstance_item_t> modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk->instance!=this) {
 		assert(false);
 		return 0;
 	}
-	iot_modinstance_item_t* modinst=modinstlk.modinst;
+	iot_modinstance_item_t* modinst=(iot_modinstance_item_t*)modinstlk;
 	assert(uv_thread_self()==modinst->thread->thread);
 
 	auto state=modinst->state;
@@ -232,12 +232,12 @@ int iot_module_instance_base::kapi_self_abort(int errcode) { //can be called in 
 }
 
 int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_datavalue** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_datavalue** msgs) {
-	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
-	if(!modinstlk || modinstlk.modinst->instance!=this) {
+	iot_objref_ptr<iot_modinstance_item_t> modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk->instance!=this) {
 		assert(false);
 		return 0;
 	}
-	iot_modinstance_item_t* modinst=modinstlk.modinst;
+	iot_modinstance_item_t* modinst=(iot_modinstance_item_t*)modinstlk;
 	assert(uv_thread_self()==modinst->thread->thread);
 
 	if(!modinst->is_working()) return 0;
@@ -248,12 +248,12 @@ int iot_node_base::kapi_update_outputs(const iot_event_id_t *reason_eventid, uin
 }
 
 const iot_datavalue* iot_node_base::kapi_get_outputvalue(uint8_t index) {
-	iot_modinstance_locker modinstlk=modules_registry->get_modinstance(miid);
-	if(!modinstlk || modinstlk.modinst->instance!=this) {
+	iot_objref_ptr<iot_modinstance_item_t> modinstlk=modules_registry->get_modinstance(miid);
+	if(!modinstlk || modinstlk->instance!=this) {
 		assert(false);
 		return 0;
 	}
-	iot_modinstance_item_t* modinst=modinstlk.modinst;
+	iot_modinstance_item_t* modinst=(iot_modinstance_item_t*)modinstlk;
 	assert(uv_thread_self()==modinst->thread->thread);
 
 	if(!modinst->is_working()) return 0;
@@ -634,6 +634,9 @@ void object_destroysub_memblock(iot_objectrefable* obj) {
 }
 void object_destroysub_delete(iot_objectrefable* obj) {
 	delete obj;
+}
+void object_destroysub_staticmem(iot_objectrefable* obj) {
+	obj->~iot_objectrefable();
 }
 
 

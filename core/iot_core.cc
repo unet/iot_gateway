@@ -46,6 +46,7 @@ uint16_t last_clock_sync_error; //error of last clock sync in ms
 
 int64_t mono_clock_offset=0; //nanoseconds to add to monotonic clock to get real time. Is calculated inside iot_init_systime to difference between RT and Monotonic clock
 clockid_t mono_clockid;
+int64_t timenumerator32_offset=0;
 
 void iot_init_systime(void) { //must be called on process start
 	struct timespec monots, rtts, monots2;
@@ -55,6 +56,8 @@ void iot_init_systime(void) { //must be called on process start
 	err=clock_gettime(CLOCK_MONOTONIC, &monots);
 	if(expect_false(err==EINVAL)) { //no monotonic support, use RT
 		mono_clockid=CLOCK_REALTIME;
+		if(rtts.tv_sec>2'400'000'000ll) timenumerator32_offset=2'000'000'000ll;
+		else if(rtts.tv_sec>1'400'000'000ll) timenumerator32_offset=1'000'000'000ll;
 		return;
 	}
 	clock_gettime(CLOCK_MONOTONIC, &monots2);
@@ -70,6 +73,9 @@ void iot_init_systime(void) { //must be called on process start
 	int64_t clock_cost=(monots2.tv_nsec-monots.tv_nsec+1000000000ll*int64_t(monots2.tv_sec-monots.tv_sec))/8; //estimate cost of clock_gettime call
 	if(clock_cost<0) clock_cost=0;
 	mono_clock_offset=(1000000000ll*int64_t(rtts.tv_sec)+rtts.tv_nsec)-(1000000000ll*int64_t(monots.tv_sec)+monots.tv_nsec)-clock_cost;
+
+	if(monots.tv_sec>2'400'000'000ll) timenumerator32_offset=2'000'000'000ll;
+	else if(monots.tv_sec>1'400'000'000ll) timenumerator32_offset=1'000'000'000ll;
 }
 
 
@@ -79,7 +85,7 @@ void iot_process_module_bug(iot_any_module_item_t *module_item) {
 	//TODO
 }
 
-iot_modinstance_locker::~iot_modinstance_locker(void) {
+/*iot_modinstance_locker::~iot_modinstance_locker(void) {
 		if(modinst) {
 			modinst->unlock();
 			modinst=NULL;
@@ -102,7 +108,7 @@ bool iot_modinstance_locker::lock(iot_modinstance_item_t *inst) { //tries to loc
 		}
 		return false;
 	}
-
+*/
 iot_gwinstance::iot_gwinstance(uint32_t guid, iot_hostid_t hostid, uint64_t eventid_numerator) : guid(guid), this_hostid(hostid),
 				peers_registry(new iot_peers_registry_t(this)),
 				config_registry(new iot_configregistry_t(this)),

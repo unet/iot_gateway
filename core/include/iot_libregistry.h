@@ -91,12 +91,12 @@ struct iot_regitem_module_t {
 		struct {
 			json_object* manual; //NULL or array with manual devices
 			json_object* params; //settings for instance
-			time_t manual_modtime;
-			time_t params_modtime;
+			int64_t manual_modtime;
+			int64_t params_modtime;
 		} detector;
 		struct {
 			json_object* params; //settings for instance
-			time_t params_modtime;
+			int64_t params_modtime;
 		} driver;
 	} params; //additional type-dependent data
 	char module_name[IOT_MODULENAME_MAXLEN+1]; //pure module name   //////(if bundle defined) or full name with bundle path in it (if bundle is NULL)

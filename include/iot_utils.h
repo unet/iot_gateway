@@ -383,6 +383,133 @@ static inline void bitmap32_clear_bit(uint32_t* _map, unsigned _bit) {
 	_map[_bit>>5] &= ~(1U << (_bit & (32-1)));
 }
 
+//representation of bitmap with continuously MANUALLY allocated storage using array of uint32 
+class bitmap32 final {
+	uint32_t size; //number of following uint32 numbers
+	uint32_t bitmap[]; //pointer to array of size items
+public:
+	static size_t calc_size(uint32_t num_bits) { //caclculates necessary memory to allocate for this object and bitmap for num_bits
+		if(!num_bits) {
+			assert(false);
+			return 0;
+		}
+		return sizeof(bitmap32) + sizeof(bitmap[0])*(((num_bits-1)>>5)+1);
+	}
+	bitmap32(uint32_t num_bits, bitmap32* src=NULL) : size(((num_bits-1)>>5)+1) { //num_bits must match same argument to calc_size() when caclculating memory for allocation
+		assert(num_bits>0);
+		if(src) {
+			*this=*src;
+		} else {
+			clear();
+		}
+	}
+	bool has_space(uint32_t num_bits) const { //checks if current object has space to kepp num_bits bits
+		return size>=((num_bits-1)>>5)+1;
+	}
+	void set_bit(unsigned bit) {
+		assert((bit>>5)<size);
+		bitmap32_set_bit(bitmap, bit);
+	}
+	void clear_bit(unsigned bit) {
+		assert((bit>>5)<size);
+		bitmap32_clear_bit(bitmap, bit);
+	}
+	uint32_t test_bit(unsigned bit) const {
+		assert((bit>>5)<size);
+		return bitmap32_test_bit(bitmap, bit);
+	}
+	void clear(void) {
+		memset(bitmap, 0, size*sizeof(bitmap[0]));
+	}
+	uint32_t count_bits(void) const {
+		uint32_t i=size;
+		uint32_t n=0;
+		do {
+			i--;
+			n+=ecb_popcount32(bitmap[i]);
+		} while(i>0);
+		return n;
+	}
+
+	bitmap32& operator|=(const bitmap32& op) {
+		uint32_t i = size<=op.size ? size : op.size;
+		do {
+			i--;
+			bitmap[i]|=op.bitmap[i];
+		} while(i>0);
+		return *this;
+	}
+	bitmap32& operator^=(const bitmap32& op) {
+		uint32_t i = size<=op.size ? size : op.size;
+		do {
+			i--;
+			bitmap[i]^=op.bitmap[i];
+		} while(i>0);
+		return *this;
+	}
+	bitmap32& operator&=(const bitmap32& op) {
+		uint32_t i;
+		if(size>op.size) {
+			memset(bitmap + size, 0, sizeof(bitmap[0])*(size-op.size));
+			i = op.size;
+		} else {
+			i=size;
+		}
+		do {
+			i--;
+			bitmap[i]&=op.bitmap[i];
+		} while(i>0);
+		return *this;
+	}
+	bitmap32& operator=(const bitmap32& op) {
+		uint32_t i;
+		if(size>op.size) {
+			memset(bitmap + size, 0, sizeof(bitmap[0])*(size-op.size));
+			i = op.size;
+		} else {
+			i=size;
+		}
+		memcpy(bitmap, op.bitmap, sizeof(bitmap[0])*i);
+		return *this;
+	}
+
+	bitmap32& operator-=(const bitmap32& op) {
+		uint32_t i = size<=op.size ? size : op.size;
+		do {
+			i--;
+			bitmap[i]&=~op.bitmap[i];
+		} while(i>0);
+		return *this;
+	}
+	bitmap32& operator~(void) {
+		uint32_t i = size;
+		do {
+			i--;
+			bitmap[i]=~bitmap[i];
+		} while(i>0);
+		return *this;
+	}
+
+	bool operator!(void) const {
+		uint32_t i = size;
+		do {
+			i--;
+			if(bitmap[i]) return false;
+		} while(i>0);
+		return true;
+	}
+
+	explicit operator bool(void) const {
+		uint32_t i = size;
+		do {
+			i--;
+			if(bitmap[i]) return true;
+		} while(i>0);
+		return false;
+	}
+};
+
+
 /*
 //Bitmaps built of arrays of uint16_t
 static inline uint16_t bitmap16_test_bit(uint16_t* _map, unsigned _bit) {
@@ -642,8 +769,29 @@ public:
 	}
 };
 
-//atomic-only recursive (up to 5 levels) spinning lock implementation. Should be used for short-time locking only!!! (i.e. to read/write small regions of memory)
+//atomic-only non-recursive spinning lock implementation. Should be used for short-time locking only!!! (i.e. to read/write small regions of memory)
+//WILL DEADLOCK IF USED RECURSIVELY!!!
 class iot_spinlock {
+	mutable volatile std::atomic_flag _lock=ATOMIC_FLAG_INIT; //lock to protect critical sections
+
+public:
+	void lock(void) const { //wait for lock mutex
+		uint16_t c=1;
+		while(_lock.test_and_set(std::memory_order_acquire)) {
+			//busy wait
+			if(!(c++ & 1023)) sched_yield();
+		}
+	}
+	void unlock(void) const { //free lock mutex
+		_lock.clear(std::memory_order_release);
+	}
+	void assert_is_locked(void) { //ensures lock is locked
+		assert(_lock.test_and_set(std::memory_order_acquire));
+	}
+};
+
+//atomic-only recursive (up to 5 levels) spinning lock implementation. Should be used for short-time locking only!!! (i.e. to read/write small regions of memory)
+class iot_spinrlock {
 	mutable volatile std::atomic_flag _lock=ATOMIC_FLAG_INIT; //lock to protect critical sections
 	mutable volatile uint8_t lock_recurs=0;
 	mutable volatile uv_thread_t locked_by={};
@@ -684,14 +832,15 @@ public:
 class iot_objectrefable;
 typedef void (*object_destroysub_t)(iot_objectrefable*);
 
-void object_destroysub_memblock(iot_objectrefable*);
-void object_destroysub_delete(iot_objectrefable*);
+void object_destroysub_memblock(iot_objectrefable*); //calls destructor and then iot_release_memblock
+void object_destroysub_delete(iot_objectrefable*); //calls delete
+void object_destroysub_staticmem(iot_objectrefable*); //calls just destructor
 
 
 //object which can be referenced by iot_objid_t - derived struct, has reference count and delayed destruction
 class iot_objectrefable {
 protected:
-	iot_spinlock reflock;
+	iot_spinrlock reflock;
 private:
 //reflock protected:
 	mutable volatile int32_t refcount; //how many times address of this object is referenced. value -1 together with true pend_destroy means that destroy_sub was already called (or is right to be called)
@@ -712,7 +861,7 @@ protected:
 		if(is_dynamic) { //creates object with 1 reference count and pending release, so first unref() without prior ref() will destroy the object
 			refcount=1;
 			pend_destroy=1;
-		} else { //such mode can be used for statically allocated objects (so destroy_sub must be NULL)
+		} else { //such mode can be used for statically allocated objects (in such case destroy_sub must be NULL)
 			refcount=0;
 			pend_destroy=0;
 		}

@@ -45,6 +45,19 @@ struct iot_device_entry_t;
 struct iot_device_connection_t;
 struct iot_netproto_session_iotgw;
 
+class iot_nodemodel;
+struct iot_modelsignal;
+struct iot_modelevent;
+struct iot_modelnegsignal;
+struct iot_config_item_node_t;
+struct iot_config_item_rule_t;
+struct iot_config_item_group_t;
+struct iot_config_node_in_t;
+struct iot_config_node_out_t;
+struct iot_config_item_host_t;
+struct iot_config_item_link_t;
+
+
 extern uv_loop_t *main_loop;
 extern iot_thread_item_t* main_thread_item; //prealloc main thread item
 extern iot_thread_registry_t* thread_registry;
@@ -64,23 +77,40 @@ extern uint16_t last_clock_sync_error; //error of last clock sync in ms
 
 extern int64_t mono_clock_offset; //nanoseconds to add to monotonic clock to get real time. Is calculated on process start as difference between RT and Monotonic clock
 extern clockid_t mono_clockid;
+extern int64_t timenumerator32_offset;
 
 #include "iot_threadmsg.h"
 
 void iot_init_systime(void);
 
-inline uint64_t iot_get_systime(void) { //gets real time synchronized within hosts (in nanoseconds)
+
+inline uint64_t iot_get_systime_ns(void) { //gets real time synchronized within hosts (in nanoseconds)
 	struct timespec ts;
 	clock_gettime(mono_clockid, &ts);
 
 	return uint64_t(ts.tv_sec)*1000000000ll+ts.tv_nsec+mono_clock_offset+system_clock_offset;
 }
 
-inline uint64_t iot_get_reltime(void) { //gets relative monotonic time not affected by time correction.
+inline int64_t iot_get_systime(void) { //gets real time synchronized within hosts (rounded to nearest second)
+	return ((iot_get_systime_ns()+500000000ull)/1000000000ull);
+}
+
+
+
+inline uint64_t iot_get_reltime_ns(void) { //gets relative monotonic time not affected by time correction (if platform supports it, otherwise uses realtime clock).
 										//Only difference between two consecutive values taken IN SAME PROCESS is meaningful
 	struct timespec ts;
 	clock_gettime(mono_clockid, &ts);
 	return uint64_t(ts.tv_sec)*1000000000ll+ts.tv_nsec;
+}
+
+
+inline int64_t iot_get_reltime(void) { //gets relative monotonic time not affected by time correction (if platform supports it, otherwise uses realtime clock). rounded to nearest second
+	return ((iot_get_reltime_ns()+500000000ull)/1000000000ull);
+}
+
+static inline uint32_t get_timenumerator32(void) { //returns modified 32-bit time-dependent value. it has some offset from timestamp to allow 32-bit var to work many years. result of this function can be used within same process only. can be passed to other processes but they must invalidate it if source process died
+	return uint32_t(iot_get_reltime()-timenumerator32_offset);
 }
 
 
@@ -97,6 +127,8 @@ inline uint16_t iot_get_systime_error(void) {
 
 void iot_process_module_bug(iot_any_module_item_t *module_item);
 
+
+/*
 //holds locked state of mod instance structure
 //does not allow to copy itself, only to move
 struct iot_modinstance_locker {
@@ -135,7 +167,7 @@ struct iot_modinstance_locker {
 		return modinst==NULL;
 	}
 };
-
+*/
 
 struct iot_gwinstance { //represents IOT gateway per-user state instance
 	const uint32_t guid;
@@ -160,7 +192,7 @@ struct iot_gwinstance { //represents IOT gateway per-user state instance
 	~iot_gwinstance(void);
 
 	uint64_t next_event_numerator(void) { //returns next event numerator
-		uint64_t low=iot_get_systime()-1'000'000'000ull*1'000'000'000ull; //decrease number of seconds since EPOCH by 1e9 seconds for cases of event id
+		uint64_t low=iot_get_systime_ns()-1'000'000'000ull*1'000'000'000ull; //decrease number of seconds since EPOCH by 1e9 seconds for cases of event id
 		low-=low % 1000; //zero nanoseconds part to get microseconds multiplied by 1000
 
 		event_lock.lock();
@@ -180,7 +212,7 @@ printf("EVENT %" PRIu64 " allocated\n", rval);
 };
 
 struct iot_ownconfig_t {
-	time_t modtime;
+	int64_t modtime;
 	json_object *load_drivers; //override to loading of driver modules
 	json_object *detectors; //params and manual devices for detectors
 	json_object *hwdevices; //driver overrides and params for drivers of hw devices

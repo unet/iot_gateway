@@ -262,14 +262,14 @@ void iot_nodemodel::destroy(iot_nodemodel* node) {
 		node->curmsginput=NULL;
 		node->curmsgoutput=NULL;
 	}
-	if(node->modinstlk) node->modinstlk.unlock();
+	if(node->modinstlk) node->modinstlk=NULL;
 	iot_release_memblock(node);
 }
 
 void iot_nodemodel::on_instance_start(iot_modinstance_item_t* modinst) {
 	assert(uv_thread_self()==main_thread);
 
-	assert(modinstlk.modinst==modinst);
+	assert(modinstlk==modinst);
 	assert(state==NODESTATE_WAITSTART || state==NODESTATE_NOINSTANCE);
 
 	state=NODESTATE_STARTED;
@@ -285,7 +285,7 @@ void iot_nodemodel::on_instance_destroy(iot_nodemodel* node, iot_modinstance_ite
 	assert(uv_thread_self()==main_thread);
 
 	if(!node->modinstlk) return;
-	assert(node->modinstlk.modinst==modinst);
+	assert(node->modinstlk==modinst);
 
 	if(node->state==NODESTATE_STARTED) node->stop();
 
@@ -293,7 +293,7 @@ void iot_nodemodel::on_instance_destroy(iot_nodemodel* node, iot_modinstance_ite
 
 	node->state=NODESTATE_NOINSTANCE;
 
-	node->modinstlk.unlock();
+	node->modinstlk=NULL;
 
 	iot_nodemodel::destroy(node);
 	//TODO  do we need locker here at all? restart node instance if possible
@@ -312,7 +312,7 @@ bool iot_nodemodel::stop(void) {
 		case NODESTATE_STARTED: //model started and module instance is active
 		case NODESTATE_WAITSTART: //model started and module instance is starting
 			state=NODESTATE_STOPPING;
-			modinstlk.modinst->stop(false);
+			modinstlk->stop(false);
 		case NODESTATE_STOPPING: //model stopped and wait module instance to stop to be destroyed
 			return false;
 		case NODESTATE_RELOADING: //model stopped and wait module instance to stop to restart itself with new configuration
@@ -323,9 +323,12 @@ bool iot_nodemodel::stop(void) {
 	return true;
 }
 
+//true isasync requests async execution. this turns off simple sync mode if enabled for started nodes
+//msg must contain iot_notify_inputsupdate structure with information about updated inputs
+//outsignals is initially NULL and will be assigned to list of signals if any will be generated during simple sync execution (and return value will be true)
 bool iot_nodemodel::execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal *&outsignals) {
-	//true isasync requests async execution. this turns off simple sync mode if enabled for started nodes
 	//returns true in sync mode if outsignals is actual, i.e. reply is immediate
+
 	assert(uv_thread_self()==main_thread);
 	assert(msg!=NULL && msg->code==IOT_MSG_NOTIFY_INPUTSUPDATED && msg->data!=NULL && msg->is_releasable);
 
@@ -338,16 +341,18 @@ bool iot_nodemodel::execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal
 		if(!is_sync) return false;
 		return true; //to say immediately there are no changes in outputs
 	}
-	assert(modinstlk.modinst!=NULL);
+	assert(modinstlk!=NULL);
 
-	msg->miid=modinstlk.modinst->get_miid();
+	msg->miid=modinstlk->get_miid();
 
 	if(isasync) {
-		assert(!is_sync); //sync modules should not be called in async mode
-		if(is_sync==2) is_sync=1; //disable simple sync mode (in release build)
+		if(is_sync) { //sync modules should not be called in async mode
+			assert(false);
+			if(is_sync==2) is_sync=1; //disable simple sync mode (in release build)
+		}
 		msg->bytearg=1;
 
-		modinstlk.modinst->thread->send_msg(msg);
+		modinstlk->thread->send_msg(msg);
 		msg=NULL;
 		return false;
 	}
@@ -355,12 +360,12 @@ bool iot_nodemodel::execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal
 	if(is_sync==1) { //delayed sync execution
 		outlog_debug_modelling("Scheduling delayed sync execution for node %" IOT_PRIiotid, node_id);
 		msg->bytearg=0;
-		modinstlk.modinst->thread->send_msg(msg);
+		modinstlk->thread->send_msg(msg);
 		msg=NULL;
 		return false;
 	}
 	//simple sync mode
-	assert(modinstlk.modinst->thread==main_thread_item);
+	assert(modinstlk->thread==main_thread_item);
 
 	outlog_debug_modelling("Doing simple sync execution for node %" IOT_PRIiotid, node_id);
 	return do_execute(false, msg, outsignals);
@@ -369,7 +374,7 @@ bool iot_nodemodel::execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal
 bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsignal *&outsignals) {
 	//returns true if outsignals is actual, i.e. reply is immediate
 	assert(state==NODESTATE_STARTED);
-	iot_modinstance_item_t *modinst=modinstlk.modinst;
+	iot_modinstance_item_t *modinst=(iot_modinstance_item_t*)modinstlk;
 	assert(uv_thread_self()==modinst->thread->thread);
 
 	assert(msg!=NULL && msg->code==IOT_MSG_NOTIFY_INPUTSUPDATED && msg->data!=NULL && msg->is_releasable);
@@ -393,8 +398,10 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 		auto item=&notifyupdate->item[i];
 		auto j=item->real_index;
 		if(item->is_msg) { //msg signal
-			assert(item->data!=NULL);
 			if(item->data!=NULL) nummsgs++;
+			else {
+				assert(false);
+			}
 		} else { //value signal
 			if(j>=node_iface->num_valueinputs) {
 				assert(false);
@@ -412,7 +419,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 			} else {
 				valueset[j]=true;
 			}
-			curvalueinput[j].instance_value = valuesignals[j].new_value = item->data;
+			curvalueinput[j].instance_value = valuesignals[j].new_value = item->data;  //valuesignals[j].prev_value still has reference to old instance_value and will be used to release that value later
 			item->data=NULL; //value moved from notifyupdate to instance_value, so no refcount change (valuesignals structure is temporary and not accounted)
 		}
 	}
@@ -458,7 +465,7 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 	//now release previous values (instance will incref if it needs to keep some)
 	for(uint16_t i=0; i<node_iface->num_valueinputs; i++)
 		if(valuesignals[i].prev_value && valuesignals[i].prev_value!=valuesignals[i].new_value) valuesignals[i].prev_value->release();
-	//release msgs
+	//release msgs (instance will incref if it needs to keep some)
 	for(uint16_t i=0; i<node_iface->num_msginputs; i++) {
 		for(uint16_t j=0;j<msgsignals[i].num;j++) {
 			assert(msgsignals[i].msgs[j]!=NULL);
@@ -472,11 +479,11 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 	if(isasync) return false;
 	//sync
 
-	if(!syncexec.active()) { //there were several calls to do_update_outputs() or one call with non-current reason_event, so reply was sent using msg
+	if(!syncexec.active()) { //there were several calls to do_update_outputs() or at least one call with non-current reason_event, so reply was sent using msg
 		msg=NULL;
 		if(modinst->thread==main_thread_item && is_sync==2) is_sync=1; //disable simple mode if it was enabled
 
-		return false;
+		return false; //such reply will add node to waitexec list of current event
 	}
 	//was one call to do_update_outputs() or none
 	if(err==IOT_ERROR_NOT_READY && modinst->thread==main_thread_item && is_sync==2) is_sync=1; //disable simple mode if it was enabled
@@ -491,10 +498,10 @@ bool iot_nodemodel::do_execute(bool isasync, iot_threadmsg_t *&msg, iot_modelsig
 }
 
 int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8_t num_values, const uint8_t *valueout_indexes, const iot_datavalue** values, uint8_t num_msgs, const uint8_t *msgout_indexes, const iot_datavalue** msgs) {
-	assert(modinstlk.modinst!=NULL);
-	assert(uv_thread_self()==modinstlk.modinst->thread->thread);
-	auto allocator=modinstlk.modinst->thread->allocator;
-	uint64_t tm=uv_now(modinstlk.modinst->thread->loop);
+	assert(modinstlk!=NULL);
+	assert(uv_thread_self()==modinstlk->thread->thread);
+	auto allocator=modinstlk->thread->allocator;
+	uint64_t tm=uv_now(modinstlk->thread->loop);
 
 	if(num_values>node_iface->num_valueoutputs || num_msgs>node_iface->num_msgoutputs) return IOT_ERROR_INVALID_ARGS;
 	//check types and indexes
@@ -513,10 +520,10 @@ int iot_nodemodel::do_update_outputs(const iot_event_id_t *reason_eventid, uint8
 		if(!node_iface->msgoutput[msgout_indexes[i]].is_compatible(msgs[i])) return IOT_ERROR_INVALID_ARGS;
 	}
 
-	bool sync; //2 - simple sync
-	if(syncexec.active()) { //this is sync processing
-		if(!syncexec.result_set() && reason_eventid && syncexec.event_id==*reason_eventid) { //this is first call to this func
-			sync=true;//modinstlk.modinst->thread==main_thread_item ? sync : 1; //this->is_sync can be accessed from main thread only
+	bool sync; //show how current signals will be processed
+	if(syncexec.active()) { //node is in sync processing (simple or non-simple)
+		if(!syncexec.result_set() && reason_eventid && syncexec.event_id==*reason_eventid) { //this is first call to this func during current sync execution
+			sync=true;//modinstlk->thread==main_thread_item ? sync : 1; //this->is_sync can be accessed from main thread only
 		} else { //this is repeated call or with another reason event
 			outlog_debug_modelling("Node %" IOT_PRIiotid " sets output for event %" PRIu64 " during sync execution of event %" PRIu64, reason_eventid ? reason_eventid->numerator : 0, syncexec.event_id);
 			sync=false;
@@ -638,8 +645,8 @@ nomem:
 }
 
 const iot_datavalue* iot_nodemodel::get_outputvalue(uint8_t index) {
-	assert(modinstlk.modinst!=NULL);
-	assert(uv_thread_self()==modinstlk.modinst->thread->thread);
+	assert(modinstlk!=NULL);
+	assert(uv_thread_self()==modinstlk->thread->thread);
 	if(index>=node_iface->num_valueoutputs) return NULL;
 	return curvalueoutput[index].instance_value;
 }

@@ -62,7 +62,7 @@ private:
 	iot_objref_ptr<iot_netproto_config_iotgw> iotprotocfg;
 //	iot_netcon_mesh* iotgw_clientcon=NULL; //mesh netcon used to create IOT GW session. this is client connection used to connect to this peer when its host id IS GREATER than this host
 
-	iot_spinlock seslistlock;
+	iot_spinrlock seslistlock;
 	iot_objref_ptr<iot_netproto_session_iotgw> iotsession; //seslistlock protected active IOTGW session reference
 	iot_netconiface* iotnetcon=NULL; //seslistlock protected coniface of iotsession
 

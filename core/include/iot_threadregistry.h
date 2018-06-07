@@ -41,7 +41,7 @@ class iot_thread_item_t {
 	volatile std::atomic<uint32_t> cpu_loading={0}; //current sum of declared cpu loading. atomic is used to provide atomicity only, so memory_order_relaxed is everywhere
 	bool is_shutdown=false;
 	volatile std::atomic_flag shutdown_signaled=ATOMIC_FLAG_INIT;
-	iot_spinlock datalock; //used to protect is_shutdown, cpu_loading counter and instances_head and netcons_head lists in [add|remove]_[modinstance|netcon] calls
+	iot_spinrlock datalock; //used to protect is_shutdown, cpu_loading counter and instances_head and netcons_head lists in [add|remove]_[modinstance|netcon] calls
 
 	struct {
 		iot_atimer timer;

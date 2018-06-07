@@ -40,7 +40,7 @@ struct iot_device_connection_t {
 			iot_module_type_t type;
 		} remote;
 		struct local_client_data_t {
-			iot_modinstance_locker modinstlk; //local client_host
+			iot_objref_ptr<iot_modinstance_item_t> modinstlk; //local client_host
 			uint8_t dev_idx; //index of this device connection for client modinst
 			iot_driverclient_conndata_t *conndata;
 			dbllist_node<iot_device_entry_t, iot_mi_inputid_t, uint32_t>* blistnode; //block list node. is assigned when entering pending state
@@ -61,7 +61,7 @@ struct iot_device_connection_t {
 //			uint8_t conn_idx; //index of this connection for driver modinst
 		} remote;
 		struct local_driver_data_t { //local driver_host
-			iot_modinstance_locker modinstlk;
+			iot_objref_ptr<iot_modinstance_item_t> modinstlk;
 //			void *private_data;
 			uint8_t conn_idx; //index of this connection for driver modinst
 		} local;

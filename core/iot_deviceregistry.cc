@@ -136,7 +136,7 @@ void hwdev_registry_t::remove_hwdev(iot_hwdevregistry_item_t* hwdevitem) {
 	if(hwdevitem->devdrv_modinstlk) { //item is busy, move to list of removed items until released by driver
 		BILINKLIST_INSERTHEAD(hwdevitem, removed_dev_head, next, prev);
 		hwdevitem->is_removed=1;
-		hwdevitem->devdrv_modinstlk.modinst->stop(false, true);
+		hwdevitem->devdrv_modinstlk->stop(false, true);
 		return;
 	}
 	if(hwdevitem->dev_data) {
@@ -222,9 +222,9 @@ int hwdev_registry_t::try_connect_local_driver(iot_device_connection_t* conn) { 
 	while((it=itnext)) {
 		itnext=itnext->next;
 
-		if(!it->devdrv_modinstlk || !it->devdrv_modinstlk.modinst->is_working_not_stopping()) continue; //skip devices without driver or with non-started driver
+		if(!it->devdrv_modinstlk || !it->devdrv_modinstlk->is_working_not_stopping()) continue; //skip devices without driver or with non-started driver
 
-		err=conn->connect_local(it->devdrv_modinstlk.modinst);
+		err=conn->connect_local((iot_modinstance_item_t*)it->devdrv_modinstlk);
 		if(!err || err==IOT_ERROR_NOT_READY || err==IOT_ERROR_NO_MEMORY) goto onexit; //success or fatal error  //   || err==IOT_ERROR_CRITICAL_ERROR
 		if(err==IOT_ERROR_TEMPORARY_ERROR || err==IOT_ERROR_HARD_LIMIT_REACHED) {
 			wastemperr=true;
@@ -242,9 +242,9 @@ void iot_hwdevregistry_item_t::on_driver_destroy(iot_modinstance_item_t* modinst
 		assert(uv_thread_self()==main_thread);
 
 		if(!devdrv_modinstlk) return;
-		assert(devdrv_modinstlk.modinst==modinst);
+		assert(devdrv_modinstlk==modinst);
 
-		devdrv_modinstlk.unlock();
+		devdrv_modinstlk=NULL;
 		if(modinst->state==IOT_MODINSTSTATE_INITED) { //stopped successfully or not ever started
 			if(is_removed) gwinst->hwdev_registry->finish_hwdev_removal(this);
 				else modules_registry->try_find_driver_for_hwdev(this);

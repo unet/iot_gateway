@@ -29,10 +29,12 @@ struct iot_hwdevregistry_item_t {
 	iot_hwdev_details* dev_data; //will be assigned to custom_data buffer in current struct
 	iot_miid_t detector_miid; //miid of detector instance
 
-	iot_modinstance_locker devdrv_modinstlk; //NULL if no driver connected or ref to driver module instance
+	iot_objref_ptr<iot_modinstance_item_t> devdrv_modinstlk; //NULL if no driver connected or ref to driver module instance
 
-	uint32_t blocked_modules[IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV]; //zero for unused slot
-	uint32_t blocked_tms[IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV]; //0xFFFFFFFF if blocked forever
+	struct {
+		uint32_t module_id; //zero for unused slot
+		uint32_t tm;		//0xFFFFFFFF if blocked forever
+	} blocked[IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV];
 
 	uint32_t custom_len_alloced:24, //real size of allocated space for custom_data (could be allocated with reserve or have more space from previous use)
 			is_blocked:1,		//flag that hw device is blocked from finding a driver
@@ -42,32 +44,39 @@ struct iot_hwdevregistry_item_t {
 
 
 	bool is_module_blocked(uint32_t module_id, uint32_t now32) {
+		if(!module_id) {
+			assert(false);
+			return false;
+		}
 		for(int i=0;i<IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV;i++) {
-			if(!blocked_modules[i] || blocked_modules[i]!=module_id) continue;
-			if(blocked_tms[i]==0xFFFFFFFFu || blocked_tms[i]>now32) return true;
+			if(blocked[i].module_id!=module_id) continue;
+			if(blocked[i].tm==0xFFFFFFFFu || blocked[i].tm>now32) return true;
 			//timeout ended
-			blocked_modules[i]=0;
+			blocked[i].module_id=0;
 			break;
 		}
 		return false;
 	}
 	void clear_module_block(uint32_t module_id) { //zero value clears for all
 		if(!module_id) {
-			memset(blocked_modules,0,sizeof(blocked_modules));
+			memset(blocked,0,sizeof(blocked));
 			return;
 		}
 		for(int i=0;i<IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV;i++) {
-			if(!blocked_modules[i] || blocked_modules[i]!=module_id) continue;
-			blocked_modules[i]=0;
+			if(blocked[i].module_id!=module_id) continue;
+			blocked[i].module_id=0;
 			break;
 		}
 	}
 	bool block_module(uint32_t module_id, uint32_t till, uint32_t now32) {
 		//returns false if all slots are busy
+		if(!module_id) {
+			assert(false);
+			return false;
+		}
 		for(int i=0;i<IOT_CONFIG_MAX_BLOCKED_MODULES_PER_HWDEV;i++) {
-			if(!blocked_modules[i] || blocked_modules[i]==module_id || blocked_tms[i]<=now32) {
-				blocked_modules[i]=module_id;
-				blocked_tms[i]=till;
+			if(!blocked[i].module_id || blocked[i].module_id==module_id || blocked[i].tm<=now32) {
+				blocked[i]={.module_id=module_id, .tm=till};
 				return true;
 			}
 		}

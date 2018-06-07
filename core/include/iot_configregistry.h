@@ -47,8 +47,8 @@ struct iot_config_item_group_t {
 	uint8_t num_modes; //number of items in modes array. default mode with same ID as group is implicit and not counted here
 
 	iot_id_t group_id, activemode_id; //both zero for persistent nodes. mode_id can be zero for temporary nodes (which are group-common)
-	time_t modes_modtime;
-	time_t active_set;
+	int64_t modes_modtime;
+	int64_t active_set;
 	iot_id_t modes[IOT_CONFIG_MAX_MODES_PER_GROUP]; //array with list of possible modes not including default mode
 };
 
@@ -59,11 +59,36 @@ struct iot_config_item_rule_t {
 	iot_id_t mode_id; //can be zero for links from group-common rules
 	iot_config_item_group_t *group_item; //must point to structure corresponding to group_id
 
+	iot_modelevent* blockedby=NULL; //non-NULL value if this rule is involved in corresponding event processing. event must be present in config_registry->current_events_head
+	iot_config_item_rule_t* blocked_next=NULL; //if blockedby is set, then position in blockedby->blocked_rules_head list
+
 	bool is_del;
 
 	bool is_active(void) const {
 		return group_item && (!mode_id || group_item->activemode_id==mode_id);
 	}
+
+	bool is_blocked(void) const {return blockedby!=NULL;}
+	bool is_blockedby(const iot_modelevent *ev) const {
+		assert(ev!=NULL);
+		return blockedby==ev;
+	}
+	void set_blocked(iot_modelevent *ev) { //marks node as blocked for processing of specific event. node must be unblocked
+		assert(ev!=NULL && blockedby==NULL);
+		blockedby=ev;
+		ULINKLIST_INSERTHEAD(this, ev->blocked_rules_head, blocked_next);
+	}
+	void clear_blocked(void) {
+		assert(blockedby!=NULL);
+		ULINKLIST_REMOVE_NOPREV(this, blockedby->blocked_rules_head, blocked_next);
+		blockedby=NULL;
+	}
+	void clear_blocked_athead(iot_modelevent *ev) { //must be blocked by ev. quicker version to remove head item from ev->blocked_rules_head
+		assert(blockedby==ev && this==ev->blocked_rules_head);
+		ULINKLIST_REMOVEHEAD(ev->blocked_rules_head, blocked_next);
+		blockedby=NULL;
+	}
+
 };
 
 
@@ -134,16 +159,16 @@ struct iot_config_node_dev_t {
 
 //represents user configuration node item
 struct iot_config_item_node_t {
-	iot_id_t node_id;
 	iot_config_item_host_t* host=NULL;
+	iot_id_t node_id;
 	uint32_t module_id=0;
+	uint32_t cfg_id=0; //node config number when props were updated last time
 
 	iot_config_item_rule_t* rule_item=NULL; //parent rule. can be NULL if node is persistent or temporary but rule-independent (in particular rules can be totally unused)
 
 //	iot_id_t mode_id=0; //zero for persistent nodes. can be zero for temporary nodes (which are group-common)
 //	iot_config_item_group_t *group_item=NULL; //must point to structure corresponding to group_id for temporary nodes, NULL for persistent
 
-	uint32_t cfg_id=0; //node config number when props were updated last time
 
 	iot_config_node_dev_t *dev=NULL; //linked list of device filters
 
@@ -158,7 +183,23 @@ struct iot_config_item_node_t {
 
 	iot_threadmsg_t *prealloc_execmsg=NULL;
 
+
+	iot_modelevent* blockedby=NULL; //non-NULL value if this node is involved in corresponding event processing. event must be present in config_registry->current_events_head
+	iot_config_item_node_t* blocked_next=NULL; //if blockedby is set, then position in blockedby->blocked_nodes_head list
+	iot_config_item_node_t* tmp_blocked_next=NULL; //if tmp_blocked is true, then position in new_event->tmp_blocked_nodes_head or new_errevent->tmp_blocked_nodes_head list
+	iot_config_item_node_t* initial_next=NULL, *initial_prev=NULL; //for blocked node can held position in blockedby->initial_nodes_head list
+
+	iot_config_item_node_t* needexec_next=NULL, *needexec_prev=NULL; //position in configregistry->needexec_head or blockedby->needexec_next of nodes which need recount
+												//of outputs. at least one input must be in undelivered state or execution will assert
+
+	iot_config_item_node_t* waitexec_next=NULL, *waitexec_prev=NULL; //for sync node being executed in complex mode helds position in blockedby->waitexec_head list
+
+	uint16_t maxpathlen=0;
+
 	uint8_t config_ver=0;
+	uint8_t tmp_blocked=0; //used when forming new event from input signals to mark nodes, which would be blocked by new_event or new_errevent
+							//value 1 means that only specific output or outputs are blocked (new_event->signals_head must be traversed to know which outputs)
+							//value >1 means that whole node is blocked
 
 	bool is_del=false;
 	bool outputs_connected=false; //flag that there is at least one is_connected output in outputs list
@@ -169,16 +210,6 @@ struct iot_config_item_node_t {
 	bool acted=false; //for blocked node shows if it was already executed during event processing
 	bool pathset=false; //flag that some in has assigned pathlen (it could be temporary assignment for non-initial node). necessary just to optimize cleaning pathlen
 
-	uint16_t maxpathlen=0;
-
-	iot_modelevent* blockedby=NULL; //non-NULL value if this node is involved in corresponding event processing. event must be present in config_registry->current_events_head
-	iot_config_item_node_t* blocked_next=NULL; //if blockedby is set, then position in blockedby->blocked_nodes_head list
-	iot_config_item_node_t* initial_next=NULL, *initial_prev=NULL; //for blocked node can held position in blockedby->initial_nodes_head list
-
-	iot_config_item_node_t* needexec_next=NULL, *needexec_prev=NULL; //position in configregistry->needexec_head or blockedby->needexec_next of nodes which need recount
-												//of outputs (with or without resend of input update notification depending on 
-
-	iot_config_item_node_t* waitexec_next=NULL, *waitexec_prev=NULL; //for sync node being executed in complex mode helds position in blockedby->waitexec_head list
 
 	iot_config_item_node_t(iot_id_t node_id) : node_id(node_id), erroutput (this, "v" IOT_CONFIG_NODE_ERROUT_LABEL, &iot_datavalue_nodeerrorstate::const_noinst) {
 	}
@@ -208,6 +239,54 @@ struct iot_config_item_node_t {
 	void clear_waitexec(void) {
 		assert(waitexec_prev!=NULL);
 		BILINKLIST_REMOVE(this, waitexec_next, waitexec_prev);
+	}
+
+	bool is_blocked(void) const {return blockedby!=NULL;}
+	bool is_blockedby(const iot_modelevent *ev) const {
+		assert(ev!=NULL);
+		return blockedby==ev;
+	}
+	void set_blocked(iot_modelevent *ev) { //marks node as blocked for processing of specific event. node must be unblocked
+		assert(ev!=NULL && blockedby==NULL);
+		blockedby=ev;
+		ULINKLIST_INSERTHEAD(this, ev->blocked_nodes_head, blocked_next);
+		if(rule_item && !rule_item->is_blockedby(ev)) { //rule, when present, must be either blocked by same event or unblocked
+			assert(!rule_item->is_blocked());
+			rule_item->set_blocked(ev);
+		}
+	}
+	void clear_blocked(void) { //will not unblock rules!!!
+		assert(blockedby!=NULL);
+		ULINKLIST_REMOVE_NOPREV(this, blockedby->blocked_nodes_head, blocked_next);
+		blockedby=NULL;
+	}
+	void clear_blocked_athead(iot_modelevent *ev) { //must be blocked by ev. quicker version to remove head item from ev->blocked_nodes_head
+		assert(blockedby==ev && this==ev->blocked_nodes_head);
+		ULINKLIST_REMOVEHEAD(ev->blocked_nodes_head, blocked_next);
+		blockedby=NULL;
+	}
+
+	bool is_tmpblocked(void) const {return tmp_blocked!=0;}
+	bool is_tmpblocked_outs(void) const {return tmp_blocked==1;}
+	void set_tmpblocked(iot_modelevent *ev) { //marks node as temporary fully blocked for specific event being formed. node must be unblocked
+		assert(ev!=NULL && !tmp_blocked);
+		tmp_blocked=2;
+		ULINKLIST_INSERTHEAD(this, ev->tmp_blocked_nodes_head, tmp_blocked_next);
+	}
+	void set_tmpblocked_outs(iot_modelevent *ev) { //marks node as with temporary blocked outs for specific event being formed. node must be unblocked
+		assert(ev!=NULL && !tmp_blocked);
+		tmp_blocked=1;
+		ULINKLIST_INSERTHEAD(this, ev->tmp_blocked_nodes_head, tmp_blocked_next);
+	}
+	void clear_tmpblocked(iot_modelevent *ev) { //must be tmp blocked by ev
+		assert(tmp_blocked);
+		ULINKLIST_REMOVE_NOPREV(this, ev->tmp_blocked_nodes_head, tmp_blocked_next);
+		tmp_blocked=0;
+	}
+	void clear_tmpblocked_athead(iot_modelevent *ev) { //must be tmp blocked by ev. quicker version to remove head item from ev->tmp_blocked_nodes_head
+		assert(tmp_blocked && this==ev->tmp_blocked_nodes_head);
+		ULINKLIST_REMOVEHEAD(ev->tmp_blocked_nodes_head, tmp_blocked_next);
+		tmp_blocked=0;
 	}
 
 	bool prepare_execute(bool forceasync=false); //must be called to preallocate memory before execute(). returns false on memory error, true on success BUT needexec and initial flags can be cleared
@@ -304,6 +383,7 @@ struct iot_config_item_host_t {
 
 	const iot_hostid_t host_id;
 	uint32_t cfg_id=0; //hosts config number when props were updated last time
+	uint32_t index; //relative index of this host used to represent set of hosts like a bitmap. all indexes are changed if set of hosts changes. range if [0; iot_configregistry_t::num_hosts-1]
 	iot_objref_ptr<iot_peer> peer;
 
 	json_object* manual_connect_params=NULL; //manually specified by user ways to connect to host, common for all other hosts
@@ -352,7 +432,9 @@ private:
 	iot_modelevent *events_qhead=NULL, *events_qtail=NULL; //queue of commited events. processed from head, added to tail. uses qnext and qprev item fields
 
 	iot_modelevent *new_event=NULL; //uncommited normal event, new signals are added to it, waits for commit_signals or large reltime difference of next signal
+	bitmap32* new_event_hbitmap=NULL; //memblock-allocated bitmap object to store involved hosts for new_event
 	iot_modelevent *new_errevent=NULL; //uncommited error signals event, new signals are added to it, waits for commit_signals or large reltime difference of next signal
+	bitmap32* new_errevent_hbitmap=NULL; //memblock-allocated bitmap object to store involved hosts for new_errevent
 
 	iot_modelevent *current_events_head=NULL; //list of events being currently processed in parallel. qnext and qprev fields are used, but no tail
 
@@ -365,6 +447,7 @@ private:
 	uv_check_t events_executor={};
 	iot_config_item_node_t* needexec_head=NULL; //list of nodes whose output must be recalculated. uses fields needexec_next/prev
 
+	bool host_indexes_invalid=false; //will be set to true inside host_delete after removing some host to mark that all host indexes must be recalculated in host_add
 	bool inited=false; //flag that one-time init was done in start_config
 
 public:
@@ -393,19 +476,34 @@ public:
 //host management
 	void host_add(iot_config_item_host_t* h) {
 		assert(uv_thread_self()==main_thread);
+		assert(!new_event && !new_errevent); //modelling must not be in stage of event forming
 		assert(h->next==NULL && h->prev==NULL);
+
+		if(host_indexes_invalid) { //need to reassign host indexes
+			uint32_t idx=0;
+			for(iot_config_item_host_t* h=hosts_head; h; h=h->next, idx++) h->index=idx;
+			host_indexes_invalid=false;
+		}
 
 		//get axclusive lock on hosts list
 		hosts_lock.wrlock();
 
 		BILINKLIST_INSERTHEAD(h, hosts_head, next, prev);
-		num_hosts.fetch_add(1, std::memory_order_relaxed);
+		h->index=num_hosts.fetch_add(1, std::memory_order_relaxed);
 
 		hosts_lock.wrunlock();
 
 		if(h->host_id==gwinst->this_hostid) {
 			assert(current_host==NULL);
 			current_host=h;
+		}
+		if(new_event_hbitmap && !new_event_hbitmap->has_space(get_num_hosts())) {
+			iot_release_memblock(new_event_hbitmap);
+			new_event_hbitmap=NULL;
+		}
+		if(new_errevent_hbitmap && !new_errevent_hbitmap->has_space(get_num_hosts())) {
+			iot_release_memblock(new_errevent_hbitmap);
+			new_errevent_hbitmap=NULL;
 		}
 	}
 	iot_config_item_host_t* host_find(iot_hostid_t hostid) const { //thread safe
@@ -445,9 +543,20 @@ public:
 
 		//release lock
 		if(locked) hosts_lock.wrunlock();
+
+		if(new_event_hbitmap) {
+			iot_release_memblock(new_event_hbitmap);
+			new_event_hbitmap=NULL;
+		}
+		if(new_errevent_hbitmap) {
+			iot_release_memblock(new_errevent_hbitmap);
+			new_errevent_hbitmap=NULL;
+		}
+
 	}
 	void host_delete(iot_config_item_host_t* h, bool skiplock=false) {
 		assert(uv_thread_self()==main_thread);
+		assert(!new_event && !new_errevent); //modelling must not be in stage of event forming
 
 		if(!skiplock) {
 			//get axclusive lock on hosts list
@@ -455,7 +564,7 @@ public:
 		}
 
 		//do exclusive work
-		BILINKLIST_REMOVE_NOCL(h, next, prev);
+		BILINKLIST_REMOVE_NOCL(h, next, prev); //??? is there a sense with regard to locking? TODO. check usage of this
 		assert(num_hosts>0);
 		num_hosts.fetch_sub(1, std::memory_order_relaxed);
 
@@ -469,6 +578,7 @@ public:
 
 		h->~iot_config_item_host_t();
 		iot_release_memblock(h);
+		host_indexes_invalid=true;
 	}
 	void hosts_markdel(void) const { //set is_del mark for all hosts
 		assert(uv_thread_self()==main_thread);
@@ -573,29 +683,54 @@ public:
 		auto node=node_find(neg->node_id);
 		if(!node || !node->is_waitexec()) return;
 
-		assert(node->blockedby!=NULL);
+		assert(node->is_blocked());
 		if(neg->event_id==node->blockedby->id) { //reply is exactly for blocked event, so clear waitexec
 			node->clear_waitexec();
 			if(!node->blockedby->waitexec_head) event_continue(node->blockedby);
 		}
 	}
-	void inject_signals(iot_modelsignal* sig) {
+	void inject_signals(iot_modelsignal* sig) { //injects signal from LOCAL node only
 		assert(sig!=NULL);
+		uint32_t numhosts=get_num_hosts();
+		char bitmapbuf[bitmap32::calc_size(numhosts)];
+		bitmap32* tmpbitmap=new(bitmapbuf) bitmap32(numhosts);
+
+		auto node=node_find(sig->node_id);
+		if(!node || node->module_id!=sig->module_id) { //invalid pack of signals
+			iot_modelsignal::release(sig);
+			return;
+		}
+		assert(node->host==current_host);
+		auto node_id=node->node_id;
+
 		if(sig->out_label[0]=='v' && strcmp(sig->out_label+1, IOT_CONFIG_NODE_ERROUT_LABEL)==0) { //put error signals to separate event
 			assert(sig->next==NULL); //error output is only one per node
 
 			if(new_errevent) {
-				if(sig->reltime > new_errevent->signals_tail->reltime) { //we have unfinished event and millisecond changed
-					commit_event();
-				} else if(new_errevent->signals_head) { //check if signal already present in event
-					for(iot_modelsignal* cursig=new_errevent->signals_head; cursig; cursig=cursig->next) {
-						if(cursig->node_id==sig->node_id && strcmp(cursig->out_label, sig->out_label)==0) { //already used
-							commit_event();
-							break;
-						}
+				assert(new_errevent->signals_head!=NULL);
+				if(sig->reltime > new_errevent->signals_head->reltime) { //we have unfinished event and millisecond changed
+					commit_event(); //will nullify new_errevent and release tmp blocks
+					goto after_errcheck;
+				}
+				if(node->is_tmpblocked()) { //node has full (or outs, but error out is only one) blocking, so singnals cannot be combined
+					commit_event(); //will nullify new_errevent and release tmp blocks
+					goto after_errcheck;
+				}
+				//check that any dependent node is blocked
+				if(node->erroutput.is_connected) {
+					if(recursive_checktmpblocked(&node->erroutput, 1, tmpbitmap)) {
+						commit_event(); //will nullify new_errevent and release tmp blocks
+						goto after_errcheck;
+					}
+					//for now do not allow to combine new chain of signals if it involves more hosts than event already has
+					*tmpbitmap-=*new_errevent_hbitmap;
+					if(*tmpbitmap) { //current signals involves additional hosts
+						commit_event(); //will nullify new_errevent and release tmp blocks
+						goto after_errcheck;
 					}
 				}
 			}
+after_errcheck:
 			if(!new_errevent) {
 				if(!events_freelist) {
 					outlog_error("Event queue overflow, loosing signal");
@@ -605,82 +740,158 @@ public:
 				new_errevent=events_freelist;
 				events_freelist=events_freelist->qnext;
 				new_errevent->init(gwinst->next_event_numerator());
+				if(!new_errevent_hbitmap) {
+					new_errevent_hbitmap=(bitmap32*)main_allocator.allocate(bitmap32::calc_size(numhosts));
+					if(!new_errevent_hbitmap) {
+						outlog_error("No memory for host bitmap, loosing signal"); //TODO prevent loosing by doing retry somehow
+						iot_modelsignal::release(sig);
+						return;
+					}
+					new(new_errevent_hbitmap) bitmap32(numhosts);
+				} else {
+					new_errevent_hbitmap->clear();
+				}
+			} else {
+				assert(new_errevent_hbitmap && new_errevent_hbitmap->has_space(numhosts));
 			}
+			//do tmp block
+			node->set_tmpblocked_outs(new_errevent);
+			if(node->erroutput.is_connected) recursive_tmpblock(&node->erroutput, new_errevent, 1, new_errevent_hbitmap);
+
 			new_errevent->add_signals(sig);
 			return;
 		}
+
 		//non-error signal or pack of signals
-
-		auto node=node_find(sig->node_id);
-		if(node && node->module_id==sig->module_id) sig->node_out=node->find_output(sig->out_label);
-			else sig->node_out=NULL;
-		if(!sig->node_out) { //invalid pack of signals
-			iot_modelsignal::release(sig);
-			return;
-		}
-
 		iot_modelsignal* csig=sig->next;
-		//check pack of signals is from same node
+		if(!(sig->node_out=node->find_output(sig->out_label))) {
+			sig->next=NULL;
+			iot_modelsignal::release(sig);
+			sig=csig;
+		}
+		//check pack of signals is from same node, assign node_out
 		while(csig) {
-			if(sig->node_id!=csig->node_id) {
-				assert(false);
+			if(node_id!=csig->node_id || !(csig->node_out=node->find_output(csig->out_label))) {
+				assert(false); //must be from same node_id
+				//in release mode just remove invalid signal
 				iot_modelsignal* t=csig;
 				csig=csig->next;
+				if(t==sig) sig=csig;
 				t->next=NULL; //!!!
 				iot_modelsignal::release(t);
 				continue;
 			}
 			csig=csig->next;
 		}
+		if(!sig) return; //all signals have unknown out label
+
 		if(node->is_waitexec()) { //this node is now blocked by some event awaiting its reply from delayed sync execution. directed to suspended event
-			assert(node->blockedby!=NULL);
+			assert(node->is_blocked());
+assert(node->is_sync()); //only sync nodes should block events (temporary for check)
 			node->blockedby->add_signals(sig);
 			if(sig->reason_event==node->blockedby->id) { //reply is exactly for blocked event, so clear waitexec
 				node->clear_waitexec();
-				if(!node->blockedby->waitexec_head) event_continue(node->blockedby);
+				if(!node->blockedby->waitexec_head) {//list of awaited nodes became empty, so can continue
+					event_continue(node->blockedby);
+				}
 			} //otherwise continue to wait for reply (TODO: some timeout)
 			return;
 		}
 
 
 		if(new_event) {
-			if(sig->reltime > new_event->signals_tail->reltime) { //we have unfinished event and millisecond changed
-				commit_event();
-			} else if(new_event->signals_head) { //check if any signal already present in event to prevent same signals in one event
-				for(iot_modelsignal* cursig=new_event->signals_head; cursig; cursig=cursig->next) {
-					if(cursig->node_id!=sig->node_id) continue;
-					csig=sig;
-					while(csig) {
-						if(strcmp(cursig->out_label, csig->out_label)==0) { //already used
-							commit_event();
-							break;
+			assert(new_event->signals_head!=NULL);
+			if(sig->reltime > new_event->signals_head->reltime) { //we have unfinished event and millisecond changed
+				commit_event(); //will nullify new_event and release tmp blocks
+				goto after_check;
+			}
+			if(node->is_tmpblocked_outs()) { //node already has some outs blocked for current event. check that list of outputs in current signals pack has no intersections with already added initial signals
+				for(iot_modelsignal* cursig=new_event->signals_head; cursig; cursig=cursig->next) { //loop by initial signals
+					if(cursig->node_id!=node_id) continue;
+					for(csig=sig; csig; csig=csig->next) { //loop by outputs in current pack of signals
+						if(strcmp(cursig->out_label, csig->out_label)==0) { //output already used
+							commit_event(); //will nullify new_event and release tmp blocks
+							goto after_check;
 						}
-						csig=csig->next;
 					}
-					if(csig) break; //propagate break in internal loop
 				}
+				//different set of outputs provided in new pack. they can involve same nodes without risk to create backlinks-like behaviour, so do not check tmp blocked, but do tmp block
+			} else if(node->is_tmpblocked()) { //node has full blocking, so singnals cannot be combined
+				commit_event(); //will nullify new_event and release tmp blocks
+				goto after_check;
+			} else {
+				node->set_tmpblocked_outs(new_event);
+				//check that any dependent node is blocked
+/*				for(csig=sig; csig; csig=csig->next) { //loop by outputs in current pack of signals
+					if(!sig->node_out->is_connected) continue; //no valid links from this output
+
+					tmpbitmap->clear();
+					if(recursive_checktmpblocked(csig->node_out, 1, tmpbitmap)) {
+						commit_event(); //will nullify new_event and release tmp blocks
+						goto after_check;
+					}
+
+					//for now do not allow to combine new chain of signals if it involves more hosts than event already has
+					*tmpbitmap-=*new_event_hbitmap;
+					if(*tmpbitmap) { //current signals involves additional hosts
+						commit_event(); //will nullify new_errevent and release tmp blocks
+						goto after_check;
+					}
+				}*/
 			}
 		}
+after_check:
 		if(!new_event) {
 			if(!events_freelist) {
-				outlog_error("Event queue overflow, loosing signal");
+				outlog_error("Event queue overflow, loosing signal"); //TODO prevent loosing by doing retry somehow
 				iot_modelsignal::release(sig);
 				return;
 			}
 			new_event=events_freelist;
 			events_freelist=events_freelist->qnext;
 			new_event->init(gwinst->next_event_numerator());
+			if(!new_event_hbitmap) {
+				new_event_hbitmap=(bitmap32*)main_allocator.allocate(bitmap32::calc_size(numhosts));
+				if(!new_event_hbitmap) {
+					outlog_error("No memory for host bitmap, loosing signal"); //TODO prevent loosing by doing retry somehow
+					iot_modelsignal::release(sig);
+					return;
+				}
+				new(new_event_hbitmap) bitmap32(numhosts);
+			} else {
+				new_event_hbitmap->clear();
+			}
+		} else {
+			assert(new_event_hbitmap && new_event_hbitmap->has_space(numhosts));
 		}
+
+		//do tmp block
+/*		for(csig=sig; csig; csig=csig->next) { //loop by outputs in current pack of signals
+			if(!sig->node_out->is_connected) continue; //no valid links from this output
+			recursive_tmpblock(csig->node_out, new_event, 1, new_event_hbitmap);
+		}*/
 		new_event->add_signals(sig);
 	}
-	void commit_event(void) {
+	void commit_event(void) { //commits event with initial signals from LOCAL nodes only
 		if(!new_event && !new_errevent) return;
+		iot_config_item_node_t* node;
 		if(new_errevent) {
+			new_event_hbitmap->set_bit(current_host->index); //add curent host to bitmap of involved hosts
+			while((node=new_errevent->tmp_blocked_nodes_head)) {
+				node->clear_tmpblocked_athead(new_errevent);
+			}
+
 			new_errevent->is_error=true;
 			BILINKLISTWT_INSERTTAIL(new_errevent, events_qhead, events_qtail, qnext, qprev);
 			new_errevent=NULL;
 		}
 		if(new_event) {
+			new_event_hbitmap->set_bit(current_host->index); //add curent host to bitmap of involved hosts
+			while((node=new_event->tmp_blocked_nodes_head)) {
+				node->clear_tmpblocked_athead(new_event);
+			}
+
+			new_event->is_error=false;
 			BILINKLISTWT_INSERTTAIL(new_event, events_qhead, events_qtail, qnext, qprev);
 			new_event=NULL;
 		}
@@ -720,6 +931,8 @@ private:
 	void recursive_calcpath(iot_config_item_node_t* node, int depth); //calculate potential path for initial nodes
 	void recursive_block(iot_config_node_out_t* out, iot_modelevent* ev, int depth); //block all connected nodes by specified event
 	iot_modelevent* recursive_checkblocked(iot_config_node_out_t* out, int depth); //check if any node connected to provided out is blocked by event processing
+	void recursive_tmpblock(iot_config_node_out_t* out, iot_modelevent* ev, int depth, bitmap32* hbitmap); //temporary block all connected nodes by specified event
+	bool recursive_checktmpblocked(iot_config_node_out_t* out, int depth, bitmap32* hbitmap); //check if any node connected to provided out is temporary blocked by event forming
 };
 
 

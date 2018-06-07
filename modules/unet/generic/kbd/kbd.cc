@@ -152,9 +152,10 @@ private:
 		}
 
 		char valbuf[iot_datavalue_bitmap::calc_datasize(maxkeycode)];
-		uint8_t outn=0;
+		uint8_t outn[2]={0,1};
 		const iot_datavalue* outv=new(valbuf) iot_datavalue_bitmap(maxkeycode, keystate, maxkeycode/32+1, false);
-		int err=kapi_update_outputs(NULL, 1, &outn, &outv);
+		const iot_datavalue* outva[2]={outv, &iot_datavalue_boolean::const_true};
+		int err=kapi_update_outputs(NULL, 2, outn, outva);
 		if(err) {
 			kapi_outlog_error("Cannot update output value for node_id=%" IOT_PRIiotid ": %s, event lost", node_id, kapi_strerror(err));
 		}
@@ -176,7 +177,7 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(eventsrc)={
 	.version = IOT_VERSION_COMPOSE(0,0,1),
 	.cpu_loading = 0,
 	.num_devices = 3,
-	.num_valueoutputs = 1,
+	.num_valueoutputs = 2,
 	.num_valueinputs = 0,
 	.num_msgoutputs = 0,
 	.num_msginputs = 0,
@@ -211,6 +212,11 @@ iot_node_moduleconfig_t IOT_NODE_MODULE_CONF(eventsrc)={
 			.label = "state",
 			.notion = &iot_valuenotion_keycode::object,
 			.dataclass = &iot_datatype_metaclass_bitmap::object
+		},
+		{
+			.label = "test",
+			.notion = NULL,
+			.dataclass = &iot_datatype_metaclass_boolean::object
 		}
 	},
 	.valueinput={

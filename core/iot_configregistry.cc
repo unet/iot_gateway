@@ -5,6 +5,7 @@
 //#include<time.h>
 
 #include "iot_configregistry.h"
+#include "iot_configmodel.h"
 
 #include "iot_deviceregistry.h"
 #include "iot_moduleregistry.h"
@@ -324,7 +325,7 @@ int iot_configregistry_t::load_config(json_object* cfg, bool skiphosts) { //main
 
 int iot_configregistry_t::group_update(iot_id_t groupid, json_object* obj) {
 	json_object *val=NULL;
-	time_t modes_modtime=0, active_set=0;
+	int64_t modes_modtime=0, active_set=0;
 	iot_id_t active_mode=0;
 
 	if(json_object_object_get_ex(obj, "modes_modtime", &val)) IOT_JSONPARSE_UINT(val, uint32_t, modes_modtime)
@@ -877,6 +878,7 @@ void iot_configregistry_t::free_config(void) {
 	groups_markdel();
 	links_markdel();
 	nodes_markdel();
+	rules_markdel();
 
 	clean_config();
 
@@ -992,6 +994,23 @@ void iot_configregistry_t::clean_config(void) { //free all items marked for dele
 		iot_release_memblock(lnk);
 	}
 
+	//clean rules
+	iot_config_item_rule_t** prule=NULL;
+	decltype(rules_index)::treepath rpath;
+	res=rules_index.get_first(NULL, &prule, rpath);
+	assert(res>=0);
+	for(; res==1; res=rules_index.get_next(NULL, &prule, rpath)) {
+		if(!(*prule)->is_del) continue;
+
+		iot_config_item_rule_t *rule=*prule;
+		res=rules_index.remove(rule->rule_id, NULL, &rpath);
+		assert(res==1);
+
+		assert(rule->blockedby==NULL);
+
+		iot_release_memblock(rule);
+	}
+
 	//clean groups
 	iot_config_item_group_t* cur_group=groups_head;
 	while(cur_group) {
@@ -1009,7 +1028,7 @@ void iot_configregistry_t::clean_config(void) { //free all items marked for dele
 
 bool iot_config_item_node_t::prepare_execute(bool forceasync) { //must be called to preallocate memory before execute()
 	//returns false on memory error, true on success BUT needexec and initial flags can be cleared
-		assert(blockedby!=NULL);
+		assert(is_blocked());
 		assert(needs_exec());
 
 		//calculate necessary items
@@ -1039,7 +1058,7 @@ bool iot_config_item_node_t::prepare_execute(bool forceasync) { //must be called
 				if(!out->prealloc_signal) {
 					out->prealloc_signal=(iot_modelsignal*)main_allocator.allocate(sizeof(iot_modelsignal));
 					if(!out->prealloc_signal) return false;
-					out->prealloc_signal=new(out->prealloc_signal) iot_modelsignal();
+					out->prealloc_signal=new(out->prealloc_signal) iot_modelsignal(); //just call of constructor
 				}
 			}
 		}
@@ -1060,7 +1079,7 @@ bool iot_config_item_node_t::prepare_execute(bool forceasync) { //must be called
 		if(!notifyupdate) {
 			size_t sz=iot_notify_inputsupdate::calc_size(num_insignals);
 			alignas(iot_notify_inputsupdate) char notifyupdatebuf[sz];
-			notifyupdate=new(notifyupdatebuf) iot_notify_inputsupdate(num_insignals);
+			notifyupdate=new(notifyupdatebuf) iot_notify_inputsupdate(num_insignals); //just call of constructor
 
 			int err=iot_prepare_msg_releasable(prealloc_execmsg, IOT_MSG_NOTIFY_INPUTSUPDATED, NULL, 0, notifyupdate, sz, IOT_THREADMSG_DATAMEM_TEMP, false, &main_allocator);
 			//miid and bytearg MUST BE ASSIGNED correctly before sending msg
@@ -1072,7 +1091,7 @@ bool iot_config_item_node_t::prepare_execute(bool forceasync) { //must be called
 		return true;
 	}
 void iot_config_item_node_t::execute(bool forceasync) {
-		assert(blockedby!=NULL);
+		assert(is_blocked());
 		assert(needs_exec());
 		assert(prealloc_execmsg!=NULL && prealloc_execmsg->data!=NULL && prealloc_execmsg->is_releasable==1);
 
@@ -1150,12 +1169,11 @@ void iot_config_item_node_t::execute(bool forceasync) {
 		}
 		iot_modelsignal *signals=NULL; //will be updated in case of simple sync execution if there are any signals (outputs update)
 
-		if(!is_sync()) {
+		if(!is_sync()) { //async execution
 			nodemodel->execute(true, prealloc_execmsg, signals);
-		} else {
-			if(!nodemodel->execute(false, prealloc_execmsg, signals)) {
-				//node is not simple sync, so must wait
-				set_waitexec(blockedby);
+		} else { //sync execution
+			if(!nodemodel->execute(false, prealloc_execmsg, signals)) { //node is not simple sync, so must wait
+				set_waitexec(blockedby); //add this node to list of nodes which are awaited by event to finish their execution
 			} else { //simple sync
 				if(signals) blockedby->add_signals(signals);
 			}
@@ -1173,16 +1191,18 @@ bool iot_configregistry_t::event_start(iot_modelevent* ev) { //checks if event p
 		if(ev->signals_head) {
 			//assume all probing_mark are reset
 			for(sig=ev->signals_head; sig; sig=sig->next) {
+#ifndef NDEBUG
 				if(sig->node_out) {
 					if(sig->node_out->node->node_id!=sig->node_id || sig->node_out->node->module_id!=sig->module_id || strcmp(sig->node_out->label, sig->out_label)!=0) {
 						assert(false);
-						sig->node_out=NULL;
+//						sig->node_out=NULL;
 					}
 				}
+#endif
 				if(!sig->node_out) {
+assert(false);
 					auto node_item=node_find(sig->node_id);
-					if(node_item && node_item->module_id==sig->module_id) sig->node_out=node_item->find_output(sig->out_label);
-					if(!sig->node_out) continue; //signal is invalid
+					if(!node_item || node_item->module_id!=sig->module_id || !(sig->node_out=node_item->find_output(sig->out_label))) continue;
 				}
 
 				if(!sig->node_out->is_connected) continue; //no valid links from this output
@@ -1198,7 +1218,8 @@ bool iot_configregistry_t::event_start(iot_modelevent* ev) { //checks if event p
 		}
 		if(needexec_head) { //check if there are delayed back links calculations and involved nodes not blocked by other events
 			for(iot_config_item_node_t* node=needexec_head; node; node=node->needexec_next) {
-				if(node->blockedby) continue; //skip chains of blocked nodes
+				if(node->is_blocked()) continue; //skip chains of blocked nodes
+//assert(false);
 				if(node->outputs_connected) {
 					iot_config_node_out_t *out;
 					for(out=node->outputs; out; out=out->next) { //loop by outputs of node
@@ -1209,9 +1230,8 @@ bool iot_configregistry_t::event_start(iot_modelevent* ev) { //checks if event p
 				}
 				//here node signal path is not blocked, so input signal can be added to current event
 				//we can block node and its path right here (there must be no exit conditions later, before blocking ev->signals_head dependent nodes!!!) POINT1
-				node->blockedby=ev;
-				ULINKLIST_INSERTHEAD(node, ev->blocked_nodes_head, blocked_next);
-				node->acted=false;
+				node->set_blocked(ev);
+				node->acted=false; //?
 
 				for(iot_config_node_out_t *out=node->outputs; out; out=out->next) //loop by outputs of node
 					if(out->is_connected) recursive_block(out, ev, 1);
@@ -1248,16 +1268,19 @@ bool iot_configregistry_t::event_start(iot_modelevent* ev) { //checks if event p
 outlog_debug_modelling("EXECUTION OF EVENT %" PRIu64 " STARTED", ev->id.numerator);
 		BILINKLIST_INSERTHEAD(ev, current_events_head, qnext, qprev);
 
-
-		for(sig=ev->signals_head; sig; sig=sig->next) { //some of signal source nodes can become blocked, but these nodes cannot be reexecuted, so mark them as acted
+/*seams unnecessary
+		//some of signal source nodes can become blocked meaning that its input(s) can be modified. For async nodes this means nothing, but
+		//for sync ones means that propagation of corresponding initial signal must be delayed until node processed possible input updates. Such situation
+		//with sync nodes should be possible with remote nodes only (during connection restoratation, as all remote nodes are treated as sync) or if
+		//sync node generated async signal
+		for(sig=ev->signals_head; sig; sig=sig->next) { 
 			if(!sig->node_out) continue;
 			auto node=sig->node_out->node;
-			if(node->blockedby==ev) {
-				node->acted=true;
-				if(node->is_initial()) node->clear_initial(); //nodes from needexec_head could be added to initial list
-			}
+			if(!node->is_sync() || !node->is_blockedby(ev)) continue;
+//			node->acted=true;
+//			if(node->is_initial()) node->clear_initial(); //nodes from needexec_head could be added to initial list
 		}
-
+*/
 		event_continue(ev);
 
 		return true;
@@ -1311,7 +1334,7 @@ outlog_debug_modelling("STEP %u MODELLING EVENT %" PRIu64, unsigned(ev->step), e
 				}
 				if(sig->node_out->is_value()) { //is value output
 					if(sig->node_out->current_value==sig->data || (sig->node_out->current_value && sig->data && *sig->data==*sig->node_out->current_value)) {
-						//value unchanged
+						//model value unchanged
 						iot_modelsignal::release(sig);
 						continue;
 					}
@@ -1345,8 +1368,9 @@ outlog_debug_modelling("STEP %u MODELLING EVENT %" PRIu64, unsigned(ev->step), e
 				}
 
 				for(iot_config_item_link_t* link=sig->node_out->ins_head; link; link=link->next_input) { //loop by inputs connected to provided out
-					if(!link->valid() || link->in->node->blockedby!=ev) continue;
+					if(!link->valid()/* || link->in->node->blockedby!=ev    MUST NOT HAPPEN?? */) continue;
 					auto dnode=link->in->node;
+					assert(dnode->is_blockedby(ev));
 
 					if(sig->node_out->is_value()) { //check that input value really changed or can be changed AND UPDATE THEM
 						if(link->in->fixed_value) continue; //input value fixed
@@ -1530,9 +1554,13 @@ nosignals:
 			if(node->needs_exec()) node->execute(true); //needs_exec can be cleared by prepare_execute()
 		}
 
+		//unblock all blocked nodes and rules
 		while((node=ev->blocked_nodes_head)) {
-			node->blockedby=NULL;
-			ULINKLIST_REMOVEHEAD(ev->blocked_nodes_head, blocked_next);
+			node->clear_blocked_athead(ev);
+		}
+		iot_config_item_rule_t* rule;
+		while((rule=ev->blocked_rules_head)) {
+			rule->clear_blocked_athead(ev);
 		}
 
 outlog_debug_modelling("EXECUTION OF EVENT %" PRIu64 " FINISHED", ev->id.numerator);
@@ -1575,17 +1603,15 @@ outlog_debug_modelling("\t\tTracing potential path from node %" IOT_PRIiotid, no
 
 void iot_configregistry_t::recursive_block(iot_config_node_out_t* out, iot_modelevent* ev, int depth) { //block all connected nodes by specified event
 		outlog_debug_modelling("(depth %d) Blocking nodes from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
-		if(!out->is_connected) return; //no valid links
+//		if(!out->is_connected) return; //no valid links
 		for(iot_config_item_link_t* link=out->ins_head; link; link=link->next_input) { //loop by inputs connected to provided out
 			if(!link->valid()) continue;
 			auto dnode=link->in->node;
-			if(/*dnode->probing_mark || */dnode->blockedby==ev) continue; //probing_mark must be checked here to protect initial signal nodes from blocking
-			assert(dnode->blockedby==NULL);
-			dnode->blockedby=ev;
+			if(/*dnode->probing_mark || */dnode->is_blockedby(ev)) continue; //probing_mark must be checked here to protect initial signal nodes from blocking
+			dnode->set_blocked(ev); //will also block rule_item if any
 outlog_debug_modelling("Node %" IOT_PRIiotid " blocked", dnode->node_id);
 
 			assert(!dnode->is_initial());
-			ULINKLIST_INSERTHEAD(dnode, ev->blocked_nodes_head, blocked_next);
 			dnode->acted=false;
 			dnode->pathset=false;
 			for(iot_config_node_in_t *nextin=dnode->inputs; nextin; nextin=nextin->next) {
@@ -1612,13 +1638,17 @@ outlog_debug_modelling("Node %" IOT_PRIiotid " blocked", dnode->node_id);
 	}
 
 iot_modelevent* iot_configregistry_t::recursive_checkblocked(iot_config_node_out_t* out, int depth) { //check if any node connected to provided out is blocked by event processing
-		outlog_debug_modelling("(depth %d) Probing blocked nodes from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
+		outlog_debug_modelling("(depth %d) Probing blocked nodes and rules from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
 		for(iot_config_item_link_t* link=out->ins_head; link; link=link->next_input) { //loop by inputs connected to provided out
 			if(!link->valid() || link->in->node->probing_mark) continue;
 			auto dnode=link->in->node;
-			if(dnode->blockedby) {
+			if(dnode->is_blocked()) {
 				outlog_debug_modelling("blocked by event %" PRIu64 " (common node %" IOT_PRIiotid ")", dnode->blockedby->id.numerator, dnode->node_id);
 				return dnode->blockedby;
+			}
+			if(dnode->rule_item && dnode->rule_item->is_blocked()) {
+				outlog_debug_modelling("blocked by event %" PRIu64 " (common rule %" IOT_PRIiotid ")", dnode->blockedby->id.numerator, dnode->rule_item->rule_id);
+				return dnode->rule_item->blockedby;
 			}
 			if(!dnode->outputs_connected) continue;
 
@@ -1634,4 +1664,50 @@ iot_modelevent* iot_configregistry_t::recursive_checkblocked(iot_config_node_out
 			dnode->probing_mark=false;
 		}
 		return NULL;
+	}
+
+void iot_configregistry_t::recursive_tmpblock(iot_config_node_out_t* out, iot_modelevent* ev, int depth, bitmap32* hbitmap) { //tmp block all connected nodes by specified event
+		outlog_debug_modelling("(depth %d) Temporary blocking nodes from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
+//		if(!out->is_connected) return; //no valid links
+		for(iot_config_item_link_t* link=out->ins_head; link; link=link->next_input) { //loop by inputs connected to provided out
+			if(!link->valid()) continue;
+			auto dnode=link->in->node;
+			if(/*dnode->probing_mark || */dnode->is_tmpblocked()) continue; //probing_mark must be checked here to protect initial signal nodes from blocking
+			dnode->set_tmpblocked(ev);
+outlog_debug_modelling("Node %" IOT_PRIiotid " tmp blocked", dnode->node_id);
+			hbitmap->set_bit(dnode->host->index);
+
+			if(dnode->outputs_connected)
+				for(iot_config_node_out_t *nextout=dnode->outputs; nextout; nextout=nextout->next) { //loop by outputs of node which is parent of current input
+					if(nextout->is_connected) recursive_tmpblock(nextout, ev, depth+1, hbitmap);
+				}
+		}
+	}
+
+//check if any node connected to provided out is tmp blocked by event forming
+//hbitmap must point to initialized array of uint32 of appropriate size (enough for config_registry->num_hosts bits) and it will be updated with set of hosts involved in path
+bool iot_configregistry_t::recursive_checktmpblocked(iot_config_node_out_t* out, int depth, bitmap32* hbitmap) { 
+		outlog_debug_modelling("(depth %d) Probing temporary blocked nodes from output '%s' of node %" IOT_PRIiotid, depth, out->label, out->node->node_id);
+		for(iot_config_item_link_t* link=out->ins_head; link; link=link->next_input) { //loop by inputs connected to provided out
+			if(!link->valid() || link->in->node->probing_mark) continue;
+			auto dnode=link->in->node;
+			if(dnode->is_tmpblocked()) {
+				outlog_debug_modelling("temporary blocked (common node %" IOT_PRIiotid ")", dnode->node_id);
+				return true;
+			}
+			hbitmap->set_bit(dnode->host->index);
+			if(!dnode->outputs_connected) continue;
+			assert(dnode->host!=NULL);
+
+			dnode->probing_mark=true; //prevent recursive loop
+			for(iot_config_node_out_t *nextout=dnode->outputs; nextout; nextout=nextout->next) { //loop by outputs of node which is parent of current input
+				if(!nextout->is_connected) continue; //skip outs without valid links
+				if(recursive_checktmpblocked(nextout, depth+1, hbitmap)) {
+					dnode->probing_mark=false;
+					return true;
+				}
+			}
+			dnode->probing_mark=false;
+		}
+		return false;
 	}

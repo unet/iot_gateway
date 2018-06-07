@@ -26,6 +26,9 @@
 				"value_outputs": {
 					"state": {
 						"description": "State of all keys",
+					},
+					"test": {
+						"description": "test",
 					}
 				}
 			}

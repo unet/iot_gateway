@@ -297,7 +297,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 					reply->authtype=atype;
 					reply->time_synced=repack_uint32(last_clock_sync);
 					reply->time_accuracy_ms=repack_uint16(iot_get_systime_error());
-					reply->timestamp_ns=repack_uint64(iot_get_systime());
+					reply->timestamp_ns=repack_uint64(iot_get_systime_ns());
 					iot_gen_random((char*)reply->random, sizeof(reply->random));
 					reply->routing_version=repack_uint64(peer_host->get_origroutes_version());
 
@@ -308,7 +308,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 						goto stopses;
 					}
 					
-					reply->reltime_ns=repack_uint64(iot_get_reltime());
+					reply->reltime_ns=repack_uint64(iot_get_reltime_ns());
 					statedata.before_auth.auth_cache.reply.reltime_ns=reply->reltime_ns; //do separately to minimize operation time (whole reply structure copying will be longer)
 
 					phase=PHASE_REPLY_BEING_SENT;
@@ -333,7 +333,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_srv(hevent_t ev) {
 				}
 				if(ev==HEVENT_NEW_PACKET_HEADER) {
 					assert(current_inpacket_hdr!=NULL);
-					statedata.before_auth.finish_reltime_ns=iot_get_reltime();
+					statedata.before_auth.finish_reltime_ns=iot_get_reltime_ns();
 					if(current_inpacket_hdr->cmd!=CMD_AUTH_FINISH) {
 						outlog_notice("server MESH session got illegal cmd %d waiting for client AUTH_FINISH", int(current_inpacket_hdr->cmd));
 						goto stopses;
@@ -423,7 +423,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 				req->authtype=atype;
 				req->srchost=repack_hostid(peer_host->gwinst->this_hostid);
 				req->dsthost=repack_hostid(peer_host->host_id);
-				req->timestamp_ns=repack_uint64(iot_get_systime());
+				req->timestamp_ns=repack_uint64(iot_get_systime_ns());
 				iot_gen_random((char*)req->random, sizeof(req->random));
 				req->time_synced=repack_uint32(last_clock_sync);
 				req->time_accuracy_ms=repack_uint16(iot_get_systime_error());
@@ -436,7 +436,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 					goto stopses;
 				}
 
-				req->reltime_ns=repack_uint64(iot_get_reltime());
+				req->reltime_ns=repack_uint64(iot_get_reltime_ns());
 				statedata.before_auth.auth_cache.request.reltime_ns=req->reltime_ns; //do separately to minimize operation time (whole req structure copying will be longer)
 
 				phase=PHASE_REQ_BEING_SENT;
@@ -460,7 +460,7 @@ void iot_netproto_session_mesh::state_handler_before_auth_cl(hevent_t ev) {
 				}
 				if(ev==HEVENT_NEW_PACKET_HEADER) {
 					assert(current_inpacket_hdr!=NULL);
-					statedata.before_auth.finish_reltime_ns=iot_get_reltime();
+					statedata.before_auth.finish_reltime_ns=iot_get_reltime_ns();
 					if(current_inpacket_hdr->cmd!=CMD_AUTH_REPLY) {
 						outlog_notice("client MESH session got illegal cmd %d waiting for server AUTH_REPLY", int(current_inpacket_hdr->cmd));
 						goto stopses;
@@ -963,8 +963,8 @@ bool iot_netproto_session_mesh::process_meshtun_input(iot_meshtun_stream_listen_
 
 	it.remotehost=repack_hostid(req->srchost);
 	it.initial_sequence=repack_uint64(stream->data_sequence);
-	it.creation_time=0;
-	it.request_time=((iot_get_systime()+500000000ull)/1000000000ull)-1000000000ull; //round to integer seconds and offset by 1e9 seconds
+//	it.creation_time=0;
+	it.request_time=iot_get_systime();
 	it.peer_rwnd=repack_uint32(stream->rwndsize);
 	it.remoteport=repack_uint16(req->srcport);
 	it.metasize=metasize;
